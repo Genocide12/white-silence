@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Белое Безмолвие — изометрический сурвайвл в духе Project Zomboid: Русский Север, зима 1917 года.">
+  <meta name="theme-color" content="#070a10">
+  <title>Белое Безмолвие — White Silence</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23070a10'/><circle cx='16' cy='16' r='8' fill='%23dfe6ee'/><circle cx='13' cy='14' r='6' fill='%23a9c6dd'/></svg>">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+  <canvas id="game" width="1280" height="720"></canvas>
+  <div id="ui-root"></div>
+  <!-- ==== СКРИПТЫ ИГРЫ (генерируется scripts/build.py) ====
+       Порядок: core -> data -> world -> systems -> ai -> entities -> ui -> content -> i18n -> main -->
+  <script src="js/core/ns.js"></script>
+  <script src="js/core/math.js"></script>
+  <script src="js/core/audio.js"></script>
+  <script src="js/core/camera.js"></script>
+  <script src="js/core/events.js"></script>
+  <script src="js/core/fx.js"></script>
+  <script src="js/core/gfx.js"></script>
+  <script src="js/core/input.js"></script>
+  <script src="js/core/loop.js"></script>
+  <script src="js/core/rng.js"></script>
+  <script src="js/core/save.js"></script>
+  <script src="js/core/sprites.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/core/time.js"></script>
+  <script src="js/data/items_seed.js"></script>
+  <script src="js/world/world.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

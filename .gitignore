@@ -1,0 +1,4 @@
+captures/
+*.log
+node_modules/
+.studioigor/captures/

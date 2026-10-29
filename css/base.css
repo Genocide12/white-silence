@@ -1,0 +1,116 @@
+/* Белое Безмолвие — базовые стили. Экраны UI добавляют свои файлы css/ui*.css */
+
+:root {
+  --ink: #d8dee9;
+  --ink-dim: #8b95a5;
+  --paper: #101620;
+  --paper2: #161e2b;
+  --paper3: #1e2836;
+  --line: #2c3a4e;
+  --accent: #d8a45c;
+  --accent2: #b57f3e;
+  --blood: #8a2a22;
+  --cold: #7ea3c4;
+  --ok: #7ea36a;
+  --warn: #c4933f;
+  --bad: #b0483f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #070a10;
+  font-family: 'PT Serif', Georgia, 'Times New Roman', serif;
+  color: var(--ink);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+canvas#game {
+  position: fixed;
+  left: 0; top: 0;
+  display: block;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+#ui-root {
+  position: fixed;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#ui-root > * { pointer-events: auto; }
+
+.hidden { display: none !important; }
+
+/* ---------- общие панели ---------- */
+.ws-panel {
+  background: linear-gradient(180deg, rgba(22,30,43,0.97), rgba(14,19,28,0.97));
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  border-radius: 4px;
+}
+
+.ws-title {
+  font-family: 'PT Serif', Georgia, serif;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.ws-btn {
+  display: inline-block;
+  background: linear-gradient(180deg, #243248, #1a2334);
+  color: var(--ink);
+  border: 1px solid #354863;
+  padding: 8px 18px;
+  font-family: 'PT Serif', Georgia, serif;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  transition: background 0.12s, border-color 0.12s, transform 0.06s;
+}
+
+.ws-btn:hover { background: linear-gradient(180deg, #2d3f5a, #212d42); border-color: #4a6285; }
+.ws-btn:active { transform: translateY(1px); }
+.ws-btn.primary {
+  background: linear-gradient(180deg, #8a6224, #6e4c1a);
+  border-color: #a87f3a;
+  color: #f4e6c8;
+}
+.ws-btn.primary:hover { background: linear-gradient(180deg, #9c7028, #7c561e); }
+.ws-btn.danger {
+  background: linear-gradient(180deg, #6e2620, #4e1a16);
+  border-color: #8a3a30;
+}
+.ws-btn:disabled { opacity: 0.45; cursor: default; }
+
+/* скроллбары */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #0d1219; }
+::-webkit-scrollbar-thumb { background: #2c3a4e; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3d5068; }
+
+.ws-tooltip {
+  position: fixed;
+  z-index: 300;
+  max-width: 300px;
+  background: rgba(10,14,21,0.96);
+  border: 1px solid var(--line);
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.ws-tooltip .tt-name { color: var(--accent); font-weight: bold; margin-bottom: 4px; }
+.ws-tooltip .tt-desc { color: var(--ink-dim); font-size: 12px; font-style: italic; margin-top: 4px; }
+.ws-tooltip .tt-stats { color: #9db0c8; font-size: 12px; margin-top: 4px; }
