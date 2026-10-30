@@ -1,0 +1,148 @@
+/* demo.css — панель демо-прохождения (js/ui/demo.js) */
+
+#ws-demo {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  width: 340px;
+  max-width: calc(100vw - 20px);
+  z-index: 900;
+  background: rgba(10, 14, 22, 0.92);
+  border: 1px solid rgba(160, 190, 220, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px 10px;
+  color: #dfe6ee;
+  font: 12px/1.45 "Segoe UI", Arial, sans-serif;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+  user-select: none;
+}
+
+#ws-demo.hidden { display: none; }
+
+#ws-demo .d-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#ws-demo .d-title {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #ffd98a;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+#ws-demo .d-stop {
+  background: #5a2626;
+  color: #ffd9d9;
+  border: 1px solid #8a4040;
+  border-radius: 6px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+#ws-demo .d-stop:hover { background: #7a3030; }
+
+#ws-demo .d-status {
+  color: #a9c6dd;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+#ws-demo .d-action {
+  color: #e8d9b0;
+  font-size: 12px;
+  margin-bottom: 7px;
+  min-height: 16px;
+}
+
+#ws-demo .d-action::before { content: '▸ '; color: #7ea36a; }
+
+#ws-demo .d-speeds {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 7px;
+}
+
+#ws-demo .d-speeds button {
+  flex: 1;
+  background: rgba(60, 80, 105, 0.5);
+  color: #cfe0ee;
+  border: 1px solid rgba(140, 170, 200, 0.3);
+  border-radius: 6px;
+  padding: 3px 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+#ws-demo .d-speeds button:hover { background: rgba(90, 115, 145, 0.6); }
+#ws-demo .d-speeds button.on {
+  background: #3d5a80;
+  border-color: #a9c6dd;
+  color: #fff;
+  font-weight: 700;
+}
+
+#ws-demo .d-log {
+  background: rgba(6, 9, 14, 0.75);
+  border: 1px solid rgba(120, 150, 180, 0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  max-height: 150px;
+  overflow-y: auto;
+  font: 11px/1.5 "Consolas", "Menlo", monospace;
+  color: #b9c6d4;
+}
+
+#ws-demo .dl-line { margin-bottom: 1px; }
+#ws-demo .dl-line.bad { color: #e89a9a; }
+#ws-demo .dl-line.good { color: #a5d69a; }
+#ws-demo .dl-t { color: #6f8296; }
+
+#ws-demo .d-foot {
+  margin-top: 7px;
+  text-align: center;
+}
+
+#ws-demo .d-dl {
+  width: 100%;
+  background: rgba(61, 90, 128, 0.6);
+  color: #e8f0f8;
+  border: 1px solid rgba(169, 198, 221, 0.5);
+  border-radius: 6px;
+  padding: 5px 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+#ws-demo .d-dl:hover { background: rgba(80, 115, 160, 0.75); }
+
+#ws-demo .d-log::-webkit-scrollbar { width: 6px; }
+#ws-demo .d-log::-webkit-scrollbar-thumb { background: rgba(140, 170, 200, 0.35); border-radius: 3px; }
+
+/* кнопка в главном меню */
+#ws-menu .demo-btn {
+  border-color: #8a6d2f !important;
+  color: #ffd98a !important;
+  background: rgba(90, 70, 25, 0.35) !important;
+}
+#ws-menu .demo-btn:hover {
+  background: rgba(120, 95, 40, 0.55) !important;
+  color: #ffe9b0 !important;
+}
+
+/* мобильные: панель компактнее */
+@media (max-width: 700px) {
+  #ws-demo {
+    width: calc(100vw - 76px);
+    top: 6px;
+    right: 6px;
+    font-size: 11px;
+    padding: 8px;
+  }
+  #ws-demo .d-log { max-height: 90px; }
+}
