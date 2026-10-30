@@ -319,6 +319,12 @@
   /**
    * Топленая печь греет комнату: ищем свет огня в том же здании
    * (печь даёт свет с fire:true, r 40 — см. fire.js).
+   *
+   * FIX (этап «Демо»): «живые» дома посёлка — те, у которых из трубы
+   * идёт дым и светятся окна (roofs.js, 45% зданий), — теперь тоже
+   * считаются натопленными. Раньше дым был чисто декорацией: даже в
+   * «отапливаемой» избе герой замерзал насмерть, а топлива на 60 ночей
+   * в мире нет. Дым из трубы = в доме тепло.
    */
   function heatedRoom(p) {
     var w = W();
@@ -332,6 +338,17 @@
       if (!L.fire) continue;
       var lb = w.isInside ? w.isInside(L.x, L.y) : null;
       if (lb === b) return true;      // огонь в том же доме
+    }
+    // «живой» дом: труба дымит — стены держат тепло
+    if (WS.Roofs && WS.Roofs.isHeated && w.buildings) {
+      for (var k = 0; k < w.buildings.length; k++) {
+        var bl = w.buildings[k];
+        if (!bl) continue;
+        if (p.x >= bl.x && p.x < bl.x + bl.w && p.y >= bl.y && p.y < bl.y + bl.h) {
+          if (WS.Roofs.isHeated(bl)) return true;
+          break;
+        }
+      }
     }
     return false;
   }

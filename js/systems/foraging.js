@@ -273,8 +273,11 @@
   function meltSnow() {
     // у огня: сосулька/снег → вода
     var p = WS.G.player;
-    if (!WS.Fire || !WS.Fire.isFireNear) return false;
-    if (!WS.Fire.isFireNear(p.x, p.y, 2.5)) {
+    // FIX (демо-этап): раньше звали несуществующий WS.Fire.isFireNear —
+    // функция всегда возвращала false и сосульку нельзя было растопить.
+    // Теперь используем реальный WS.Fire.near(x, y, r).
+    var fire = (WS.Fire && WS.Fire.near) ? WS.Fire.near(p.x, p.y, 2.5) : null;
+    if (!fire) {
       toast('Нужен огонь рядом.', 'warn');
       return false;
     }

@@ -24,7 +24,9 @@
     speed: 1,               // 1..5, 0 = пауза (управляется через setSpeed)
     stepsRun: 0,
     setSpeed: function (mult) {
-      Loop.speed = Math.max(0, Math.min(5, mult));
+      // 120 — потолок для демо-автопилота (кнопка «Демо»); игроку UI
+      // даёт 1..3, старый потолок 5 не трогаем по смыслу
+      Loop.speed = Math.max(0, Math.min(120, mult));
     },
     start: function () {
       if (running) return;

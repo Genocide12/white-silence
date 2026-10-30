@@ -100,16 +100,40 @@
     var k = cellKey(cx, cy);
     if (!World.spatial[k]) World.spatial[k] = [];
     World.spatial[k].push(o);
+    o._ck = k;                     // ячейка регистрации — для переноса при движении
   }
 
   function removeFromSpatial(o) {
-    var cx = Math.floor(o.x / World.SPATIAL_CELL), cy = Math.floor(o.y / World.SPATIAL_CELL);
-    var k = cellKey(cx, cy);
+    // удаляем из ЗАРЕГИСТРИРОВАННОЙ ячейки: сущность могла уйти из той,
+    // где стоит сейчас (движение пишет координаты напрямую)
+    var k = o._ck || cellKey(Math.floor(o.x / World.SPATIAL_CELL), Math.floor(o.y / World.SPATIAL_CELL));
     var arr = World.spatial[k];
     if (!arr) return;
     var i = arr.indexOf(o);
     if (i >= 0) arr.splice(i, 1);
   }
+
+  /** Перенос сущности в актуальную ячейку хэша, если ушла из своей.
+   *  Движение в этой кодовой базе пишет координаты напрямую (o.x = ...),
+   *  и без переноса сущность, перешагнувшая границу ячейки (8 тайлов),
+   *  выпадает из ВСЕХ запросов: не рисуется и не замечается ИИ. Герой
+   *  после спавна был виден только пока не отходил от точки старта;
+   *  телепорты (двери, проверки) «теряли» его полностью. */
+  function syncCell(o) {
+    if (!o) return;
+    var k = cellKey(Math.floor(o.x / World.SPATIAL_CELL), Math.floor(o.y / World.SPATIAL_CELL));
+    if (k === o._ck) return;
+    removeFromSpatial(o);
+    addToSpatial(o);
+  }
+
+  /** Синхронизация всех сущностей (рендер-тик 69, перед gfx:render=70).
+   *  Сущности (герой, NPC, звери) двигаются каждый шаг — проверка
+   *  дешёвая: два floor и сравнение строк. Объекты (деревья, заборы)
+   *  статичны — их лечит ленивая проверка в query. */
+  World.syncSpatial = function () {
+    for (var i = 0; i < World.ents.length; i++) syncCell(World.ents[i]);
+  };
 
   World._rehash = function () {
     World.spatial = {};
@@ -179,14 +203,21 @@
   /** Прямоугольный запрос для рендера: объекты + сущности. */
   World.query = function (x0, y0, x1, y1) {
     var out = [];
+    var qid = (World._qid = (World._qid || 0) + 1);
     var c0 = Math.floor(x0 / World.SPATIAL_CELL), c1 = Math.floor(x1 / World.SPATIAL_CELL);
     var r0 = Math.floor(y0 / World.SPATIAL_CELL), r1 = Math.floor(y1 / World.SPATIAL_CELL);
     for (var cy = r0; cy <= r1; cy++) {
       for (var cx = c0; cx <= c1; cx++) {
         var arr = World.spatial[cellKey(cx, cy)];
         if (!arr) continue;
-        for (var i = 0; i < arr.length; i++) {
+        // обратный ход + штамп запроса: syncCell может удалять из arr
+        // (splice) и добавлять в ячейки, которые ещё предстоит пройти —
+        // без штампа объект попал бы в выдачу дважды
+        for (var i = arr.length - 1; i >= 0; i--) {
           var o = arr[i];
+          if (o._qs === qid) continue;
+          o._qs = qid;
+          syncCell(o);               // ленивое самолечение: объект ушёл из ячейки — переносим
           if (o.x >= x0 && o.x <= x1 && o.y >= y0 && o.y <= y1) out.push(o);
         }
       }
@@ -329,4 +360,11 @@
   World.newId = function (prefix) { return (prefix || 'id') + (World._nextId++); };
 
   WS.def('World', World);
+
+  // Рендер-тик 69 — непосредственно перед gfx:render (70): пространственный
+  // хэш свежий к моменту отрисовки. Телепорты (двери, интерьеры) и долгая
+  // ходьба больше не «теряют» сущности. Работает и на паузе.
+  WS.tick(69, function () {
+    if (World.ents && World.ents.length) World.syncSpatial();
+  }, 'world:spatial-sync');
 })();

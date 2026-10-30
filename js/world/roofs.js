@@ -381,6 +381,9 @@
     visible: visible,
     draw: draw,
     hideWall: hideWall,
-    inside: function () { return insideB; }
+    inside: function () { return insideB; },
+    /** Дом «живой» (дым из трубы, тёплые окна)? Публикуем для
+     *  temperature.js: труба с дымом греет комнату по-настоящему. */
+    isHeated: function (b) { return !!(b && heated(b)); }
   });
 })();
