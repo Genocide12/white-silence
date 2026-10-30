@@ -1,0 +1,219 @@
+/**
+ * ДОПОЛНИТЕЛЬНЫЕ РЕЦЕПТЫ: самодельное оружие, походные приспособления,
+ * строительные детали, медикаменты из подручного. Расширяет recipes.js.
+ */
+(function () {
+  'use strict';
+
+  function R(o) { return o; }
+
+  var RECIPES = [
+    // ================================================================ ОРУЖИЕ САМОДЕЛЬНОЕ
+    R({ id: 'knuckles_lead', out: [{ id: 'knuckles_lead', n: 1 }], cat: 'weapon',
+      req: [{ id: 'scrap_metal', n: 2 }, { id: 'cloth_rag', n: 1 }], tools: ['file_metal'],
+      station: 'anvil', time: 60, skill: { id: 'carpentry', lv: 2 },
+      desc: 'Свинчатка: кулак тяжелеет втрое' }),
+    R({ id: 'club_nail', out: [{ id: 'club_nail', n: 1 }], cat: 'weapon',
+      req: [{ id: 'plank', n: 1 }, { id: 'nails', n: 6 }], tools: ['hammer'],
+      station: 'workbench', time: 45, skill: { id: 'carpentry', lv: 0 },
+      desc: 'Дубина с гвоздями' }),
+    R({ id: 'spear_fire', out: [{ id: 'spear_fire', n: 1 }], cat: 'weapon',
+      req: [{ id: 'plank', n: 2 }, { id: 'fat', n: 1 }, { id: 'cloth_rag', n: 2 }],
+      tools: [], station: null, time: 30, skill: { id: 'survive', lv: 1 },
+      desc: 'Копьё с горящим концом: свет и урон' }),
+    R({ id: 'bow_war', out: [{ id: 'bow_war', n: 1 }], cat: 'weapon',
+      req: [{ id: 'willow_twigs', n: 3 }, { id: 'rope_coil', n: 1 }, { id: 'sinew', n: 2 }],
+      tools: ['knife'], station: null, time: 120, skill: { id: 'survive', lv: 3 },
+      desc: 'Крепкий боевой лук' }),
+    R({ id: 'arrow_hunt', out: [{ id: 'arrow', n: 5 }], cat: 'ammo',
+      req: [{ id: 'plank', n: 1 }, { id: 'nails', n: 5 }, { id: 'cloth_rag', n: 1 }, { id: 'sinew', n: 1 }],
+      tools: ['knife'], station: null, time: 40, skill: { id: 'survive', lv: 1 },
+      desc: 'Пять стрел с железными наконечниками' }),
+    R({ id: 'arrow_fire', out: [{ id: 'arrow_fire', n: 3 }], cat: 'ammo',
+      req: [{ id: 'arrow', n: 3 }, { id: 'fat', n: 1 }, { id: 'cloth_rag', n: 1 }],
+      tools: [], station: null, time: 20, skill: { id: 'survive', lv: 2 },
+      desc: 'Зажигательные стрелы: свет и страх зверя' }),
+    R({ id: 'bullets_cast', out: [{ id: 'rifle_round', n: 10 }], cat: 'ammo',
+      req: [{ id: 'gunpowder', n: 1 }, { id: 'bullet_cast', n: 10 }, { id: 'wadding', n: 10 }],
+      tools: ['file_metal'], station: 'anvil', time: 90, skill: { id: 'survive', lv: 3 },
+      desc: 'Отлить и снарядить десяток патронов' }),
+    R({ id: 'shell_reload', out: [{ id: 'shell', n: 6 }], cat: 'ammo',
+      req: [{ id: 'gunpowder', n: 1 }, { id: 'scrap_metal', n: 2 }, { id: 'wadding', n: 6 }],
+      tools: ['file_metal'], station: 'anvil', time: 100, skill: { id: 'survive', lv: 4 },
+      desc: 'Перезарядка дробовых гильз' }),
+
+    // ================================================================ СНАРЯЖЕНИЕ ПОХОДНОЕ
+    R({ id: 'bedroll', out: [{ id: 'bedroll', n: 1 }], cat: 'survival',
+      req: [{ id: 'bearskin_rug', n: 1 }, { id: 'linen_sheet', n: 2 }, { id: 'rope_coil', n: 1 }],
+      tools: ['needle_sewing'], station: null, time: 150, skill: { id: 'tailor', lv: 3 },
+      desc: 'Спальник: сон в тепле где угодно' }),
+    R({ id: 'bedroll_poor', out: [{ id: 'bedroll_poor', n: 1 }], cat: 'survival',
+      req: [{ id: 'linen_sheet', n: 2 }, { id: 'dry_grass', n: 4 }, { id: 'mouse_nest', n: 1 }],
+      tools: ['needle_sewing'], station: null, time: 90, skill: { id: 'tailor', lv: 0 },
+      desc: 'Тонкий спальник: лучше, чем снег' }),
+    R({ id: 'skis_make', out: [{ id: 'skis_hunting', n: 1 }], cat: 'survival',
+      req: [{ id: 'plank', n: 4 }, { id: 'rope_coil', n: 1 }, { id: 'birch_bark', n: 2 }],
+      tools: ['knife'], station: 'workbench', time: 180, skill: { id: 'carpentry', lv: 3 },
+      desc: 'Охотничьи лыжи с камусом' }),
+    R({ id: 'snowshoes', out: [{ id: 'snowshoes', n: 1 }], cat: 'survival',
+      req: [{ id: 'willow_twigs', n: 4 }, { id: 'rope_coil', n: 1 }, { id: 'sinew', n: 2 }],
+      tools: ['knife'], station: null, time: 60, skill: { id: 'survive', lv: 1 },
+      desc: 'Снегоступы «медвежья лапа»: не тонуть в сугробах' }),
+    R({ id: 'sled_hand', out: [{ id: 'sled_hand', n: 1 }], cat: 'survival',
+      req: [{ id: 'plank', n: 3 }, { id: 'nails', n: 8 }, { id: 'rope_coil', n: 1 }],
+      tools: ['hammer'], station: 'workbench', time: 120, skill: { id: 'carpentry', lv: 2 },
+      desc: 'Ручные санки: тащите вдвое больше' }),
+    R({ id: 'backpack_frame', out: [{ id: 'backpack_frame', n: 1 }], cat: 'survival',
+      req: [{ id: 'plank', n: 2 }, { id: 'rope_coil', n: 1 }, { id: 'cloth_rag', n: 2 }],
+      tools: ['knife'], station: null, time: 80, skill: { id: 'survive', lv: 2 },
+      desc: 'Плетёный короб за спину' }),
+
+    // ================================================================ КОСТЁР И СВЕТ
+    R({ id: 'torch_make', out: [{ id: 'torch', n: 2 }], cat: 'survival',
+      req: [{ id: 'plank', n: 1 }, { id: 'fat', n: 1 }, { id: 'cloth_rag', n: 2 }],
+      tools: [], station: null, time: 30, skill: { id: 'survive', lv: 0 },
+      desc: 'Два факела: свет и страх волка' }),
+    R({ id: 'candles_dip', out: [{ id: 'candle_stump', n: 6 }], cat: 'survival',
+      req: [{ id: 'fat', n: 2 }, { id: 'wicks_pack', n: 1 }],
+      tools: [], station: 'fire', time: 90, skill: { id: 'cook', lv: 1 },
+      desc: 'Маканые свечи: шесть огарков' }),
+    R({ id: 'lamp_tin', out: [{ id: 'lamp_tin', n: 1 }], cat: 'survival',
+      req: [{ id: 'tin_can', n: 1 }, { id: 'wicks_pack', n: 1 }, { id: 'lamp_oil', n: 1 }],
+      tools: [], station: null, time: 40, skill: { id: 'survive', lv: 1 },
+      desc: 'Жестяная коптилка' }),
+    R({ id: 'lantern_refit', out: [{ id: 'lantern', n: 1 }], cat: 'survival',
+      req: [{ id: 'glass_spare', n: 1 }, { id: 'scrap_metal', n: 1 }, { id: 'wicks_pack', n: 1 }],
+      tools: ['pliers'], station: 'workbench', time: 60, skill: { id: 'carpentry', lv: 2 },
+      desc: 'Починить фонарь «летучую мышь»' }),
+
+    // ================================================================ ЛОВУШКИ
+    R({ id: 'snare_make', out: [{ id: 'snare_loop', n: 2 }], cat: 'survival',
+      req: [{ id: 'snare_wire', n: 1 }, { id: 'willow_twigs', n: 1 }],
+      tools: ['pliers'], station: null, time: 25, skill: { id: 'track', lv: 1 },
+      desc: 'Две петли на заячьей тропе' }),
+    R({ id: 'trap_hare_make', out: [{ id: 'trap_hare', n: 1 }], cat: 'survival',
+      req: [{ id: 'scrap_metal', n: 1 }, { id: 'plank', n: 1 }, { id: 'rope_coil', n: 1 }],
+      tools: ['file_metal'], station: 'workbench', time: 70, skill: { id: 'track', lv: 2 },
+      desc: 'Малый капкан' }),
+    R({ id: 'trap_wolf_make', out: [{ id: 'trap_wolf', n: 1 }], cat: 'survival',
+      req: [{ id: 'scrap_metal', n: 3 }, { id: 'staple_iron', n: 2 }, { id: 'chain_short', n: 1 }],
+      tools: ['tongs_smith'], station: 'anvil', time: 140, skill: { id: 'track', lv: 4 },
+      desc: 'Волчий капкан: челюсти и якорь' }),
+    R({ id: 'vertushka_make', out: [{ id: 'fish_vertushka', n: 1 }], cat: 'survival',
+      req: [{ id: 'willow_twigs', n: 4 }, { id: 'rope_coil', n: 1 }],
+      tools: ['knife'], station: null, time: 60, skill: { id: 'forage', lv: 1 },
+      desc: 'Верш для проруби' }),
+    R({ id: 'bait_meat', out: [{ id: 'bait_meat', n: 1 }], cat: 'survival',
+      req: [{ id: 'meat_raw', n: 1 }, { id: 'blood_pool_item', n: 0 }],
+      tools: [], station: null, time: 10, skill: { id: 'track', lv: 1 },
+      desc: 'Приманка из свежатины' }),
+
+    // ================================================================ СТРОЙКА
+    R({ id: 'barricade_plank', out: [{ id: 'barricade_plank', n: 1 }], cat: 'carpentry',
+      req: [{ id: 'plank', n: 2 }, { id: 'nails', n: 6 }],
+      tools: ['hammer'], station: null, time: 30, skill: { id: 'carpentry', lv: 0 },
+      desc: 'Забаррикадировать проём' }),
+    R({ id: 'window_plank', out: [{ id: 'window_plank', n: 1 }], cat: 'carpentry',
+      req: [{ id: 'plank', n: 1 }, { id: 'nails', n: 4 }],
+      tools: ['hammer'], station: null, time: 20, skill: { id: 'carpentry', lv: 0 },
+      desc: 'Заколотить окно' }),
+    R({ id: 'floor_patch', out: [{ id: 'floor_patch', n: 1 }], cat: 'carpentry',
+      req: [{ id: 'plank', n: 1 }, { id: 'nails', n: 4 }],
+      tools: ['hammer'], station: null, time: 25, skill: { id: 'carpentry', lv: 1 },
+      desc: 'Заплатка пола' }),
+    R({ id: 'stretcher', out: [{ id: 'stretcher', n: 1 }], cat: 'carpentry',
+      req: [{ id: 'plank', n: 2 }, { id: 'linen_sheet', n: 2 }, { id: 'rope_coil', n: 1 }],
+      tools: ['hammer'], station: 'workbench', time: 90, skill: { id: 'carpentry', lv: 2 },
+      desc: 'Носилки: тащить раненого или груз' }),
+    R({ id: 'crate_storage', out: [{ id: 'crate_storage', n: 1 }], cat: 'carpentry',
+      req: [{ id: 'plank', n: 3 }, { id: 'nails', n: 8 }],
+      tools: ['hammer', 'saw'], station: 'workbench', time: 100, skill: { id: 'carpentry', lv: 1 },
+      desc: 'Складной ящик для базы' }),
+
+    // ================================================================ МЕДИЦИНА
+    R({ id: 'bandage_rip', out: [{ id: 'bandage', n: 2 }], cat: 'med',
+      req: [{ id: 'linen_sheet', n: 1 }],
+      tools: ['scissors_tailor'], station: null, time: 20, skill: { id: 'medic', lv: 0 },
+      desc: 'Разорвать полотно на бинты' }),
+    R({ id: 'poultice_chaga', out: [{ id: 'poultice_chaga', n: 2 }], cat: 'med',
+      req: [{ id: 'chaga_chunk', n: 1 }, { id: 'cloth_rag', n: 1 }, { id: 'vodka', n: 1 }],
+      tools: [], station: 'fire', time: 40, skill: { id: 'medic', lv: 1 },
+      desc: 'Примочка из чаги: раны и воспаления' }),
+    R({ id: 'tincture_iodine', out: [{ id: 'iodine_tincture', n: 2 }], cat: 'med',
+      req: [{ id: 'bottle_empty', n: 2 }, { id: 'vodka', n: 1 }, { id: 'ash_potash', n: 1 }],
+      tools: [], station: 'fire', time: 60, skill: { id: 'medic', lv: 2 },
+      desc: 'Йодная настойка на золе' }),
+    R({ id: 'splint_field', out: [{ id: 'splint_field', n: 1 }], cat: 'med',
+      req: [{ id: 'plank', n: 1 }, { id: 'cloth_rag', n: 2 }, { id: 'rope_coil', n: 1 }],
+      tools: [], station: null, time: 25, skill: { id: 'medic', lv: 1 },
+      desc: 'Полевой лубок для перелома' }),
+    R({ id: 'tobacco_pipe_fill', out: [{ id: 'tobacco_pouch', n: 1 }], cat: 'misc',
+      req: [{ id: 'tobacco_dry', n: 1 }, { id: 'newspaper_stack', n: 1 }],
+      tools: [], station: null, time: 10, skill: { id: 'survive', lv: 0 },
+      desc: 'Кисет табаку' }),
+
+    // ================================================================ БЫТ
+    R({ id: 'soap_boil', out: [{ id: 'soap_lump', n: 2 }], cat: 'misc',
+      req: [{ id: 'fat', n: 1 }, { id: 'ash_potash', n: 1 }],
+      tools: [], station: 'fire', time: 80, skill: { id: 'cook', lv: 2 },
+      desc: 'Варка хозяйственного мыла' }),
+    R({ id: 'rag_wash', out: [{ id: 'cloth_rag', n: 1 }], cat: 'misc',
+      req: [{ id: 'cloth_dirty', n: 1 }, { id: 'soap_lump', n: 0 }],
+      tools: ['washboard'], station: null, time: 30, skill: { id: 'survive', lv: 0 },
+      desc: 'Отстирать ветошь' }),
+    R({ id: 'charcoal_burn', out: [{ id: 'charcoal_bag', n: 1 }], cat: 'survival',
+      req: [{ id: 'log', n: 2 }, { id: 'birch_bark', n: 2 }],
+      tools: [], station: 'fire', time: 240, skill: { id: 'survive', lv: 2 },
+      desc: 'Выжечь уголь в яме' }),
+    R({ id: 'pitch_boil', out: [{ id: 'tar_bucket', n: 1 }], cat: 'survival',
+      req: [{ id: 'birch_bark', n: 6 }, { id: 'fat', n: 1 }],
+      tools: [], station: 'fire', time: 150, skill: { id: 'survive', lv: 2 },
+      desc: 'Гнать берестяную смолу' })
+  ];
+
+  /** Предметы, на которые ссылаются рецепты и которых может не быть. */
+  function ensureItems() {
+    WS.Data = WS.Data || {};
+    WS.Data.items = WS.Data.items || {};
+    var I = function (o) { if (!WS.Data.items[o.id]) WS.Data.items[o.id] = o; };
+    I({ id: 'knuckles_lead', cat: 'weapon', w: 0.5, dmg: 9, range: 0.6, atkSpd: 2.2, knock: 2, crit: 8, tags: ['weapon'] });
+    I({ id: 'club_nail', cat: 'weapon', w: 2.0, dmg: 16, range: 1.1, atkSpd: 1.0, knock: 9, crit: 5, tags: ['weapon'] });
+    I({ id: 'spear_fire', cat: 'weapon', w: 2.8, dmg: 24, range: 1.9, atkSpd: 0.8, knock: 8, crit: 12, twoHand: true, light: 35, tags: ['weapon', 'light', 'noise_scare'] });
+    I({ id: 'bow_war', cat: 'ranged', w: 1.1, ranged: true, ammo: 'arrow', mag: 1, dmg: 34, accuracy: 50, noise: 6, twoHand: true, tags: ['weapon'] });
+    I({ id: 'arrow_fire', cat: 'ammo', w: 0.05, fire: true, tags: [] });
+    I({ id: 'bedroll', cat: 'tool', w: 3.5, warm: 25, tags: ['bedding'] });
+    I({ id: 'bedroll_poor', cat: 'tool', w: 2.0, warm: 12, tags: ['bedding'] });
+    I({ id: 'snowshoes', cat: 'tool', w: 1.2, tags: ['skis'] });
+    I({ id: 'sled_hand', cat: 'tool', w: 4.0, carry: 25, tags: [] });
+    I({ id: 'backpack_frame', cat: 'container', w: 1.5, carry: 15, tags: [] });
+    I({ id: 'lamp_tin', cat: 'light', w: 0.4, light: 40, fuel: 'lamp_oil', fuelH: 3, tags: ['light'] });
+    I({ id: 'bait_meat', cat: 'tool', w: 0.3, tags: ['wolf_bait'] });
+    I({ id: 'barricade_plank', cat: 'material', w: 2.5, tags: ['build'] });
+    I({ id: 'window_plank', cat: 'material', w: 1.5, tags: ['build'] });
+    I({ id: 'floor_patch', cat: 'material', w: 1.5, tags: ['build'] });
+    I({ id: 'stretcher', cat: 'tool', w: 3.0, tags: ['carry'] });
+    I({ id: 'crate_storage', cat: 'container', w: 4.0, carry: 20, tags: [] });
+    I({ id: 'poultice_chaga', cat: 'med', w: 0.15, heal: 8, disinfect: 30, tags: ['heal'] });
+    I({ id: 'splint_field', cat: 'med', w: 0.4, cures: 'fracture', tags: ['heal'] });
+    I({ id: 'tin_can', cat: 'material', w: 0.1, stack: 6, tags: [] });
+    I({ id: 'chain_short', cat: 'material', w: 1.8, tags: [] });
+    I({ id: 'ash_potash', cat: 'material', w: 0.5, stack: 4, tags: [] });
+    I({ id: 'cloth_dirty', cat: 'material', w: 0.15, stack: 10, tags: [] });
+    I({ id: 'tobacco_dry', cat: 'material', w: 0.1, stack: 6, tags: [] });
+    I({ id: 'bottle_empty', cat: 'material', w: 0.3, stack: 5, tags: [] });
+  }
+
+  WS.boot(function () {
+    ensureItems();
+    WS.Data = WS.Data || {};
+    if (!WS.Data.recipes) WS.Data.recipes = [];
+    for (var i = 0; i < RECIPES.length; i++) {
+      // не дублировать
+      var exists = false;
+      for (var k = 0; k < WS.Data.recipes.length; k++) {
+        if (WS.Data.recipes[k].id === RECIPES[i].id) { exists = true; break; }
+      }
+      if (!exists) WS.Data.recipes.push(RECIPES[i]);
+    }
+  }, 'recipes:extra');
+})();

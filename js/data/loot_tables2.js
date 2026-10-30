@@ -1670,3 +1670,25 @@
     EXT: EXT, EXT_LATE: EXT_LATE, NEW: NEW, selfTest: selfTest
   });
 })();
+
+// ============================================================= ДОПОЛНЕНИЕ: дровники (decor.js)
+(function () {
+  'use strict';
+  var boot = WS.boot;
+  boot(function () {
+    WS.Data = WS.Data || {};
+    WS.Data.loot = WS.Data.loot || {};
+    if (!WS.Data.loot.wood_pile) {
+      WS.Data.loot.wood_pile = {
+        rolls: [1, 3],
+        items: [
+          { id: 'firewood_bundle', w: 40, min: 1, max: 3 },
+          { id: 'log', w: 12, min: 1, max: 1 },
+          { id: 'plank', w: 8, min: 1, max: 3 },
+          { id: 'birch_bark', w: 10, min: 1, max: 3 },
+          { id: null, w: 20, min: 0, max: 0 }
+        ]
+      };
+    }
+  }, 'loot:woodpile');
+})();
