@@ -79,60 +79,116 @@
     }
   };
 
-  /** Отрисовка чанка террейна через кэш. */
+  /** Отрисовка чанка террейна через кэш.
+   *  Координаты чанка — ОТНОСИТЕЛЬНО КАМЕРЫ: toScreen(wx - cam.cx, wy - cam.cy).
+   *  Внутренний канвас чанка сдвинут по X на CHUNK*HW (ромб изометрии уходит
+   *  в минус по X при lx < ly — без сдвига половина тайлов обрезалась бы).
+   */
   function drawChunk(cx, cy, zoom) {
     var key = cx + ',' + cy;
     var w = WS.World;
-    if (!w.chunkValid) w.chunkValid = 1;
     var entry = chunkCache[key];
     if (!entry || entry.ver !== w.ver) {
       entry = renderChunkToCanvas(cx, cy);
       chunkCache[key] = entry;
     }
     var c = WS.Cam.canvasCenter();
-    // верхний угол чанка в мировых координатах
     var wx = cx * CHUNK, wy = cy * CHUNK;
-    var s = M.toScreen(wx, wy);
-    ctx.drawImage(entry.cv,
-      c.x + (s.x) * zoom, c.y + (s.y) * zoom,
-      entry.cv.width * zoom, entry.cv.height * zoom);
+    // верхний угол чанка относительно камеры (с учётом запаса YOFF сверху)
+    var s = M.toScreen(wx - WS.Cam.cx - WS.Cam._shakeX, wy - WS.Cam.cy - WS.Cam._shakeY);
+    // округляем позицию и добавляем 1px перекрытия — иначе на дробном зуме
+    // между чанками мерцают чёрные швы
+    var dx = Math.round(c.x + (s.x - CHUNK * M.HW) * zoom);
+    var dy = Math.round(c.y + (s.y - YOFF) * zoom);
+    ctx.drawImage(entry.cv, dx, dy,
+      Math.ceil(entry.cv.width * zoom) + 1, Math.ceil(entry.cv.height * zoom) + 1);
   }
+
+  var XOFF = 512, YOFF = 32;   // сдвиги внутри чанк-канваса (изометрия уходит в минус)
 
   function renderChunkToCanvas(cx, cy) {
     var w = WS.World;
-    var pxW = CHUNK * M.TW, pxH = CHUNK * M.TH + M.TH;  // + запас на высокие спрайты
+    var pxW = CHUNK * M.TW;
+    var pxH = CHUNK * M.TH + M.TH * 2;   // запас: сверху высокие тайлы, снизу грани
     var off = document.createElement('canvas');
     off.width = pxW; off.height = pxH;
     var octx = off.getContext('2d');
     octx.imageSmoothingEnabled = false;
+    var X = XOFF, Y = YOFF;
+
+    // Сбор и сортировка тайлов чанка: сначала все плоские полы (они не
+    // перекрываются), затем высокие (стены) в порядке (lx+ly) — чтобы грань
+    // стены всегда ложилась поверх пола перед ней. Высокие тайлы якорятся
+    // НИЗОМ в ромб тайла.
+    var flat = [], tall = [];
     for (var ly = 0; ly < CHUNK; ly++) {
       for (var lx = 0; lx < CHUNK; lx++) {
         var tx = cx * CHUNK + lx, ty = cy * CHUNK + ly;
         if (tx < 0 || ty < 0 || tx >= w.w || ty >= w.h) continue;
-        var s = M.toScreen(lx, ly);
+        // внутри здания — прячем южные/восточные стены (Roofs управляет)
+        if (WS.Roofs && WS.Roofs.hideWall(tx, ty)) continue;
         var tile = w.tileAt(tx, ty);
         var spr = WS.Spr ? WS.Spr.tile(tile, tx, ty) : null;
         if (!spr) continue;
-        octx.drawImage(spr, s.x - M.HW, s.y, spr.width, spr.height);
-        // накладной слой (снег на объектах и т.п.)
-        var over = WS.Spr ? WS.Spr.tileOverlay(tile, tx, ty) : null;
-        if (over) octx.drawImage(over, s.x - M.HW, s.y, over.width, over.height);
+        (spr.height > M.TH ? tall : flat).push({ lx: lx, ly: ly, spr: spr, tile: tile, tx: tx, ty: ty });
       }
     }
+    for (var i = 0; i < flat.length; i++) drawTile(octx, flat[i], X, Y);
+    tall.sort(function (a, b) { return (a.lx + a.ly) - (b.lx + b.ly) || a.lx - b.lx; });
+    for (var j = 0; j < tall.length; j++) drawTile(octx, tall[j], X, Y);
     return { cv: off, ver: w.ver };
+  }
+
+  var STAND_T = null;   // тайлы-«стоячие» декорации: база — центр ромба, как у сущностей
+
+  function drawTile(octx, t, X, Y) {
+    var s = M.toScreen(t.lx, t.ly);
+    if (!STAND_T) {
+      var T = WS.World.T;
+      STAND_T = {};
+      if (T) { STAND_T[T.FENCE] = 1; STAND_T[T.RAIL] = 1; }
+    }
+    var y;
+    if (STAND_T[t.tile]) {
+      // стоячая декорация (забор, перила): стоит в центре тайла
+      y = s.y + M.HH - t.spr.height + Y;
+    } else if (t.spr.height > M.TH) {
+      // стены-кубы: низ базового ромба совпадает с ромбом тайла
+      y = s.y + M.TH - t.spr.height + Y;
+    } else {
+      y = s.y + Y;
+    }
+    octx.drawImage(t.spr, s.x - M.HW + X, y, t.spr.width, t.spr.height);
+    var over = WS.Spr ? WS.Spr.tileOverlay(t.tile, t.tx, t.ty) : null;
+    if (over) octx.drawImage(over, s.x - M.HW + X, y, over.width, over.height);
   }
 
   /** Сущности и объекты — сортировка по (x+y), рисуем с тенями. */
   function drawSorted(vb, zoom) {
     var list = WS.World.query(vb.x0 - 3, vb.y0 - 3, vb.x1 + 3, vb.y1 + 3);
+    // крыши зданий рядом — как псевдо-сущности с ключом сортировки в южном
+    // углу здания: всё, что южнее, рисуется поверх крыши
+    if (WS.Roofs) list = list.concat(WS.Roofs.visible(vb));
     if (!list.length) return;
     var c = WS.Cam.canvasCenter();
     list.sort(function (a, b) { return (a.x + a.y) - (b.x + b.y); });
     for (var i = 0; i < list.length; i++) {
       var e = list[i];
       if (e.hidden) continue;
+      if (e.isRoof) { WS.Roofs.draw(ctx, e.b, zoom); continue; }
       var s = M.toScreen(e.x - WS.Cam.cx - WS.Cam._shakeX, e.y - WS.Cam.cy - WS.Cam._shakeY);
-      var sx = c.x + s.x * zoom, sy = c.y + s.y * zoom;
+      // ноги сущности — в ЦЕНТРЕ ромба тайла (+HH), а не в верхнем углу
+      var sx = c.x + s.x * zoom, sy = c.y + (s.y + M.HH) * zoom;
+      // маркер игрока: мягкая подложка ПОД тенью (слабое свечение снега)
+      if (e.marker) {
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = '#dce8ff';
+        ctx.beginPath();
+        ctx.ellipse(sx, sy + 2 * zoom, 17 * zoom, 8 * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       // тень
       if (e.shadow !== false && WS.Spr) {
         var sh = WS.Spr.shadow(e);
@@ -144,9 +200,30 @@
       var img = e.spr;
       if (!img && e.sprName && WS.Spr) img = WS.Spr.get(e.sprName, e.sprFrame || 0, e.dir || 0);
       if (img) {
-        var iw = img.width * zoom * (e.scale || 1);
-        var ih = img.height * zoom * (e.scale || 1);
+        var sc = (e.scale || 1) * (e.marker ? 1.12 : 1);   // герой чуть крупнее — читаемость
+        // деревья: детерминированное разнообразие размера (лес не по линейке)
+        if (!e.scale && e.sprName && e.sprName.indexOf('tree_') === 0) {
+          sc *= 0.86 + WS.RNG.hash2(e.x, e.y, 555) * 0.34;
+        }
+        var iw = img.width * zoom * sc;
+        var ih = img.height * zoom * sc;
         ctx.drawImage(img, sx - iw / 2, sy - ih, iw, ih);
+      }
+      // маркер игрока — ПОВЕРХ тени и спрайта обода: герой всегда виден на снегу
+      if (e.marker) {
+        ctx.save();
+        ctx.globalAlpha = 0.30;
+        ctx.fillStyle = '#eaf2ff';
+        ctx.beginPath();
+        ctx.ellipse(sx, sy + 2 * zoom, 15 * zoom, 6.5 * zoom, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.62;
+        ctx.strokeStyle = 'rgba(250,252,255,0.9)';
+        ctx.lineWidth = Math.max(1, zoom);
+        ctx.beginPath();
+        ctx.ellipse(sx, sy + 2 * zoom, 15 * zoom, 6.5 * zoom, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
       }
       if (e.render && typeof e.render === 'function') e.render(ctx, sx, sy, zoom);
     }
@@ -185,7 +262,9 @@
     lightCtx.fillStyle = 'rgba(4,8,20,' + alpha + ')';
     lightCtx.fillRect(0, 0, lightCv.width, lightCv.height);
 
-    // вырезаем свет источников: 'destination-out' радиальные градиенты
+    // вырезаем свет источников: 'destination-out' КЭШИРОВАННЫМ спрайтом-градиентом
+    // (создание радиального градиента на каждый свет каждый кадр — узкое место)
+    var punchSpr = getPunchSprite();
     lightCtx.globalCompositeOperation = 'destination-out';
     var c = WS.Cam.canvasCenter();
     var lights = WS.World ? WS.World.lightsIn(vb2(6)) : [];
@@ -200,18 +279,68 @@
         r *= 0.92 + 0.08 * Math.sin(tms * 9 + L.x * 7 + L.y * 3) *
                     (0.5 + 0.5 * Math.sin(tms * 23 + L.y * 5));
       }
-      var g = lightCtx.createRadialGradient(sx, sy - 8 * WS.Cam.zoom, 0, sx, sy - 8 * WS.Cam.zoom, r);
+      // за пределами экрана (с запасом радиуса) — не рисуем
+      if (sx < -r || sy < -r || sx > cv.width + r || sy > cv.height + r) continue;
       var punch = Math.min(1, (L.a !== undefined ? L.a : 0.95) * darkness);
-      g.addColorStop(0, 'rgba(0,0,0,' + punch + ')');
-      g.addColorStop(0.5, 'rgba(0,0,0,' + (punch * 0.45) + ')');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      lightCtx.fillStyle = g;
-      lightCtx.beginPath();
-      lightCtx.arc(sx, sy - 8 * WS.Cam.zoom, r, 0, Math.PI * 2);
-      lightCtx.fill();
+      lightCtx.globalAlpha = punch;
+      lightCtx.drawImage(punchSpr, sx - r, sy - 8 * WS.Cam.zoom - r, r * 2, r * 2);
     }
+    lightCtx.globalAlpha = 1;
     lightCtx.globalCompositeOperation = 'source-over';
     ctx.drawImage(lightCv, 0, 0);
+
+    // тёплый блик окон: аддитивное свечение КЭШИРОВАННЫМ спрайтом (только L.win)
+    var glowSpr = getWindowGlowSprite();
+    var glowA = Math.min(0.5, darkness * 0.55);
+    if (glowA > 0.03) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (var wg = 0; wg < lights.length; wg++) {
+        var WL = lights[wg];
+        if (!WL.win) continue;
+        var ws2 = M.toScreen(WL.x - WS.Cam.cx, WL.y - WS.Cam.cy);
+        var wsx = c.x + ws2.x * WS.Cam.zoom, wsy = c.y + ws2.y * WS.Cam.zoom;
+        var wr = (WL.r || 40) * WS.Cam.zoom * 1.35;
+        if (wsx < -wr || wsy < -wr || wsx > cv.width + wr || wsy > cv.height + wr) continue;
+        ctx.globalAlpha = glowA;
+        ctx.drawImage(glowSpr, wsx - wr, wsy - 6 * WS.Cam.zoom - wr, wr * 2, wr * 2);
+      }
+      ctx.restore();
+    }
+  }
+
+  var _punchSpr = null, _glowSpr = null;
+
+  /** Спрайт-градиент «вырезания тьмы» (белый центр → прозрачный край), 128x128. */
+  function getPunchSprite() {
+    if (_punchSpr) return _punchSpr;
+    var s = document.createElement('canvas');
+    s.width = s.height = 128;
+    var sc = s.getContext('2d');
+    var g = sc.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(0,0,0,1)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0.45)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    sc.fillStyle = g;
+    sc.fillRect(0, 0, 128, 128);
+    _punchSpr = s;
+    return s;
+  }
+
+  /** Тёплый спрайт-свечение окон (янтарный центр → прозрачный), 128x128. */
+  function getWindowGlowSprite() {
+    if (_glowSpr) return _glowSpr;
+    var s = document.createElement('canvas');
+    s.width = s.height = 128;
+    var sc = s.getContext('2d');
+    var g = sc.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,196,120,0.85)');
+    g.addColorStop(0.4, 'rgba(255,166,90,0.38)');
+    g.addColorStop(1, 'rgba(255,150,80,0)');
+    sc.fillStyle = g;
+    sc.fillRect(0, 0, 128, 128);
+    _glowSpr = s;
+    return s;
   }
 
   function vb2(pad) { return WS.Cam.viewBounds(pad || 4); }

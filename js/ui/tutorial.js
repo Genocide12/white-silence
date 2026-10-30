@@ -1022,7 +1022,7 @@
     s.id = 'ws-tutorial-style';
     s.textContent =
       '#ws-tutorial{position:fixed;left:50%;bottom:138px;transform:translateX(-50%);' +
-        'width:600px;max-width:94vw;z-index:55;pointer-events:auto;' +
+        'width:540px;max-width:94vw;z-index:55;pointer-events:auto;' +
         'padding:0 0 10px;animation:wst-in .3s ease-out both;}' +
       '#ws-tutorial.wst-mini{bottom:138px;}' +
       '@keyframes wst-in{from{opacity:0;transform:translateX(-50%) translateY(14px)}' +

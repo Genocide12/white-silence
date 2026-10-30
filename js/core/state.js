@@ -34,6 +34,7 @@
       id: 'player',
       x: 0, y: 0,
       dir: 4,                     // 0=N..7=NW
+      marker: true,               // белый эллипс под ногами — герой всегда виден
       hp: 100, maxHp: 100,
       speed: 2.2,                 // тайлов/с
       sprintMul: 1.8,

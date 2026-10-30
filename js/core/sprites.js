@@ -195,17 +195,20 @@
       c.fillStyle = pal.snow1; c.fillRect(22, 10, 20, 4);
     }});
     def('T' + T.GRASS, { w: 64, h: 32, variants: 5, draw: function (c, w, h, f, d, v) {
-      diamond(c, pal.grassF, 0, 0, 0);
-      c.fillStyle = pal.grassF2;
+      diamond(c, '#979d90', 0, 0, 0);      // зимняя сухая трава, выбеленная инеем
+      c.fillStyle = '#767c6c';
       if (v >= 2) { c.fillRect(28, 12, 4, 2); c.fillRect(38, 18, 4, 2); }
       if (v >= 3) c.fillRect(22, 20, 5, 2);
-      // тонкий снег поверх
-      c.fillStyle = 'rgba(226,232,240,0.55)';
-      c.fillRect(26, 8, 12, 3); c.fillRect(36, 16, 8, 2);
+      // плотный иней поверх — ВСЕГДА (глубокая зима)
+      c.fillStyle = 'rgba(226,232,240,0.7)';
+      c.fillRect(26, 8, 12, 3); c.fillRect(36, 16, 8, 2); c.fillRect(20, 15, 7, 2);
+      c.fillStyle = 'rgba(214,223,232,0.5)';
+      c.fillRect(30, 20, 10, 3); c.fillRect(16, 10, 6, 2);
     }});
     def('T' + T.GRASS2, { w: 64, h: 32, variants: 5, draw: function (c, w, h, f, d, v) {
-      diamond(c, pal.grassF2, 0, 0, 0);
-      c.fillStyle = 'rgba(226,232,240,0.4)'; c.fillRect(24, 10, 16, 4);
+      diamond(c, '#8b9084', 0, 0, 0);
+      c.fillStyle = 'rgba(226,232,240,0.62)'; c.fillRect(24, 10, 16, 4); c.fillRect(34, 18, 9, 3);
+      c.fillStyle = 'rgba(214,223,232,0.45)'; c.fillRect(18, 14, 10, 3); c.fillRect(38, 8, 8, 3);
     }});
     def('T' + T.DIRT, { w: 64, h: 32, variants: 5, draw: function (c, w, h, f, d, v) {
       diamond(c, pal.dirt, 0, 0, 0);
@@ -281,75 +284,123 @@
       c.fillStyle = pal.wood2; c.fillRect(20, 10, 24, 3); c.fillRect(20, 19, 24, 3);
     }});
 
-    // стены — высокие (64x64): верхняя кромка + лицевая сторона
-    function wall(c, top, face, faceDark, trim) {
-      c.clearRect(0, 0, 64, 64);
-      // верхняя плоскость (ромб, приподнятый на 32)
-      for (var y = 0; y < 16; y++) {
-        var wd = (y + 1) * 4;
-        c.fillStyle = top;
-        c.fillRect(32 - wd / 2, 15 - y, wd, 1);
-        c.fillStyle = trim || faceDark;
-        c.fillRect(32 - wd / 2, 15 - y, wd, 1);
-      }
-      // левая грань
+    // стены — КУБЫ 64x64: полный ромб-верх (32px, стыкуется с соседями в
+    // сплошную стену) + южные грани вниз до земли. Низ якорится в ромб тайла.
+    // Геометрия: верхний ромб N(32,1) W(0,17) E(64,17) S(32,33);
+    // базовый ромб (у земли) N(32,33) W(0,49) E(64,49) S(32,63).
+    function wall(c, topCol, face, faceDark, detail) {
+      // ЮЗ грань: от W(0,17) S(32,33) вниз до W(0,49) S(32,63)
       c.fillStyle = face;
-      for (var i = 0; i < 16; i++) {
-        c.fillRect(16 - i, 16 + i, 2, 32);
-      }
-      c.beginPath(); c.moveTo(16, 16); c.lineTo(0, 32); c.lineTo(0, 48); c.lineTo(16, 48); c.closePath(); c.fill();
-      // правая грань
+      c.beginPath();
+      c.moveTo(0, 17); c.lineTo(32, 33); c.lineTo(32, 63); c.lineTo(0, 47); c.closePath();
+      c.fill();
+      // ЮВ грань: от S(32,33) E(64,17) вниз до S(32,63) E(64,47)
       c.fillStyle = faceDark;
-      c.beginPath(); c.moveTo(48, 16); c.lineTo(64, 32); c.lineTo(64, 48); c.lineTo(48, 48); c.closePath(); c.fill();
-      // центральная колонна
-      c.fillStyle = face; c.fillRect(16, 16, 32, 32);
-      c.fillStyle = faceDark; c.fillRect(40, 16, 8, 32);
+      c.beginPath();
+      c.moveTo(32, 33); c.lineTo(64, 17); c.lineTo(64, 47); c.lineTo(32, 63); c.closePath();
+      c.fill();
+      // верхняя плоскость — полный ромб со снегом
+      diamondAt(c, 1, topCol);
+      // снег на верхней кромке
+      c.fillStyle = 'rgba(226,232,240,0.85)';
+      c.fillRect(10, 12, 44, 5); c.fillRect(18, 8, 28, 4); c.fillRect(6, 17, 18, 3); c.fillRect(40, 17, 18, 3);
+      c.fillStyle = 'rgba(214,223,232,0.5)';
+      c.fillRect(24, 6, 16, 2);
+      if (detail) detail(c);
+      // лёгкая тень под верхней кромкой на гранях
+      c.fillStyle = 'rgba(8,12,22,0.22)';
+      c.fillRect(1, 33, 30, 2); c.fillRect(33, 33, 30, 2);
     }
+
+    /** Ромб-верх стены: вершина (32, y0), полширины 32, полвысоты 16. */
+    function diamondAt(c, y0, col) {
+      for (var y = 0; y < 16; y++) {
+        var wdt = (y + 1) * 4;
+        c.fillStyle = col;
+        c.fillRect(32 - wdt / 2, y0 + y, wdt, 1);
+        c.fillRect(32 - wdt / 2, y0 + 31 - y, wdt, 1);
+      }
+    }
+
     def('T' + T.WALL_WOOD, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#7d6046', pal.wood, pal.wood2);
-      c.fillStyle = pal.wood2;
-      for (var i = 0; i < 6; i++) c.fillRect(20 + i * 4, 18, 1, 28);
+      wall(c, '#6e6a5e', pal.wood, pal.wood2, function (c) {
+        // вертикальные доски на ЮЗ грани
+        c.fillStyle = pal.wood2;
+        for (var i = 0; i < 4; i++) c.fillRect(4 + i * 7, 20 + i * 3.5, 1, 26);
+        // и на ЮВ
+        for (var k = 0; k < 4; k++) c.fillRect(34 + k * 7, 18 + (3 - k) * 3.5, 1, 26);
+      });
     }});
     def('T' + T.WALL_BRICK, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#8d584a', pal.brick, pal.brick2);
-      c.fillStyle = '#6b4034';
-      for (var r = 0; r < 6; r++) for (var k = 0; k < 6; k++) {
-        c.fillRect(18 + k * 6 + (r % 2 ? 3 : 0), 18 + r * 5, 5, 1);
-      }
+      wall(c, '#6e6258', pal.brick, pal.brick2, function (c) {
+        c.fillStyle = '#6b4034';
+        for (var r = 0; r < 7; r++) {
+          for (var k = 0; k < 5; k++) {
+            c.fillRect(2 + k * 6 + (r % 2 ? 3 : 0), 21 + r * 6, 5, 1);
+            c.fillRect(34 + k * 6 + (r % 2 ? 3 : 0), 19 + r * 6, 5, 1);
+          }
+        }
+      });
     }});
     def('T' + T.WALL_STONE, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#83878f', pal.stone, pal.stone2);
-      c.fillStyle = pal.stone2;
-      c.fillRect(20, 22, 10, 8); c.fillRect(34, 34, 12, 8); c.fillRect(22, 40, 8, 6);
+      wall(c, '#71757d', pal.stone, pal.stone2, function (c) {
+        c.fillStyle = pal.stone2;
+        c.fillRect(6, 24, 10, 8); c.fillRect(19, 34, 12, 8); c.fillRect(8, 46, 9, 7);
+        c.fillRect(38, 22, 11, 8); c.fillRect(50, 36, 10, 8); c.fillRect(40, 48, 9, 6);
+        c.fillStyle = 'rgba(226,232,240,0.35)';
+        c.fillRect(6, 23, 10, 2); c.fillRect(38, 21, 11, 2);
+      });
     }});
     def('T' + T.WALL_LOG, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#6a5238', '#5c4730', '#4c3a27');
-      c.fillStyle = '#4c3a27';
-      for (var r = 0; r < 7; r++) c.fillRect(18, 18 + r * 4, 28, 1);
+      wall(c, '#5f4c36', '#5c4730', '#4c3a27', function (c) {
+        // горизонтальные венцы
+        c.fillStyle = '#43331f';
+        for (var r = 0; r < 6; r++) {
+          c.fillRect(1, 22 + r * 7, 29, 1);
+          c.fillRect(34, 20 + r * 7, 29, 1);
+        }
+        // торцы брёвен
+        c.fillStyle = '#7d6046';
+        c.fillRect(1, 24, 2, 4); c.fillRect(1, 38, 2, 4);
+        c.fillRect(61, 22, 2, 4); c.fillRect(61, 36, 2, 4);
+      });
     }});
 
-    // окно и дверь — вставки в стену
+    // окно и дверь — вставки в стену (та же геометрия куба, проём на ЮВ грани)
     def('T' + T.WINDOW, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#7d6046', pal.wood, pal.wood2);
-      c.fillStyle = '#1d2b3d'; c.fillRect(24, 24, 16, 16);
-      c.fillStyle = '#2c425e'; c.fillRect(25, 25, 14, 7);
-      c.fillStyle = pal.wood2; c.fillRect(23, 23, 18, 1); c.fillRect(23, 40, 18, 1);
-      c.fillRect(31, 24, 1, 16);
-      // тёплый свет внутри (виден вечером)
-      c.fillStyle = 'rgba(226,146,74,0.25)'; c.fillRect(25, 25, 14, 14);
+      wall(c, '#6e6a5e', pal.wood, pal.wood2, function (c) {
+        // окно на ЮВ грани
+        c.fillStyle = '#3e2f1f'; c.fillRect(41, 27, 16, 17);
+        c.fillStyle = '#1d2b3d'; c.fillRect(42, 28, 14, 15);
+        c.fillStyle = '#2c425e'; c.fillRect(43, 29, 12, 6);
+        // тёплый свет внутри
+        c.fillStyle = 'rgba(226,146,74,0.45)'; c.fillRect(43, 29, 12, 13);
+        // рама
+        c.fillStyle = pal.wood2; c.fillRect(41, 26, 16, 1); c.fillRect(41, 44, 16, 1);
+        c.fillRect(48, 27, 1, 17);
+        // снежный подоконник
+        c.fillStyle = 'rgba(226,232,240,0.9)'; c.fillRect(40, 45, 18, 2);
+      });
     }});
     def('T' + T.DOOR, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#7d6046', pal.wood, pal.wood2);
-      c.fillStyle = '#3e2f1f'; c.fillRect(24, 20, 16, 28);
-      c.fillStyle = '#54402b'; c.fillRect(25, 21, 14, 26);
-      c.fillStyle = '#3e2f1f'; c.fillRect(31, 21, 1, 26);
-      c.fillStyle = pal.brass; c.fillRect(36, 34, 2, 2);
+      wall(c, '#6e6a5e', pal.wood, pal.wood2, function (c) {
+        // дверь на ЮВ грани
+        c.fillStyle = '#241a10'; c.fillRect(41, 25, 16, 26);
+        c.fillStyle = '#54402b'; c.fillRect(42, 26, 14, 24);
+        c.fillStyle = '#3e2f1f'; c.fillRect(48, 26, 1, 24); c.fillRect(42, 36, 14, 1);
+        c.fillStyle = pal.brass; c.fillRect(53, 36, 2, 2);
+        // снег у порога
+        c.fillStyle = 'rgba(226,232,240,0.8)'; c.fillRect(40, 50, 18, 2);
+      });
     }});
     def('T' + T.DOORWAY, { w: 64, h: 64, draw: function (c) {
-      c.clearRect(0, 0, 64, 64);
-      // тёмный проём
-      c.fillStyle = '#0e0c0a';
-      c.beginPath(); c.moveTo(22, 22); c.lineTo(42, 22); c.lineTo(42, 48); c.lineTo(22, 48); c.closePath(); c.fill();
+      wall(c, '#6e6a5e', pal.wood, pal.wood2, function (c) {
+        // тёмный проём на ЮВ грани
+        c.fillStyle = '#0a0806';
+        c.beginPath();
+        c.moveTo(41, 25); c.lineTo(57, 25); c.lineTo(57, 50); c.lineTo(41, 50); c.closePath();
+        c.fill();
+      });
     }});
     def('T' + T.STAIRS, { w: 64, h: 32, draw: function (c) {
       diamond(c, '#6e7178', 0, 0, 0);
@@ -359,25 +410,42 @@
       diamond(c, pal.plank, 0, 0, 0);
       c.fillStyle = pal.wood2; c.fillRect(18, 10, 28, 2); c.fillRect(18, 20, 28, 2);
     }});
-    def('T' + T.RAIL, { w: 64, h: 32, draw: function (c) {
-      c.clearRect(0, 0, 64, 32);
-      c.fillStyle = '#4a4238';
-      c.fillRect(30, 8, 4, 16); c.fillRect(14, 16, 4, 8); c.fillRect(46, 16, 4, 8);
-      c.fillStyle = 'rgba(200,205,214,0.8)';
-      c.fillRect(18, 14, 28, 2);
+    def('T' + T.RAIL, { w: 64, h: 40, draw: function (c) {
+      c.clearRect(0, 0, 64, 40);
+      // штакетник-ограждение: столбы до низа канваса (база — центр тайла)
+      c.fillStyle = '#6a5a46';
+      c.fillRect(29, 6, 5, 34); c.fillRect(13, 12, 5, 28); c.fillRect(45, 12, 5, 28);
+      c.fillStyle = '#7d6a52';
+      c.fillRect(29, 6, 2, 34); c.fillRect(13, 12, 2, 28); c.fillRect(45, 12, 2, 28);
+      // перекладины
+      c.fillStyle = '#7d6a52';
+      c.fillRect(14, 14, 36, 3); c.fillRect(14, 24, 36, 3);
+      // снег сверху
+      c.fillStyle = 'rgba(226,232,240,0.9)';
+      c.fillRect(12, 12, 38, 2); c.fillRect(28, 5, 7, 2); c.fillRect(44, 11, 7, 2);
     }});
     def('T' + T.FENCE, { w: 64, h: 48, draw: function (c) {
       c.clearRect(0, 0, 64, 48);
-      c.fillStyle = '#5c4730';
-      c.fillRect(28, 14, 6, 26); c.fillRect(10, 20, 6, 20); c.fillRect(46, 20, 6, 20);
+      // забор-штакетник: столбы до низа (база — центр тайла)
       c.fillStyle = '#6a5238';
-      c.fillRect(10, 18, 42, 4); c.fillRect(10, 28, 42, 4);
-      c.fillStyle = 'rgba(226,232,240,0.6)'; c.fillRect(10, 16, 42, 3);
+      c.fillRect(28, 10, 6, 38); c.fillRect(10, 16, 6, 32); c.fillRect(46, 16, 6, 32);
+      c.fillStyle = '#7d6046';
+      c.fillRect(28, 10, 3, 38); c.fillRect(10, 16, 3, 32); c.fillRect(46, 16, 3, 32);
+      // горизонтальные прожилины
+      c.fillStyle = '#7d6046';
+      c.fillRect(10, 20, 42, 4); c.fillRect(10, 30, 42, 4);
+      c.fillStyle = '#57422e';
+      c.fillRect(10, 23, 42, 1); c.fillRect(10, 33, 42, 1);
+      // снег на кромке
+      c.fillStyle = 'rgba(226,232,240,0.85)';
+      c.fillRect(9, 15, 44, 3); c.fillRect(27, 8, 8, 3); c.fillRect(45, 14, 8, 3);
     }});
     def('T' + T.CRYPT, { w: 64, h: 64, draw: function (c) {
-      wall(c, '#6f737b', '#5c6068', '#4c5058');
-      c.fillStyle = '#2c3038'; c.fillRect(26, 30, 12, 18);
-      c.fillStyle = '#42464e'; c.fillRect(27, 31, 10, 16);
+      wall(c, '#6f737b', '#5c6068', '#4c5058', function (c) {
+        c.fillStyle = '#23272f'; c.fillRect(43, 30, 12, 20);
+        c.fillStyle = '#3a3e46'; c.fillRect(44, 31, 10, 18);
+        c.fillStyle = 'rgba(226,232,240,0.5)'; c.fillRect(42, 50, 14, 2);
+      });
     }});
     def('T' + T.VOID, { w: 64, h: 32, draw: function (c) {
       diamond(c, '#0a0e14', 0, 0, 0);

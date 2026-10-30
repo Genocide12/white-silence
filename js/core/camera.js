@@ -41,14 +41,18 @@
       return { x: cv.width / 2, y: cv.height / 2 };
     },
 
-    /** Прямоугольник видимой области мира (для кулинга). */
+    /** Прямоугольник видимой области мира (для кулинга).
+     *  Видимая в изометрии область — ромб: (wx-wy) в пределах экранной полуширины,
+     *  (wx+wy) в пределах полувысоты. AABB этого ромба — полуширина (sx+sy)/2. */
     viewBounds: function (pad) {
       pad = pad || 2;
       var c = Cam.canvasCenter();
-      var halfW = (c.x / Cam.zoom) / M.HW, halfH = (c.y / Cam.zoom) / M.HH;
+      var sx = (c.x / Cam.zoom) / M.HW;
+      var sy = (c.y / Cam.zoom) / M.HH;
+      var r = (sx + sy) / 2 + pad;
       return {
-        x0: Cam.cx - halfW * 0.6 - pad, x1: Cam.cx + halfW * 0.6 + pad,
-        y0: Cam.cy - halfH * 0.6 - pad, y1: Cam.cy + halfH * 0.6 + pad
+        x0: Cam.cx - r, x1: Cam.cx + r,
+        y0: Cam.cy - r, y1: Cam.cy + r
       };
     },
 

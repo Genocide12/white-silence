@@ -8,6 +8,11 @@
 
   var STEP = 1 / 60;         // шаг симуляции
   var MAX_STEPS = 5;        // защита от спирани смерти
+  // Тики с приоритетом [70, 80) — РЕНДЕР (gfx:render=70, events:aurora=75):
+  // выполняются РАЗ В КАДР, а не на каждом шаге симуляции. Иначе при просадке
+  // FPS догоняющие шаги (до 5) рисовали кадр по 5 раз — нагрузка росла ещё
+  // сильнее (spiral of death). UI-тики (80+) остаются пошаговыми.
+  var RENDER_LO = 70, RENDER_HI = 80;
   var acc = 0;
   var last = 0;
   var raf = 0;
@@ -78,10 +83,13 @@
   function simulate(dt) {
     var tickers = WS._tickFns;
     for (var i = 0; i < tickers.length; i++) {
+      var t = tickers[i];
+      // рендер-тики [70, 80) выполняются в render() — раз в кадр
+      if (t.pri >= RENDER_LO && t.pri < RENDER_HI) continue;
       try {
-        tickers[i].fn(dt);
+        t.fn(dt);
       } catch (e) {
-        WS.err('tick "' + tickers[i].name + '" failed:', e && e.message);
+        WS.err('tick "' + t.name + '" failed:', e && e.message);
         // выкидываем падающий тик, чтобы не заспамить консоль
         tickers.splice(i, 1); i--;
       }
@@ -91,7 +99,18 @@
   function render(rdt) {
     var canvas = WS.Gfx && WS.Gfx.canvas();
     if (!canvas) return;
-    // рендер-тик с приоритетом 70 зарегистрирован в gfx.js
+    // рендер-тики: один раз за кадр (в т.ч. на паузе и в меню)
+    var tickers = WS._tickFns;
+    for (var i = 0; i < tickers.length; i++) {
+      var t = tickers[i];
+      if (t.pri < RENDER_LO || t.pri >= RENDER_HI) continue;
+      try {
+        t.fn(rdt);
+      } catch (e) {
+        WS.err('render tick "' + t.name + '" failed:', e && e.message);
+        tickers.splice(i, 1); i--;
+      }
+    }
   }
 
   WS.def('Loop', Loop);

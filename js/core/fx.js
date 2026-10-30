@@ -90,6 +90,18 @@
       else if (p.type === 'spark') ctx.fillStyle = '#f4b968';
       else if (p.type === 'wood') ctx.fillStyle = '#8a6d50';
       else if (p.type === 'steam') { ctx.fillStyle = '#c8d2de'; ctx.globalAlpha = a * 0.4; }
+      else if (p.type === 'chimney') {
+        // печной дым: тёмно-серый, разрастается и тает — виден и на снегу, и на ночном небе
+        ctx.fillStyle = '#7e8a9c';
+        ctx.globalAlpha = Math.min(1, a * 0.78);
+        sz = p.size * zoom * (0.6 + 1.15 * (p.t / p.life));
+      }
+      else if (p.type === 'breath') {
+        // пар дыхания на морозе: маленький, тающий
+        ctx.fillStyle = '#c9d4e2';
+        ctx.globalAlpha = a * 0.62;
+        sz = p.size * zoom * (0.5 + 0.8 * (p.t / p.life));
+      }
       ctx.fillRect(sx - sz / 2, sy - sz / 2, sz, sz);
     }
     ctx.globalAlpha = 1;
