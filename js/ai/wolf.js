@@ -358,12 +358,29 @@
 
   function RUNTIME_RANGE(a, b) { return a + Math.random() * (b - a); }
 
-  /** Окраина посёлка (для ночной охоты). */
+  /** Точка ночной охоты: волки чуют жильё — идут туда, где живёт ИГРОК
+   *  (его изба/посёлок). Раньше точка была фиксированной «окраиной
+   *  посёлка» — герой, живущий в другой части карты, волков никогда
+   *  не видел («врагов нет»). Теперь охота — в 7-15 тайлах от героя,
+   *  вне зданий: и страшно, и честно (в дом волк не войдёт). */
   function pickOutskirts() {
-    return {
-      x: 55 + Math.random() * 110,    // x 55..165
-      y: AI.consts.VILLAGE_Y0 + 2 + Math.random() * 8   // y 82..90
-    };
+    var p = AI.player();
+    var w = WS.World;
+    if (!p || !w || !w.w) {
+      return { x: 55 + Math.random() * 110, y: 82 + Math.random() * 8 };
+    }
+    for (var i = 0; i < 14; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var r = 7 + Math.random() * 8;
+      var x = p.x + Math.cos(a) * r;
+      var y = p.y + Math.sin(a) * r;
+      if (x < 6 || y < 6 || x > w.w - 6 || y > w.h - 6) continue;
+      var tx = Math.floor(x), ty = Math.floor(y);
+      if (w.isTileBlocked && w.isTileBlocked(tx, ty)) continue;
+      if (w.isInside && w.isInside(x, y)) continue;      // в дом не суемся
+      return { x: x, y: y };
+    }
+    return { x: p.x + 9, y: p.y + 4 };
   }
 
   /**

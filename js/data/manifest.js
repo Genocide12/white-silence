@@ -61,7 +61,7 @@
       'Ноль зависимостей: чистый код, который переживёт апокалипсис.'
     ],
 
-    authors: 'studioigor pipeline: агентная разработка по скиллу studioigor'
+    authors: 'DirtyG — автор игры'
   };
 
   WS.boot(function initManifest() {

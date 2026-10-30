@@ -413,7 +413,8 @@
     // иконка изделия
     var out0 = c.out && c.out.length ? c.out[0] : null;
     var def = out0 ? defOf(out0.id) : null;
-    var ico = TT.catIconNode(def ? def.cat : 'misc', 'r-ico');
+    var ico = (WS.Icons && out0 && out0.id) ? WS.Icons.iconNode(out0.id, 'r-ico')
+        : TT.catIconNode(def ? def.cat : 'misc', 'r-ico');
     row.appendChild(ico);
 
     // тело: имя + мета
@@ -475,7 +476,8 @@
       var o = c.out[i];
       var row = el('div', 'ing-row');
       var def = defOf(o.id);
-      row.appendChild(TT.catIconNode(def ? def.cat : 'misc', 'ing-ico'));
+      row.appendChild((WS.Icons && o && o.id) ? WS.Icons.iconNode(o.id, 'ing-ico')
+        : TT.catIconNode(def ? def.cat : 'misc', 'ing-ico'));
       row.appendChild(el('span', 'ing-name', o.name + (o.n > 1 ? ' ×' + o.n : '')));
       outBox.appendChild(row);
     }

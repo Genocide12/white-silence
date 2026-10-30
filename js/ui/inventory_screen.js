@@ -537,7 +537,8 @@
         continue;
       }
       var def = defOf(info.id);
-      var ico = WS.ToolTip.catIconNode(def ? def.cat : 'misc', 'eq-ico');
+      var ico = (WS.Icons && info && info.id) ? WS.Icons.iconNode(info.id, 'eq-ico')
+        : WS.ToolTip.catIconNode(def ? def.cat : 'misc', 'eq-ico');
       body.appendChild(ico);
       var nm = el('span', 'eq-name', info.name);
       body.appendChild(nm);
@@ -618,7 +619,8 @@
     var cell = el('div', cls);
     cell.setAttribute('data-i', String(info.i));
 
-    var ico = TT.catIconNode(def ? def.cat : 'misc', 'slot-ico');
+    var ico = (WS.Icons && info && info.id) ? WS.Icons.iconNode(info.id, 'slot-ico')
+        : TT.catIconNode(def ? def.cat : 'misc', 'slot-ico');
     cell.appendChild(ico);
 
     if (info.count && info.count > 1) {
@@ -686,7 +688,8 @@
     var fr = null;
     if (slotInfo && TT.freshness) fr = TT.freshness(slotInfo.per, slotInfo.age);
     if (fr) icoBox.className += ' fresh-' + fr.cls;
-    icoBox.appendChild(TT.catIconNode(def ? def.cat : 'misc'));
+    icoBox.appendChild((WS.Icons && slotInfo && slotInfo.id) ? WS.Icons.iconNode(slotInfo.id)
+        : TT.catIconNode(def ? def.cat : 'misc'));
     if (slotInfo && slotInfo.spoiled) icoBox.appendChild(TT.iconNode('ui_rot', 'slot-rot'));
     wrap.appendChild(icoBox);
 

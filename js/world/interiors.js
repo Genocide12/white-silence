@@ -164,6 +164,38 @@
     }
   });
 
+  // -------- РАДИОПРИЁМНИК, 28x24: деревянный ящик, латунь, катушка, наушники --------
+  WS.Spr.def('radio_recv', {
+    w: 28, h: 24,
+    draw: function (c) {
+      var p = WS.Spr.pal;
+      // тень
+      E2(c, 7, 11, 6.5, 1.2, 'rgba(0,0,0,0.28)');
+      // корпус — полированный ящик
+      R2(c, 1, 4, 12, 7, p.wood);
+      R2(c, 1, 4, 12, 1, p.wood3);
+      R2(c, 1, 10, 12, 1, p.wood2);
+      // передняя панель темнее
+      R2(c, 2, 6, 10, 4, '#4a3a26');
+      // катушка (цилиндр с витками)
+      R2(c, 3, 5, 3, 3, '#8a6f47');
+      R2(c, 3, 5, 3, 1, '#a8895a');
+      D2(c, 4, 6, '#c9b28a');
+      // латунные клеммы и ручка настройки
+      D2(c, 8, 6, p.brass); D2(c, 10, 6, p.brass);
+      R2(c, 8, 8, 3, 1, p.brass);
+      // стрелка-указатель шкалы
+      D2(c, 9, 7, '#e8dfc8');
+      // наушники сверху (чашка + дуга)
+      E2(c, 7, 3, 2.2, 1.6, '#3a2c1c');
+      E2(c, 11, 3, 2.2, 1.6, '#3a2c1c');
+      R2(c, 6, 1, 6, 1, '#2a1f14');
+      // провод от наушников к корпусу
+      c.strokeStyle = '#2a1f14'; c.lineWidth = 1;
+      c.beginPath(); c.moveTo(14, 8); c.quadraticCurveTo(16, 6, 13, 5); c.stroke();
+    }
+  });
+
   // -------- КРОВАТЬ ПРОСТАЯ, 48x40: соломник, подушка, домотканое одеяло --------
   WS.Spr.def('bed_wood', {
     w: 48, h: 40,
@@ -1002,7 +1034,6 @@
   }
 
   function res(ctx, x, y) { ctx.reserved[x + ',' + y] = 1; }
-
   /** Зарезервировать тайл и его соседей внутри коробки здания. */
   function reserveAround(ctx, x, y) {
     var b = ctx.b;
@@ -1018,10 +1049,11 @@
 
   /**
    * Контекст расстановки: occ (занятые тайлы: 1 твёрдое, 2 лёгкое),
-   * reserved (двери, проходы и подходы к ним), spent (бюджет комнаты).
+   * reserved (двери, проходы и подходы к ним), spent (бюджет комнаты),
+   * inter (тайлы ценных предметов: лут/печи/кровати — им нужен подход).
    */
   function mkCtx(b) {
-    var ctx = { b: b, occ: {}, reserved: {}, spent: {} };
+    var ctx = { b: b, occ: {}, reserved: {}, spent: {}, inter: {} };
     var W = WS.World, T = W.T;
     var i, xx, yy;
     // двери: сам тайл и соседние внутренние тайлы
@@ -1063,6 +1095,62 @@
     return cap - (ctx.spent[k] || 0);
   }
 
+  /** Ценный ли предмет (лут/печь/кровать): такому нужен подход-тайл. */
+  function preciousOpts(opts) {
+    if (!opts) return false;
+    return !!(opts.container || opts.heat ||
+      String(opts.spr || '').indexOf('bed') === 0);
+  }
+
+  /**
+   * ФИКС «мебельное кольцо» (сид 1917: ящики склада окружали ящик,
+   * полки — прилавок): постановка твёрдого предмета не должна
+   * запечатывать ЦЕННЫЕ предметы — у каждого соседа-ценного должен
+   * остаться хотя бы один подход-тайл (пол без твёрдого предмета,
+   * считая и новый x,y занятым). Смотрим по всей коробке здания:
+   * подход может лежать и в соседней комнате (через проём).
+   * Ценный сам предмет — тоже должен получить подход (иначе нечего
+   * ставить в глухой карман).
+   */
+  function approachKept(b, ctx, x, y, opts) {
+    var W = WS.World, T = W.T;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    var bx1 = b.x + b.w, by1 = b.y + b.h;
+    function floorFree(xx, yy) {
+      if (xx < b.x || xx >= bx1 || yy < b.y || yy >= by1) return false;
+      if (xx === x && yy === y) return false;        // сюда ставим предмет
+      var key = xx + ',' + yy;
+      if (ctx.occ[key] === 1) return false;          // занято твёрдым
+      if (ctx.reserved[key]) return false;           // проход у двери — не в счёт
+      var t = W.tileAt(xx, yy);
+      return t === T.FLOOR_WOOD || t === T.FLOOR_DIRT || t === T.FLOOR_TILE ||
+             t === T.FLOOR_CONCRETE || t === T.FLOOR_STONE || t === T.FLOOR_PLANK ||
+             t === T.DOORWAY || t === T.DOOR;
+    }
+    // сам предмет (если ценный) должен получить подход
+    if (preciousOpts(opts)) {
+      var hasSelf = false;
+      for (var d0 = 0; d0 < 4 && !hasSelf; d0++) {
+        if (floorFree(x + dirs[d0][0], y + dirs[d0][1])) hasSelf = true;
+      }
+      if (!hasSelf) return false;
+    }
+    // соседи-ценные не должны лишиться последнего подхода
+    for (var d = 0; d < 4; d++) {
+      var nx = x + dirs[d][0], ny = y + dirs[d][1];
+      if (nx < b.x || nx >= bx1 || ny < b.y || ny >= by1) continue;
+      var nk = nx + ',' + ny;
+      if (ctx.occ[nk] !== 1) continue;               // не твёрдый — не запечатывает
+      if (!ctx.inter[nk]) continue;                  // не ценный — пусть стоит
+      var has = false;
+      for (var d2 = 0; d2 < 4 && !has; d2++) {
+        if (floorFree(nx + dirs[d2][0], ny + dirs[d2][1])) has = true;
+      }
+      if (!has) return false;
+    }
+    return true;
+  }
+
   /** Установить предмет в конкретный тайл (без проверок места сверх usable). */
   function placeAt(b, room, ctx, x, y, opts) {
     if (budgetLeft(room, ctx) <= 0 && !opts.force) return null;
@@ -1073,11 +1161,13 @@
       name: opts.name || 'Мебель'
     };
     if (opts.container) o.container = opts.container;
+    if (opts.radio) o.radio = true;
     if (opts.heat) { o.heat = true; o.fire = false; }   // тепло есть, огня нет
     if (opts.sprFrame !== undefined) o.sprFrame = opts.sprFrame;
     if (opts.shadow === false) o.shadow = false;
     WS.World.addObject(o);
     ctx.occ[x + ',' + y] = opts.solid === false ? 2 : 1;
+    if (preciousOpts(opts)) ctx.inter[x + ',' + y] = 1;
     var k = room.x + ',' + room.y;
     ctx.spent[k] = (ctx.spent[k] || 0) + 1;
     return o;
@@ -1088,6 +1178,7 @@
     if (!opts || !opts.spr) return null;
     if (!usable(b, room, ctx, x, y, opts)) return null;
     if (solidOpts(opts) && !opts.force && !connectedAfter(room, ctx, x, y)) return null;
+    if (solidOpts(opts) && !opts.force && !approachKept(b, ctx, x, y, opts)) return null;
     return placeAt(b, room, ctx, x, y, opts);
   }
 
@@ -1126,6 +1217,7 @@
     for (i = 0; i < filtered.length; i++) {
       var p = filtered[i];
       if (solidOpts(opts) && !connectedAfter(room, ctx, p.x, p.y)) continue;
+      if (solidOpts(opts) && !approachKept(b, ctx, p.x, p.y, opts)) continue;
       return p;
     }
     return null;
@@ -1785,9 +1877,141 @@
     }
   }
 
+  /**
+   * РАДИОПРИЁМНИКИ В МИРЕ: где приёмник — там эфир слышен и виден
+   * (новости идут текстом у источника + дикторский голос).
+   * Казённая рация вокзала ставит story.js (st_radio); здесь — домашние
+   * приёмники в домах, где до революции успели купить.
+   */
+  function placeRadios(R) {
+    var W = WS.World, T = W.T;
+    var want = { doctor: 0.6, izba_rich: 0.85, dacha: 0.7, tavern: 0.5 };
+    var bs = W.buildings;
+    for (var i = 0; i < bs.length; i++) {
+      var b = bs[i];
+      if (!b || !b.rooms || !b.rooms.length) continue;
+      var p = want[b.type];
+      if (!p || !R.chance(p)) continue;
+      var rooms = [];
+      for (var k = 0; k < b.rooms.length; k++) {
+        var role = b.rooms[k].role;
+        if (role === 'living' || role === 'bedroom' || role === 'hall' || role === 'office') {
+          rooms.push(b.rooms[k]);
+        }
+      }
+      if (!rooms.length) continue;
+      var room = rooms[R.int(0, rooms.length - 1)];
+      for (var t = 0; t < 40; t++) {
+        var x = room.x + R.int(0, room.w - 1);
+        var y = room.y + R.int(0, room.h - 1);
+        var tt = W.tileAt(x, y);
+        if (tt !== T.FLOOR_TILE && tt !== T.FLOOR_WOOD) continue;
+        if (W.objsAt(x, y).length) continue;
+        W.addObject({
+          x: x + 0.5, y: y + 0.5,
+          sprName: 'radio_recv',
+          solid: true,
+          name: 'Приёмник',
+          radio: true
+        });
+        break;
+      }
+    }
+  }
+
   // ==================================================================
   //  ОБРАБОТЧИК 'gen:town' И ПУБЛИЧНЫЙ API
   // ==================================================================
+
+  /**
+   * ФИКС «лодка на острове» (сид 1917: вмёрзшая лодка за проливом):
+   * контейнеры ВНЕ зданий (лодки декора, егерские тайники) могут
+   * оказаться в части карты, откуда нет пути — река/пролив режут
+   * мир. После 'gen:interiors' (все подписчики уже поставили своё)
+   * проверяем глобальную достижимость от точки появления игрока и
+   * переносим недостижимый уличный лут к ближайшему достижимому
+   * подходящему тайлу. Детерминированно: без ГСЧ, скан по порядку.
+   */
+  function relocateStreetLoot() {
+    var W = WS.World, T = W.T;
+    if (!W || !W.objects || !W.spawnPoint) return 0;
+    var sx = Math.floor(W.spawnPoint.x), sy = Math.floor(W.spawnPoint.y);
+    // BFS от старта по проходимым тайлам (двери-объекты не мешают)
+    var reach = {};
+    var q = [{ x: sx, y: sy }];
+    reach[sx + ',' + sy] = 1;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (q.length) {
+      var c = q.shift();
+      for (var d = 0; d < 4; d++) {
+        var nx = c.x + dirs[d][0], ny = c.y + dirs[d][1];
+        var k = nx + ',' + ny;
+        if (reach[k]) continue;
+        if (nx < 1 || ny < 1 || nx >= W.w - 1 || ny >= W.h - 1) continue;
+        if (W.isTileBlocked(nx, ny)) continue;
+        var obs = W.objsAt(nx, ny);
+        var solid = false;
+        if (obs) {
+          for (var i = 0; i < obs.length; i++) {
+            if (obs[i] && obs[i].solid && !obs[i].door) { solid = true; break; }
+          }
+        }
+        if (solid) continue;
+        reach[k] = 1;
+        q.push({ x: nx, y: ny });
+      }
+    }
+    // достижимые тайлы-кандидаты: берег (для лодок) и природа (прочее)
+    var shoreSpots = [], natureSpots = [];
+    for (var yy = 2; yy < W.h - 2; yy++) {
+      for (var xx = 2; xx < W.w - 2; xx++) {
+        if (!reach[xx + ',' + yy]) continue;
+        if (W.buildingAt && W.buildingAt(xx, yy)) continue;
+        var obs2 = W.objsAt(xx, yy);
+        if (obs2 && obs2.length) continue;
+        var t = W.tileAt(xx, yy);
+        if (t === T.SHORE || t === T.ICE) shoreSpots.push({ x: xx, y: yy });
+        else if (t === T.SNOW || t === T.GRASS || t === T.GRASS2 || t === T.DIRT) {
+          natureSpots.push({ x: xx, y: yy });
+        }
+      }
+    }
+    if (!shoreSpots.length && !natureSpots.length) return 0;
+    var used = {};
+    var moved = 0;
+    for (var oi = 0; oi < W.objects.length; oi++) {
+      var o = W.objects[oi];
+      if (!o || !o.container) continue;
+      var ox = Math.floor(o.x), oy = Math.floor(o.y);
+      if (W.buildingAt && W.buildingAt(ox, oy)) continue;   // интерьеры не трогаем
+      var ok = false;
+      for (var d2 = 0; d2 < 4; d2++) {
+        if (reach[(ox + dirs[d2][0]) + ',' + (oy + dirs[d2][1])]) { ok = true; break; }
+      }
+      if (ok) continue;
+      // перенос: лодки — к берегу, прочее — на природу
+      var isBoat = String(o.sprName || '').indexOf('boat') === 0;
+      var pool = (isBoat && shoreSpots.length) ? shoreSpots :
+                 (natureSpots.length ? natureSpots : shoreSpots);
+      if (!pool || !pool.length) break;
+      var best = null, bd = 1e9;
+      for (var pi = 0; pi < pool.length; pi++) {
+        var pk = pool[pi].x + ',' + pool[pi].y;
+        if (used[pk]) continue;
+        var dd = (pool[pi].x - ox) * (pool[pi].x - ox) +
+                 (pool[pi].y - oy) * (pool[pi].y - oy);
+        if (dd < bd) { bd = dd; best = pool[pi]; }
+      }
+      if (!best) continue;
+      try { W.removeObject(o); } catch (e1) { continue; }
+      o.x = best.x + 0.5;
+      o.y = best.y + 0.5;
+      W.addObject(o);
+      used[best.x + ',' + best.y] = 1;
+      moved++;
+    }
+    return moved;
+  }
 
   function onGenTown(d) {
     var R = (d && d.R) ? d.R : WS.RNG.mk((d && d.seed) || 1);
@@ -1801,10 +2025,19 @@
     }
     try { boatsSupply(); } catch (e2) { WS.err('boats', e2); }
     try { rangerCaches(R); } catch (e3) { WS.err('ranger caches', e3); }
+    try { placeRadios(R); } catch (e4) { WS.err('radios', e4); }
     WS.log('[Interiors] мебель расставлена: зданий ' + bs.length +
            ', объектов всего ' + WS.World.objects.length);
     // следующий этап наполнения мира
     WS.Ev.emit('gen:interiors', { R: R });
+    // ПОСЛЕ всех подписчиков (декор ставит лодки, квесты — тайники):
+    // уличный лут, отрезанный водой, переносим в достижимые места
+    try {
+      var movedLoot = relocateStreetLoot();
+      if (movedLoot) {
+        WS.log('[Interiors] уличный лут с недостижимых берегов перенесён: ' + movedLoot);
+      }
+    } catch (e5) { WS.err('street loot', e5); }
   }
 
   WS.boot(function initInteriors() {

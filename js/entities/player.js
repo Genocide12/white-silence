@@ -336,13 +336,20 @@
   //  Так «вверх» на экране остаётся «вверх» при любой камере/зуме.
   // ====================================================================
 
-  /** Экранные оси ввода: ax/ay = -1..1 (уже скомпенсировано «вниз»). */
+  /** Экранные оси ввода: ax/ay = -1..1 (уже скомпенсировано «вниз»).
+   *  Если демо-автопилот включил виртуальный джойстик — его оси точнее
+   *  квантованных WASD (бот шёл по дуге и «обходил препятствие» вечно). */
   function screenAxes() {
     var ax = 0, ay = 0;
     if (WS.Input.down('right')) ax += 1;
     if (WS.Input.down('left')) ax -= 1;
     if (WS.Input.down('down')) ay += 1;
     if (WS.Input.down('up')) ay -= 1;
+    var v = (WS.Input && WS.Input.virtualAxes) ? WS.Input.virtualAxes() : null;
+    if (v && v.on) {
+      // реальная клавиатура имеет приоритет над джойстиком бота
+      if (!ax && !ay) { ax = v.ax; ay = v.ay; }
+    }
     return { ax: ax, ay: ay };
   }
 
@@ -361,13 +368,25 @@
   /**
    * Итоговая скорость, тайлов/с:
    *   base(2.2) × sneak(0.45) × sprint(1.8) × (1/terrainCost, мин 0.3)
-   *   × задыхание(0.6) × p.moveMul (крючок для систем B: перелом, боль...)
+   *   × задыхание(0.6) × перегруз(0.7/0.45) × p.moveMul (крючок B)
+   * Перегруз — РЕАЛИЗМ: Inv.overload() 1 (свыше максимума) — тяжело,
+   * 2 (жёсткий потолок) — еле плетёшься. Раньше считался, но ни на что
+   * не влиял — 40 кг барахла несли безнаказанно.
    */
   function currentSpeed(p, mx, my, sprinting) {
     var sp = (typeof p.speed === 'number' && p.speed > 0) ? p.speed : BASE_SPEED;
     if (p.sneaking) sp *= SNEAK_MUL;
     if (sprinting) sp *= (typeof p.sprintMul === 'number' && p.sprintMul > 0) ? p.sprintMul : SPRINT_MUL;
     if (typeof p.breath === 'number' && p.breath < BREATH_GASP) sp *= GASP_SPEED_MUL;
+
+    // перегруз: тяжело / очень тяжело
+    try {
+      if (WS.Inv && WS.Inv.overload) {
+        var ov = WS.Inv.overload();
+        if (ov >= 2) sp *= 0.45;
+        else if (ov >= 1) sp *= 0.7;
+      }
+    } catch (eOv) { /* инвентаря нет — идём без штрафа */ }
 
     // рельеф: щуп вперёд по направлению движения
     var cost = terrainCostAt(p.x + mx * PROBE_AHEAD, p.y + my * PROBE_AHEAD, p);
@@ -1210,6 +1229,7 @@
 
     // внутренние, открыты для действий (actions.js не должен дублировать)
     wakeInternal: wake,
+    trySleepInternal: function () { return trySleep(P()); },
     hint: hint
   });
 

@@ -851,7 +851,12 @@
 
   function onKey(d) {
     if (!isOpen) return;
-    if (d && (d.code === 'KeyH' || d.code === 'Escape')) close();
+    if (d && d.code === 'KeyH') {
+      if (WS.Input && WS.Input.consumeCode) WS.Input.consumeCode('KeyH');
+      close();
+    } else if (d && d.code === 'Escape') {
+      close();
+    }
   }
 
   // ====================================================================

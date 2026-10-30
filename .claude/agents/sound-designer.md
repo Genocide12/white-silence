@@ -13,10 +13,10 @@ to live in the same world as the style.
 ## First
 1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
    files — BLOCKED. Check the base from the task, prepare the worktree.
-2. Read `.studioigor/CONCEPT.md` (genre, tone), `.studioigor/ART_BIBLE.md` (world),
-   `.studioigor/ASSETS.md` (sound strategy, conventions), `.studioigor/ENV.md` (commands).
-3. Techniques, the relevant section: `/home/z/my-project/studioigor-skill/references/assets.md` (sound),
-   `/home/z/my-project/studioigor-skill/references/polish-release.md` (juice, mix).
+2. Read `.DirtyG/CONCEPT.md` (genre, tone), `.DirtyG/ART_BIBLE.md` (world),
+   `.DirtyG/ASSETS.md` (sound strategy, conventions), `.DirtyG/ENV.md` (commands).
+3. Techniques, the relevant section: `/home/z/my-project/DirtyG-skill/references/assets.md` (sound),
+   `/home/z/my-project/DirtyG-skill/references/polish-release.md` (juice, mix).
 
 ## How you work
 - Make an "event → sound" map: player action, hit, damage, pickup, UI, victory and

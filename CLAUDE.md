@@ -1,22 +1,21 @@
-# Белое Безмолвие — project rules (studioigor)
+# Белое Безмолвие — project rules (DirtyG)
 
-The game "Белое Безмолвие" is built with the studioigor pipeline. The agent leads the user step by step
-from idea to release; the user decides taste and direction and plays often. Run the
-pipeline work through the studioigor skill (`/home/z/my-project/studioigor-skill/SKILL.md`, phase rules in
-`/home/z/my-project/studioigor-skill/references/`).
+The game "Белое Безмолвие" is built with the DirtyG pipeline. The agent leads the user step by step
+from idea to release; the user decides taste and direction and plays often.
+
+The project is self-contained: the rules live in this file, the module API contract in
+`CONTRACT.md` (read it before writing any file), and the defect/verification log in
+`RESCUE.md` (what was broken, how it was fixed, how it was checked).
 
 ## Start of every session
-1. `python3 /home/z/my-project/studioigor-skill/scripts/studio.py status` — shows the phase, open gates, what's
-   next, learned items for this phase (accepted improvements and user preferences) and
-   warnings. Do what it says.
-2. Read `.studioigor/STATE.md`: "Now", open questions, session log.
-3. What is recorded in `.studioigor/` (especially DECISIONS.md) is already decided: do not
+1. Read `CONTRACT.md` (file rules, tick priorities, prohibitions) and the latest section
+   of `RESCUE.md` (recent defects, verification method, known limitations).
+2. What is recorded on disk (CONTRACT.md, RESCUE.md, git history) is already decided: do not
    ask again and do not rebuild it. Trust the disk more than context memory.
-4. `status` says "AUTOPILOT ACTIVE" and you are not an autopilot tick — do not edit the
-   project: independent development is running. To intervene — `/home/z/my-project/studioigor-skill/scripts/autopilot.py stop`.
 
-If you are a subagent with a task from the lead — do not run `status`: it ticks gates and
-changes files. Work on the task and return the contract from your role.
+If you are a subagent with a task from the lead — work on the task and return the contract
+from your role. Do not rewrite the shared docs (this file, CONTRACT.md): propose the change
+to the lead instead.
 
 ## Game first
 - Effort and tokens go into the game itself: gameplay, feel, assets, levels, sound, story.
@@ -33,36 +32,36 @@ changes files. Work on the task and return the contract from your role.
   only via `AskUserQuestion`: 1–4 questions, 2–4 options, the recommended one first
   marked "(Recommended)", "you decide" is always available.
 - Find out facts (files, installed software, APIs, documentation) yourself.
-- Record the decision: `studio.py decide "…" --by user|agent --why "…"`. The user
-  stepped away (`/loop`) — don't ask, decide yourself `--by agent`. Autopilot (independent
-  development) — taste decisions `--by proxy`, user gates `tick "…" --proxy`, rules in
-  `/home/z/my-project/studioigor-skill/references/autopilot.md`.
-- "Always do it this way" / "I don't like X" — right away
-  `python3 /home/z/my-project/studioigor-skill/scripts/learn.py prefer "…"`: it stays in this game
-  (`.studioigor/PREFERENCES.md`). `--global` only for a rule about how to work with the user
-  in any game, never for this game's taste.
+- Record the decision as a one-line note in the commit that implements it (what and why).
+- "Always do it this way" / "I don't like X" — record it the same way: a one-line decision
+  note in the commit; it stays part of this game's rules. A rule about how to work with the
+  user in any game goes into this file, never into this game's taste.
 
 ## Git
-- Commit at every step (a decision, closed gates, a locked mechanic):
-  `python3 /home/z/my-project/studioigor-skill/scripts/studio.py commit "…"`.
+- Commit at every step (a decision, closed gates, a locked mechanic). The lead reviews the
+  diff and commits; subagents never commit, push or stash.
 - Never push or publish unless the user asked for it.
 - Subagents that change files work in a git worktree (`isolation: "worktree"`).
   The lead reviews the diff, merges one at a time and checks the game after each merge.
-  `.claude/worktrees/` must be in .gitignore. The procedure is in `/home/z/my-project/studioigor-skill/references/team.md`.
+  `.claude/worktrees/` must be in .gitignore.
 - Live Blender (blender-mcp) and the engine editor via MCP — main session only.
   Subagents work headless.
 
 ## Commands and code
-- Verified commands live in `.studioigor/ENV.md`: RUN (the user sees the game), TEST,
-  BUILD, CAPTURE (frames in `.studioigor/captures/`), EDITOR. Take them from there, don't make them up.
-  A command changed — update ENV.md and run `studio.py verify`.
-- The code standard is `/home/z/my-project/studioigor-skill/references/code.md`: tuning parameters in data files, simple
-  architecture with nothing "for the future".
+- Verified commands (RUN/TEST/BUILD/CAPTURE) live in `scripts/`; take them from there,
+  don't make them up. A command changed — update this list:
+  - RUN: `node scripts/serve.mjs 3000` — the user sees the game at http://localhost:3000.
+  - TEST: `node scripts/bootcheck.mjs http://localhost:3000` (boot validation),
+    `node scripts/probe2.mjs http://localhost:3000 qa` (E2E smoke).
+  - BUILD: `python3 scripts/build.py` — rebuild `index.html` after adding files.
+  - CAPTURE: `node scripts/shots.mjs`, `node scripts/shots_responsive.mjs` (frames in
+    `download/`), responsive audit: `node scripts/resp_check.mjs`.
+- The code standard is `CONTRACT.md` (ES5 IIFE + `WS.def`, tick priorities, no CDN):
+  tuning parameters in data files, simple architecture with nothing "for the future".
 - Studio roles live in `.claude/agents/`: game-designer, art-director, tech-artist,
   gameplay-programmer, level-designer, sound-designer, narrative-designer, qa-tester.
 
 ## Do not touch
-- Never edit the skill's files (`/home/z/my-project/studioigor-skill/SKILL.md`, `references/`, `scripts/`).
-  Found a better way — `learn.py propose`; `status` will show what was accepted.
-- Change the `.studioigor/` state through `studio.py` (decide, tick, note, commit) when
-  there is a command for it.
+- Never rewrite the shared rule docs (this file, CONTRACT.md) to fit a local change —
+  propose the edit to the lead; accepted edits show up in git history.
+- The fix log in `RESCUE.md` is append-only: new sections, no rewriting of old ones.

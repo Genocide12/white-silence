@@ -13,6 +13,9 @@
     volume: 0.7,
     music: 0.5,
     muted: false,
+    voiceDed: true,       // голос деда (озвучка мыслей, Web Speech)
+    voiceRadio: true,     // голос радио-диктора
+    voiceVol: 1.0,        // громкость голоса (0..1)
     lang: null,            // null = авто
     difficulty: 'survivor',
     tutorial: true,
@@ -65,6 +68,14 @@
       case 'muted':
         if (WS.Snd) WS.Snd.setMuted(!!v);
         break;
+      case 'voiceDed':
+      case 'voiceRadio':
+        // тумблеры озвучки: thoughts.js читает их в момент речи
+        // (WS.Options.get) — мгновенно применять нечего
+        break;
+      case 'voiceVol':
+        // громкость голоса тоже применяется при следующей реплике
+        break;
       case 'music':
         if (WS.Music && WS.Music.setVolume) WS.Music.setVolume(v);
         break;
@@ -114,6 +125,11 @@
     el.appendChild(row('Громкость звуков', 'volume', 'slider', 0, 1, 0.05));
     el.appendChild(row('Громкость музыки', 'music', 'slider', 0, 1, 0.05));
     el.appendChild(row('Без звука', 'muted', 'check'));
+
+    // --- голос (озвучка мыслей деда и радио-диктора) ---
+    el.appendChild(row('Голос деда (озвучка мыслей)', 'voiceDed', 'check'));
+    el.appendChild(row('Голос радио-диктора', 'voiceRadio', 'check'));
+    el.appendChild(row('Громкость голоса', 'voiceVol', 'slider', 0, 1, 0.05));
 
     el.appendChild(hr());
 

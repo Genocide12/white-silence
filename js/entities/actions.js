@@ -912,10 +912,25 @@
     if (!o) return false;
     if (o.door) return toggleDoor(o);
     if (o.container) return searchContainer(o);
+    // печь: затопить (дрова + спичка/огниво) — WS.Fire.lightStove
+    if (WS.Fire && WS.Fire.lightStove && isStoveObj(o)) {
+      var r = null;
+      try { r = WS.Fire.lightStove(o); } catch (e) { r = null; }
+      if (r && r.ok) return true;
+      return false;
+    }
     // прочее: просто осмотр
     hint(o.name || 'Ничего особенного');
     snd('click', o.x, o.y, 0.4);
     return false;
+  }
+
+  /** Похоже ли на печь (спрайты pech / stove_iron, поле heat). */
+  function isStoveObj(o) {
+    if (!o) return false;
+    if (o.heat) return true;
+    var n = String(o.sprName || '');
+    return n === 'pech' || n === 'stove_iron' || n.indexOf('stove') >= 0;
   }
 
   // ====================================================================
@@ -1159,11 +1174,39 @@
 
       var m = mouse();
 
-      // ЛКМ: удар/выстрел/кулаки
-      if (m.leftP) onPrimary(p);
+      // ЛКМ: предмет под курсором — БЫСТРОЕ ДЕЙСТВИЕ (жалоба игрока:
+      // «при нажатии — быстрое действие с предметом, если нет действия —
+      // в инвентарь»); зверь под курсором или пусто — удар/выстрел/кулаки.
+      if (m.leftP) {
+        var tgt = cursorTarget(p);
+        var entUnder = entAt(m.wx, m.wy, 0.8, p);
+        if (tgt && !tgt.far && !entUnder) {
+          quickAction(tgt.o);
+        } else if (tgt && tgt.far && !entUnder) {
+          hint('Подойти ближе');
+        } else {
+          onPrimary(p);
+        }
+      }
 
-      // ПКМ или E: взаимодействие
-      if (m.rightP || WS.Input.hit('interact')) doInteract(p);
+      // ПКМ: предмет под курсором — КОНТЕКСТНОЕ МЕНЮ всех действий;
+      // пусто под курсором — обычное взаимодействие (как [E]).
+      if (m.rightP) {
+        var mtgt = cursorTarget(p);
+        if (mtgt && WS.CtxMenu && WS.CtxMenu.show) {
+          var entries = actionsFor(mtgt.o, mtgt.far);
+          var name = mtgt.o.name || '';
+          if (!name && mtgt.ent) {
+            var dr = parseDrop(mtgt.o);
+            name = dr && dr.id ? itemName(dr.id) : 'Предмет';
+          }
+          WS.CtxMenu.show(m.x, m.y, entries, name || undefined);
+        } else {
+          doInteract(p);
+        }
+      } else if (WS.Input.hit('interact')) {
+        doInteract(p);
+      }
 
       // F: факел/фонарь
       if (WS.Input.hit('lightSrc')) toggleLight();
@@ -1245,6 +1288,224 @@
   }
 
   // ====================================================================
+  //  РАБОТА С ПРЕДМЕТОМ ПОД КУРСОРОМ (схема игрока):
+  //    наведение — подсказка (world_hover.js);
+  //    ЛКМ       — быстрое действие (quickAction);
+  //    ПКМ       — все действия (actionsFor → CtxMenu).
+  // ====================================================================
+
+  var CURSOR_GRAB = 1.05;   // радиус захвата предмета курсором, тайлы
+
+  /** Объект мира или дроп под курсором (для ЛКМ/ПКМ).
+   *  Возвращает {o, far, ent} или null. ent=true, если это дроп-сущность. */
+  function cursorTarget(p) {
+    var w = W();
+    var m = mouse();
+    if (!w || !p || m.tx < 0 || m.ty < 0) return null;
+
+    // 1) дроп-сущность под курсором (предмет на земле)
+    if (w.ents) {
+      var be = null, bed = CURSOR_GRAB;
+      for (var i = 0; i < w.ents.length; i++) {
+        var e = w.ents[i];
+        if (!e || e.dead || (e.kind !== 'drop' && !e.drop)) continue;
+        var de = WS.M.dist(m.wx, m.wy, e.x, e.y);
+        if (de < bed) { bed = de; be = e; }
+      }
+      if (be) {
+        return { o: be, far: WS.M.dist(p.x, p.y, be.x, be.y) > INTERACT_R + 0.4, ent: true };
+      }
+    }
+
+    // 2) объект мира: точный тайл, затем ближайший в радиусе захвата
+    var direct = null;
+    try { direct = w.objAt(m.tx, m.ty); } catch (errD) { direct = null; }
+    var o = direct;
+    if (!o) {
+      var bd = CURSOR_GRAB;
+      var list = [];
+      try {
+        list = w.query(m.wx - CURSOR_GRAB - 1, m.wy - CURSOR_GRAB - 1,
+                       m.wx + CURSOR_GRAB + 1, m.wy + CURSOR_GRAB + 1) || [];
+      } catch (errQ) { list = w.objects || []; }
+      for (var k = 0; k < list.length; k++) {
+        var c = list[k];
+        if (!c) continue;
+        var dc = WS.M.dist(m.wx, m.wy, c.x, c.y);
+        if (dc < bd) { bd = dc; o = c; }
+      }
+    }
+    if (!o) return null;
+    // интересуют только «предметы взаимодействия»
+    if (!(o.door || o.container || o.forage || isStoveObj(o) ||
+          /^bed/.test(String(o.sprName || '')) || o.sprName === 'crazy_gift' ||
+          o.sprName === 'ice_hole' || o.sprName === 'ice_covered' ||
+          o.drop)) return null;
+    return { o: o, far: WS.M.dist(p.x, p.y, o.x, o.y) > INTERACT_R + 0.4, ent: false };
+  }
+
+  /** Подобрать конкретный дроп (сущность или объект с полем drop). */
+  function pickupDrop(e) {
+    var p = P();
+    var w = W();
+    if (!p || !w || !e) return false;
+    var dr = parseDrop(e);
+    if (!dr || !dr.id || !itemDef(dr.id)) { hint('Мусор, не берём'); return false; }
+    var got = give(dr.id, dr.count || 1);
+    if (got <= 0) { hint('Некуда класть — рюкзак полон'); snd('error', 0.5); return false; }
+    pickupFx(dr, e.x, e.y);
+    try {
+      if (e.kind === 'drop' || e.drop && w.removeEnt && w.ents.indexOf(e) >= 0) w.removeEnt(e);
+      else if (w.removeObject) w.removeObject(e);
+    } catch (err) { WS.err('pickupDrop:', err && err.message); }
+    return true;
+  }
+
+  /** Затопить печь (обёртка над WS.Fire.lightStove с тостами). */
+  function stoveLight(o) {
+    if (WS.Fire && WS.Fire.lightStove) {
+      var r = WS.Fire.lightStove(o);
+      return !!(r && r.ok);
+    }
+    return false;
+  }
+
+  /** Подкинуть лучшие дрова в печь/костёр. */
+  function stoveFuel(o) {
+    if (WS.Fire && WS.Fire.addFuel) {
+      var fuels = ['firewood', 'wood_pile', 'plank', 'branch'];
+      for (var i = 0; i < fuels.length; i++) {
+        if (countItem(fuels[i]) > 0) {
+          return !!WS.Fire.addFuel(o, fuels[i]);
+        }
+      }
+      hint('Нет дров в рюкзаке');
+    }
+    return false;
+  }
+
+  /** Ловить рыбу в проруби под курсором. */
+  function fishHole(o) {
+    if (WS.Fishing && WS.Fishing.startCast) {
+      var rec = o._holeRec || null;
+      if (!rec && WS.Fishing.holes) {
+        var hs = WS.Fishing.holes();
+        for (var i = 0; i < hs.length; i++) {
+          if (hs[i] && hs[i].o === o) { rec = hs[i]; break; }
+        }
+      }
+      if (rec) return !!WS.Fishing.startCast(rec);
+      // записи нет — зарегистрируем и повторим
+      if (WS.Fishing.scanHoles) {
+        WS.Fishing.scanHoles();
+        return fishHole(o);
+      }
+    }
+    return false;
+  }
+
+  /**
+   * СПИСОК ВСЕХ ДЕЙСТВИЙ с объектом (для контекстного меню ПКМ).
+   * far=true — объект вне досягаемости: пункты задизейблены + подсказка.
+   * Возвращает массив {label, kbd, note, disabled, danger, sep, fn}.
+   */
+  function actionsFor(o, far) {
+    var out = [];
+    if (!o) return out;
+    var dis = far;    // далеко — все действия недоступны
+    var spr = String(o.sprName || '');
+
+    function add(label, fn, kbd, note, danger) {
+      out.push({
+        label: label, kbd: kbd || '', note: note || '',
+        disabled: dis, danger: !!danger, fn: fn
+      });
+    }
+
+    if (o.door) {
+      if (o.locked && !o.open) {
+        add('Заперто', null, '', 'Замок не поддаётся — нужен лом или ключ');
+      } else {
+        add(o.open ? 'Закрыть дверь' : 'Открыть дверь', function () { toggleDoor(o); }, 'E');
+      }
+    } else if (o.container) {
+      if (o.corpse) {
+        add('Обыскать труп', function () { searchContainer(o); }, 'E');
+      } else if (o.sprName === 'crazy_gift') {
+        add('Забрать подарок', function () { searchContainer(o); }, 'E');
+      } else if (o.looted) {
+        add('Обыскано — пусто', null, '', 'Здесь уже всё вынесли');
+      } else {
+        add('Обыскать', function () { searchContainer(o); }, 'E');
+      }
+    } else if (isStoveObj(o)) {
+      var lit = !!(o.fire && o.fireData && o.fireData.fuel > 0);
+      if (lit) {
+        add('Подкинуть дров', function () { stoveFuel(o); }, '', null);
+        out.push({ sep: true });
+        out.push({
+          label: 'Печь топится — греет комнату', kbd: '', note: '',
+          disabled: true, danger: false, fn: null
+        });
+      } else {
+        add('Затопить печь', function () { stoveLight(o); }, '',
+            'Нужны дрова и спичка/огниво');
+      }
+    } else if (/^bed/.test(spr) || /Кроват|Тахт/.test(String(o.name || ''))) {
+      add('Лечь спать', function () {
+        if (WS.Player && WS.Player.trySleepInternal) WS.Player.trySleepInternal();
+      }, 'Z', 'Сон греет и восстанавливает силы');
+    } else if (o.forage) {
+      add('Собрать', function () {
+        if (WS.Forage && WS.Forage.tryHarvest) WS.Forage.tryHarvest(o);
+      }, 'E');
+    } else if (spr === 'ice_hole' || spr === 'ice_covered') {
+      add('Ловить рыбу', function () { fishHole(o); }, '', 'Нужна удочка');
+      if (spr === 'ice_covered') {
+        add('Расколоть лёд', function () { fishHole(o); }, '', 'Прорубь схвачена морозом');
+      }
+    } else if (o.drop || o.kind === 'drop') {
+      add('Подобрать', function () { pickupDrop(o); });
+    } else {
+      add('Осмотреть', null, 'E', 'Ничего особенного');
+    }
+
+    if (far) {
+      out.unshift({
+        label: 'Подойти ближе', kbd: '', note: 'Слишком далеко для действия',
+        disabled: true, danger: false, fn: null
+      });
+    }
+    return out;
+  }
+
+  /**
+   * БЫСТРОЕ ДЕЙСТВИЕ (ЛКМ по предмету): первое осмысленное действие.
+   * Возвращает true, если действие выполнено (атака не нужна).
+   */
+  function quickAction(o) {
+    if (!o) return false;
+    var spr = String(o.sprName || '');
+    if (o.door) return toggleDoor(o);
+    if (o.container || o.corpse || spr === 'crazy_gift') return searchContainer(o);
+    if (isStoveObj(o)) {
+      var lit = !!(o.fire && o.fireData && o.fireData.fuel > 0);
+      return lit ? stoveFuel(o) : stoveLight(o);
+    }
+    if (/^bed/.test(spr) || /Кроват|Тахт/.test(String(o.name || ''))) {
+      if (WS.Player && WS.Player.trySleepInternal) return WS.Player.trySleepInternal();
+      return false;
+    }
+    if (o.forage) {
+      if (WS.Forage && WS.Forage.tryHarvest) return WS.Forage.tryHarvest(o);
+      return false;
+    }
+    if (spr === 'ice_hole' || spr === 'ice_covered') return fishHole(o);
+    if (o.drop || o.kind === 'drop') return pickupDrop(o);
+    return false;
+  }
+
+  // ====================================================================
   //  ПУБЛИЧНЫЙ API МОДУЛЯ
   //  Базовый инвентарь (ядро для WS.Inv B-агента) + действия.
   //  ВСЕ методы безопасны при отсутствии партии (возвращают нули/false).
@@ -1272,6 +1533,12 @@
     interactTarget: function () { var p = P(); return p ? interactTarget(p) : null; },
     toggleDoor: toggleDoor,
     searchContainer: searchContainer,
+
+    // --- предмет под курсором: ЛКМ/ПКМ-схема игрока ---
+    cursorTarget: function () { var p = P(); return p ? cursorTarget(p) : null; },
+    actionsFor: function (o, far) { return actionsFor(o, far); },
+    quickAction: quickAction,
+    pickupDrop: pickupDrop,
 
     // --- предметы на полу ---
     dropHand1: dropHand1,

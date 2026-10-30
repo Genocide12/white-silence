@@ -2,8 +2,11 @@
 
 #ws-demo {
   position: fixed;
-  top: 10px;
-  right: 10px;
+  /* НИЖЕ #ws-hud (часы/дни/скорость, top:12 right:14, ~70px высотой):
+     панель больше не перекрывает кнопки управления. Позицию можно
+     менять перетаскиванием за шапку — она запоминается. */
+  top: 92px;
+  right: 14px;
   width: 340px;
   max-width: calc(100vw - 20px);
   z-index: 900;
@@ -25,6 +28,44 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 6px;
+  cursor: grab;
+}
+
+#ws-demo .d-head:active { cursor: grabbing; }
+
+#ws-demo .d-head-btns {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+#ws-demo .d-col {
+  background: rgba(60, 80, 105, 0.5);
+  color: #cfe0ee;
+  border: 1px solid rgba(140, 170, 200, 0.3);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+}
+#ws-demo .d-col:hover { background: rgba(90, 115, 145, 0.6); }
+
+/* СВЁРНУТАЯ панель: остаётся только шапка-полоска — не мешает играть */
+#ws-demo.collapsed { padding: 6px 10px; }
+#ws-demo.collapsed .d-status,
+#ws-demo.collapsed .d-action,
+#ws-demo.collapsed .d-speeds,
+#ws-demo.collapsed .d-log,
+#ws-demo.collapsed .d-foot { display: none; }
+#ws-demo.collapsed .d-head { margin-bottom: 0; }
+#ws-demo.collapsed .d-title::after {
+  content: ' — свёрнуто';
+  color: #6f8296;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 #ws-demo .d-title {
@@ -98,9 +139,10 @@
   color: #b9c6d4;
 }
 
-#ws-demo .dl-line { margin-bottom: 1px; }
+#ws-demo .dl-line { margin-bottom: 1px; overflow-wrap: break-word; }
 #ws-demo .dl-line.bad { color: #e89a9a; }
 #ws-demo .dl-line.good { color: #a5d69a; }
+#ws-demo .dl-line.think { color: #d8c9a3; font-style: italic; opacity: 0.92; }
 #ws-demo .dl-t { color: #6f8296; }
 
 #ws-demo .d-foot {
@@ -139,7 +181,7 @@
 @media (max-width: 700px) {
   #ws-demo {
     width: calc(100vw - 76px);
-    top: 6px;
+    top: 96px;
     right: 6px;
     font-size: 11px;
     padding: 8px;

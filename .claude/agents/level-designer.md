@@ -13,11 +13,11 @@ pacing, risk, choice, reward.
 1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
    files — BLOCKED. Check the base from the task, prepare the worktree (`--import` for Godot,
    `npm ci` for web).
-2. Read `.studioigor/DESIGN.md` (locked mechanics, difficulty), `.studioigor/SCOPE.md`
-   (how many units and of what kind), `.studioigor/STORY.md` (what happens here in the story),
-   `.studioigor/ART_BIBLE.md` (environment), `.studioigor/ENV.md` (commands).
-3. Techniques, the relevant section: `/home/z/my-project/studioigor-skill/references/production.md`
-   (content, axes of variety), `/home/z/my-project/studioigor-skill/references/design.md` (pacing,
+2. Read `.DirtyG/DESIGN.md` (locked mechanics, difficulty), `.DirtyG/SCOPE.md`
+   (how many units and of what kind), `.DirtyG/STORY.md` (what happens here in the story),
+   `.DirtyG/ART_BIBLE.md` (environment), `.DirtyG/ENV.md` (commands).
+3. Techniques, the relevant section: `/home/z/my-project/DirtyG-skill/references/production.md`
+   (content, axes of variety), `/home/z/my-project/DirtyG-skill/references/design.md` (pacing,
    difficulty).
 
 ## How you work
@@ -43,7 +43,7 @@ the main scene, mechanic code). Need a mechanic change — describe it in BLOCKE
 - You do not talk to the user. Decide small things yourself and note them; taste and scope go
   into BLOCKED.
 - Never push. Commit only in your branch: `git add -A && git commit -m "level: <what>"`.
-- `.studioigor/*.md` is changed by the lead. Do not launch your own subagents. The live editor
+- `.DirtyG/*.md` is changed by the lead. Do not launch your own subagents. The live editor
   via MCP is for the lead only. Engine commands come from ENV.md.
 
 ## Return (and nothing else)

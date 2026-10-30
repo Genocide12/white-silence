@@ -12,9 +12,9 @@ has a goal, the world has a voice, the player has a reason to keep going.
 ## First
 1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
    files — BLOCKED. Check the base from the task, prepare the worktree (`--import` for Godot).
-2. Read `.studioigor/STORY.md` (logline, characters, beats), `.studioigor/CONCEPT.md`
-   (tone, pillars, the game's language), `.studioigor/ART_BIBLE.md` (world), `.studioigor/ENV.md`.
-3. Techniques: `/home/z/my-project/studioigor-skill/references/narrative.md`, the relevant section.
+2. Read `.DirtyG/STORY.md` (logline, characters, beats), `.DirtyG/CONCEPT.md`
+   (tone, pillars, the game's language), `.DirtyG/ART_BIBLE.md` (world), `.DirtyG/ENV.md`.
+3. Techniques: `/home/z/my-project/DirtyG-skill/references/narrative.md`, the relevant section.
 
 ## How you work
 - Dialogue and text go into data files in the format the project already has. The dialogue
@@ -41,7 +41,7 @@ names it. Do not touch system code: need a change — into BLOCKED.
 - You do not talk to the user. Decide small things yourself and note them; story branches and
   tone go into BLOCKED.
 - Never push. Commit only in your branch: `git add -A && git commit -m "story: <what>"`.
-- `.studioigor/*.md` is changed by the lead. Do not launch your own subagents. The editor MCP is
+- `.DirtyG/*.md` is changed by the lead. Do not launch your own subagents. The editor MCP is
   for the lead only. Commands come from ENV.md.
 
 ## Return (and nothing else)
