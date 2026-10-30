@@ -332,13 +332,47 @@
       if (WS.Fx && WS.Fx.text) WS.Fx.text('ПУФ!', x, y - 0.8, { col: '#ffd76e', size: 15, life: 1.2 });
     } catch (e) { /* пусто */ }
     // подарок с бонусами: шанс на дедовские предметы
-    if (corpseObj && Math.random() < dropChance()) {
-      var drops = ['mushroom_fun', 'candy_ded', 'candy_ded'];
-      if (Math.random() < 0.22) drops.push('joint_ded');
-      if (Math.random() < 0.10) drops.push('plunger_magic');
-      if (Math.random() < 0.10) drops.push('hammer_rubber');
+    if (corpseObj) {
       corpseObj._crazyExtra = corpseObj._crazyExtra || [];
-      corpseObj._crazyExtra.push({ id: drops[(Math.random() * drops.length) | 0], count: 1 });
+      // ФАКЕЛЬНОЕ ТОПЛИВО: без 3 факелов не будет Магического Огня —
+      // раньше мирная игра не собирала их НИКОГДА (жир 18% только с
+      // тел, в контейнерах 8%) — признанная дыра баланса. Изгнанник
+      // честно оставляет деду НЕДОСТАЮЩИЙ ингредиент, пока факелы
+      // не собраны (жир/масло → тряпьё → доски).
+      try {
+        var pInv = P();
+        var torchN = 0, fatN = 0, oilN = 0, ragN = 0, plankN = 0;
+        if (pInv && pInv.inv) {
+          for (var ii = 0; ii < pInv.inv.length; ii++) {
+            var it2 = pInv.inv[ii];
+            if (!it2) continue;
+            if (it2.id === 'torch') torchN += it2.count || 1;
+            else if (it2.id === 'fat') fatN += it2.count || 1;
+            else if (it2.id === 'lamp_oil') oilN += it2.count || 1;
+            else if (it2.id === 'cloth_rag') ragN += it2.count || 1;
+            else if (it2.id === 'plank') plankN += it2.count || 1;
+          }
+        }
+        if (torchN < 3) {
+          if (fatN + oilN < 3) {
+            if (Math.random() < 0.5) {
+              corpseObj._crazyExtra.push({ id: 'fat', count: 1 });
+              if (Math.random() < 0.4) corpseObj._crazyExtra.push({ id: 'lamp_oil', count: 1 });
+            }
+          } else if (ragN < 2 && Math.random() < 0.6) {
+            corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 2 });
+          } else if (plankN < 1 && Math.random() < 0.6) {
+            corpseObj._crazyExtra.push({ id: 'plank', count: 1 });
+          }
+        }
+      } catch (eF) { /* пусто */ }
+      if (Math.random() < dropChance()) {
+        var drops = ['mushroom_fun', 'candy_ded', 'candy_ded'];
+        if (Math.random() < 0.22) drops.push('joint_ded');
+        if (Math.random() < 0.10) drops.push('plunger_magic');
+        if (Math.random() < 0.10) drops.push('hammer_rubber');
+        corpseObj._crazyExtra.push({ id: drops[(Math.random() * drops.length) | 0], count: 1 });
+      }
     }
     var line = BANISH_LINES[(Math.random() * BANISH_LINES.length) | 0];
     try {

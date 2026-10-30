@@ -72,6 +72,7 @@
   var TORCHES_NEED = 3;
   var HUNT_FROM_DAY = 12;               // когда начинать охоту (если есть винтовка)
 
+
   // что выбрасываем при перевесе (в порядке очереди).
   // ВАЖНО: newspaper_stack НЕ выбрасываем — из газет рвётся трут (тряпьё)
   // для факелов; в дед-режиме это материал Магического Огня.
@@ -1140,7 +1141,13 @@
         if (gone) {
           var gift = giftNear(t.gx || 0, t.gy || 0);
           if (gift && !gift.looted && WS.World.objects.indexOf(gift) >= 0) {
-            unshiftTask({ type: 'search', o: gift });
+            // В ОЧЕРЕДЬ, а не в план: план затирается следующей угрозой
+            // (24 волка вокруг — каждый clearPlan съедал задачу «обыскать
+            // подарок»; 29 изгнаний — 0 обысканных подарков в журнале)
+            D.gifts = D.gifts || [];
+            if (D.gifts.indexOf(gift) < 0 && D.gifts.length < 8) {
+              D.gifts.push(gift);
+            }
           }
           return false;
         }
@@ -1694,6 +1701,47 @@
     // === день: добыча ===
     var shipwait = !!(fq && fq.lit);          // огонь горит — ждём тарелку (60-й день, 06:00)
     if (h >= 6.4 && h < 19.6) {
+      // 0.9) ПОДАРКИ ИЗГНАННИКОВ: очередь переживает clearPlan (угрозы
+      //      затирали задачу прямо на подходе — 29 изгнаний, 0 вскрытых
+      //      подарков). Жир/масло для факелов лежат именно в них.
+      //      Плюс МИРОВОЙ СКАН: «реванш после прикорнутья» изгоняет зверей
+      //      БЕЗ задачи демо (70 из 80 изгнаний!) — подарки лежали брошенными.
+      D.gifts = D.gifts || [];
+      if (!D._giftScanMin || absMin() - D._giftScanMin > 20) {
+        D._giftScanMin = absMin();
+        var objsS = WS.World.objects;
+        for (var si = 0; si < objsS.length && D.gifts.length < 8; si++) {
+          var so = objsS[si];
+          if (so && so.sprName === 'crazy_gift' && !so.looted &&
+              dist(p.x, p.y, so.x, so.y) < 55 && D.gifts.indexOf(so) < 0) {
+            D.gifts.push(so);
+          }
+        }
+      }
+      if (D.gifts.length) {
+        // чистим мёртвые/обчистенные
+        D.gifts = D.gifts.filter(function (g) {
+          return g && !g.looted && WS.World.objects.indexOf(g) >= 0;
+        });
+        if (D.gifts.length) {
+          // ближайший подарок
+          var gBest = null, gD = 1e9;
+          for (var gi = 0; gi < D.gifts.length; gi++) {
+            var gd2 = dist(p.x, p.y, D.gifts[gi].x, D.gifts[gi].y);
+            if (gd2 < gD) { gD = gd2; gBest = D.gifts[gi]; }
+          }
+          if (gBest && gD < 60) {
+            log('Вскрываю подарок изгнанника (' + D.gifts.length + ' в очереди) — там жир для факелов.');
+            var gg = taskGoto(gBest.x, gBest.y, 1.2, 'подарок');
+            gg.o = gBest;
+            plan.push(gg);
+            plan.push({ type: 'search', o: gBest });
+            plan.push({ type: 'craftwait', sec: 0.5 });
+            return plan;
+          }
+        }
+      }
+
       // 1) факелы: скрафтить при любой возможности (внутри — ×8, не на улице)
       if (!shipwait && torchesMissing() > 0) {
         // идём домой крафтить ТОЛЬКО когда есть из чего: иначе бот
@@ -1718,9 +1766,12 @@
         //      луте), и не чаще раза в 1,5 игровых часа — иначе охота
         //      съедала все будни деда (фак:0 к Д10, стая в 45 тайлах есть
         //      почти всегда).
+        //      ДЕДЛАЙН: с Д45 жёстко давим без оглядки на остатки лута —
+        //      факелы обязаны быть к Д55 (Магический Огонь).
+        var fuelHuntLoose = (day >= 45);
         if (torchFuelMissing() > 0 && day >= 12 &&
             absMin() - (D._lastBanishPlanMin || -9999) > 90 &&
-            !nextLootTarget(1).length) {
+            (fuelHuntLoose || !nextLootTarget(1).length)) {
           var beastF = beastNear(45);
           if (beastF) {
             D._lastBanishPlanMin = absMin();
@@ -2094,7 +2145,9 @@
       return;
     }
 
-    // контейнер/экран открыт — подождём (симуляция стоит)
+    // контейнер/экран открыт — подождём (симуляция стоит).
+    // Сюжетные диалоги и NPC-разговоры разруливает watchScreens()
+    // (интервал — он живёт и на паузе симуляции, когда этот тик мёртв).
     if (WS.Ui && WS.Ui.modal && WS.Ui.modal()) return;
 
     // 1) угроза. НОЧЬЮ и в финальном забеге радиус меньше: стая может
@@ -2102,9 +2155,17 @@
     // гонялся бы за каждым сторожковым волком (фикс цикла «ИЗГОНЯЮ
     // лодошкой» каждый игровой час). Отвечаем только на РЕАЛЬНО близкую
     // угрозу; зверей в «кулдауне» тоже пропускаем.
+    // ДЕЛОВОЙ ПРИОРИТЕТ: пока 3 факела не собраны (это главная миссия,
+    // без них не будет Магического Огня) — чистая самооборона: бьём
+    // только тех, кто реально кусает (2.2 тайла). Факелы есть — можно
+    // и на энергию охотиться (радиус 9): подарки изгнанников несут жир.
     var nightNow = (hourF() >= 20.0 || hourF() < 6.0);
     var finalRun = !!(D.task && D.task.finalTrip);
-    var threat = nearestThreat(finalRun ? 2.5 : (nightNow ? 4.5 : 9));
+    var torchesReady = invCount('torch') >= TORCHES_NEED;
+    var dangerR = finalRun ? 2.2 :
+      (crazy() ? (torchesReady ? (nightNow ? 4.5 : 9) : 2.2)
+               : (nightNow ? 4.5 : 9));
+    var threat = nearestThreat(dangerR);
     if (threat && !p.sleeping &&
         !(threat._demoSkipUntil && threat._demoSkipUntil > absMin())) {
       if (crazy()) {
@@ -2336,45 +2397,59 @@
     }
   }
 
-  function dropJunk() {
+  function dropJunkCrazy() {
     var p = P();
     if (!p) return;
     // ДЕД-РЕЖИМ: хлам — всё, что не в белом списке (еда, одежда, трофеи:
     // дед не мёрзнет и не ест — это мёртвый вес). Выбрасываем ЦЕЛЫМИ
     // стопками и циклом — старый «по одной в секунду» не успевал за
     // потоком добычи, дед плёлся с 57 кг на 31,5.
-    if (crazy()) {
-      var dropped = 0;
-      for (var ci = p.inv.length - 1; ci >= 0 && dropped < 12; ci--) {
-        var it = p.inv[ci];
-        if (!it || CRAZY_KEEP[it.id]) continue;
+    // ДИСЦИПЛИНА МАТЕРИАЛОВ: доски — только на 3 факела (+1 запас = 4),
+    // тряпки/газеты — не больше 8: живой лог Д24 — дед тащил 29 досок
+    // (62 кг при лимите 33) и не мог взять жир/масло для факелов.
+    var dropped = 0;
+    var CAPS = { plank: 4, cloth_rag: 8, newspaper_stack: 8, matches: 15 };
+    for (var cap in CAPS) {
+      var over = invCount(cap) - CAPS[cap];
+      if (over > 0) {
         try {
-          WS.Inv.drop(ci, it.count || 1);
+          WS.Inv.take(cap, over);
           dropped++;
+          log('Материалов с избытком: оставил ' + CAPS[cap] + ' × ' + cap + ', остальное — сюда.');
         } catch (e) { /* пусто */ }
       }
-      if (dropped) log('Разгружаю сумку: выбросил хлама — ' + dropped + ' стопок (деду нужны только факелы и хилки).');
-      return;
     }
-    for (var j = 0; j < JUNK.length; j++) {
-      var id = JUNK[j];
-      for (var i = 0; i < p.inv.length; i++) {
-        if (p.inv[i] && p.inv[i].id === id) {
-          try { WS.Inv.drop(i, 1); log('Выбросил лишнее: ' + WS.Inv.nameOf(id)); } catch (e) { /* пусто */ }
-          return;
-        }
-      }
+    for (var ci = p.inv.length - 1; ci >= 0 && dropped < 12; ci--) {
+      var it = p.inv[ci];
+      if (!it || CRAZY_KEEP[it.id]) continue;
+      try {
+        WS.Inv.drop(ci, it.count || 1);
+        dropped++;
+      } catch (e) { /* пусто */ }
     }
+    if (dropped) log('Разгружаю сумку: выбросил хлама — ' + dropped + ' стопок (деду нужны только факелы и хилки).');
+  }
+
+  /** Диспетчер разгрузки: раньше в файле жили ДВЕ функции dropJunk и
+   *  хойстинг молча оставлял работать старую (дед таскал 29 досок). */
+  function dropJunk() {
+    if (crazy()) dropJunkCrazy();
+    else dropJunkNormal();
   }
 
   /** Дед-режим: забрать из контейнера только нужное (белый список).
-   *  Возвращает число взятых стопок. Остальное остаётся в контейнере. */
+   *  Возвращает число взятых стопок. Остальное остаётся в контейнере.
+   *  КАПЫ МАТЕРИАЛОВ: доски сверх 4 и тряпки/газеты сверх 8 не берём —
+   *  дед иначе тащит 29 досок (62 кг) и не может поднять жир для факелов. */
   function takeCrazyLoot(o) {
     if (!o || !o.inv || !o.inv.length) return 0;
     var n = 0;
+    var CAPS = { plank: 4, cloth_rag: 8, newspaper_stack: 8, matches: 15 };
     for (var i = o.inv.length - 1; i >= 0; i--) {
       var slot = o.inv[i];
       if (!slot || !CRAZY_KEEP[slot.id]) continue;
+      var cap = CAPS[slot.id];
+      if (cap && invCount(slot.id) >= cap) continue;   // хватит уже
       try {
         if (WS.Loot.take(o, i, slot.count)) n++;
       } catch (e) { /* пусто */ }
@@ -2419,8 +2494,9 @@
   }
 
   /** Выбросить барахло при перегрузе (обратно на пол — не теряется).
-   *  Ценим: еду/мед/патроны/топливо/факелы; жертвуем тяжёлым хламом. */
-  function dropJunk() {
+   *  Ценим: еду/мед/патроны/топливо/факелы; жертвуем тяжёлым хламом.
+   *  (переименовано из dropJunk: дубль-имя глّушило дедовскую разгрузку) */
+  function dropJunkNormal() {
     var p = P();
     if (!p || !p.inv || !(WS.Inv && WS.Inv.overload)) return;
     var KEEP = {
@@ -2463,6 +2539,51 @@
   function watchScreens() {
     if (!D.active) return;
     try {
+      // СЮЖЕТНЫЕ ДИАЛОГИ (st-dlg-*, .ws-confirm.ws-modal): они ПАУЗЯТ
+      // симуляцию (Loop не зовёт simulate, пока Ui.modal() === true),
+      // значит и сам автопилот (сим-тик) бессилен — раньше демо висело
+      // на них по полдня (Д18 15:10). Этот интервал живёт всегда:
+      // выбираем первый доступный ответ через ~2.4 сек (зритель успеет
+      // прочитать), болтовню с NPC обрываем.
+      var stDlg = null;
+      try {
+        // .ws-confirm.ws-modal живёт в DOM только пока открыт (close()
+        // удаляет его) — присутствие = открыт. Проверок видимости через
+        // offsetParent НЕ делать: у fixed-позиционирования он всегда
+        // null, и демо висело на диалоге ещё полдня.
+        var cand = document.querySelectorAll('.ws-confirm.ws-modal');
+        if (cand.length) stDlg = cand[cand.length - 1];
+      } catch (eD) { stDlg = null; }
+      if (stDlg) {
+        D.dlgT = (D.dlgT || 0) + 0.4;
+        if (D.dlgT >= 2.4) {
+          D.dlgT = 0;
+          var stBtns = stDlg.querySelectorAll('button:not([disabled])');
+          if (stBtns.length) {
+            var stTitle = '';
+            try {
+              var tEl = stDlg.querySelector('.c-title');
+              if (tEl) stTitle = tEl.textContent.trim().slice(0, 36);
+            } catch (eT) { /* пусто */ }
+            stBtns[0].click();
+            log('Сюжетный выбор' + (stTitle ? ' («' + stTitle + '…»)' : '') +
+                ': «' + stBtns[0].textContent.trim().slice(0, 40) + '»');
+          } else {
+            // кнопок нет (все недоступны/сломанный диалог) — убрать с глаз
+            try { stDlg.parentNode.removeChild(stDlg); } catch (eR) { /* пусто */ }
+          }
+        }
+      } else if (WS.Dialog && WS.Dialog.isOpen && WS.Dialog.isOpen()) {
+        D.dlgT = (D.dlgT || 0) + 0.4;
+        if (D.dlgT >= 2.4) {
+          D.dlgT = 0;
+          try { WS.Dialog.close(); } catch (eC) { /* пусто */ }
+          log('Разговор прервал — дел по горло, некогда болтать.');
+        }
+      } else {
+        D.dlgT = 0;
+      }
+
       if (WS.ContScreen && WS.ContScreen.isOpen()) {
         D.contT += 0.4;
         if (D.contT >= 1.6) {

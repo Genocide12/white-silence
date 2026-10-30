@@ -77,6 +77,13 @@ const run = async () => {
       if (!G) return null;
       const p = G.player;
       const D = WS.Demo._state();
+      let modal = '-', screens = '-';
+      try {
+        modal = WS.Ui.modal() ? 'ДА' : 'нет';
+        const sl = [];
+        document.querySelectorAll('#ui-root .ws-modal, #ui-root .ws-screen:not(.hidden)').forEach(el => sl.push(el.id || el.className.split(' ')[0]));
+        screens = sl.slice(0, 4).join(',') || '-';
+      } catch (e) { /* пусто */ }
       return {
         day: WS.Time.day(), fmt: WS.Time.fmt(),
         gameMin: WS.Time.day() * 1440 + Math.floor(WS.Time.hour() * 60),
@@ -87,7 +94,7 @@ const run = async () => {
         torches: WS.Inv.count('torch'), matches: WS.Inv.count('matches'),
         dead: !!G.dead, running: G.running, demo: WS.Demo.active(),
         result: D.result, phase: D.phase, resumed: D.resumedFrom,
-        speed: D.curSpeed,
+        speed: D.curSpeed, modal, screens,
         action: D.task ? (D.task.type + ' ' + (D.task.label || '')) : '-',
         journal: D.journal.slice(-2).map(j => j.t + ' ' + j.txt),
         fps: WS.Loop.fps(),
@@ -96,7 +103,7 @@ const run = async () => {
     });
     const mins = ((Date.now() - t0) / 60000).toFixed(1);
     if (!st) { console.log(`[${mins}м] G=null`); continue; }
-    console.log(`[${mins}м] д${st.day} ${st.fmt} x${st.speed} fps:${st.fps} hp:${st.hp} T:${st.temp} гол:${st.hunger} жаж:${st.thirst} уст:${st.fatigue} фак:${st.torches} дело:${st.action}`);
+    console.log(`[${mins}м] д${st.day} ${st.fmt} x${st.speed} fps:${st.fps} hp:${st.hp} T:${st.temp} гол:${st.hunger} жаж:${st.thirst} уст:${st.fatigue} фак:${st.torches} мод:${st.modal}[${st.screens}] дело:${st.action}`);
     st.journal.forEach(j => console.log('   | ' + j));
     // прогресс-чек: игровое время должно идти
     if (st.gameMin === prevGameMin && st.demo && st.running) stagnantSamples++;
