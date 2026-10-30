@@ -694,32 +694,40 @@
 
   // ====================================================================
   //  БОЛЕЗНИ
-  //  p.sick = {id, t} — t оставшиеся игровые минуты. Простуда приходит
+  //  p.sick — формат health.js {id, t: прошедшие часы, fired, compT, tea}.
+  // needs отвечает за атмосферу (чихание, рвота) и множители жажды/
+  // усталости; течение/урон/выздоровление — health.js. Простуда приходит
   //  от переохлаждения (ставит WS.Temp), грипп осложняет простуду.
   // ====================================================================
 
-  /** Назначить болезнь (замена текущей, если тяжелее). */
+  /** Назначить болезнь. ЕДИНЫЙ ВЛАДЕЛЕЦ ФОРМАТА — health.js
+   *  ({id, t: прошедшие ЧАСЫ, fired, compT, tea}): раньше needs создавал
+   *  свой {id, t: оставшиеся МИНУТЫ}, и health-тик падал на sk.fired[sym.at]
+   *  («reading '0'») — вся система здоровья отключалась до конца партии. */
   function makeSick(id, tMin) {
     var p = P();
     var def = SICK_DEF[id];
     if (!p || !def) return false;
-    var t = (tMin !== undefined) ? tMin : def.dur;
-    // уже болен тем же — продлеваем
-    if (p.sick && p.sick.id === id) {
-      p.sick.t = Math.max(p.sick.t, t * 0.6);
-      return true;
-    }
+    // уже болен тем же — не перезаписываем (health ведёт течение сам)
+    if (p.sick && p.sick.id === id) return true;
     // тяжёлая болезнь не сменяется лёгкой
     if (p.sick) {
       var cur = SICK_DEF[p.sick.id];
       if (cur && def.hpH && (cur.hpH || 0) > (def.hpH || 0)) return false;
     }
-    p.sick = { id: id, t: t };
+    // health-совместимый id ('food_poisoning' -> 'food_poison')
+    var hid = (id === 'food_poisoning' && WS.Health && WS.Health.DISEASES &&
+               WS.Health.DISEASES.food_poison) ? 'food_poison' : id;
+    if (WS.Health && WS.Health.infectDisease && WS.Health.DISEASES && WS.Health.DISEASES[hid]) {
+      try { if (WS.Health.infectDisease(hid)) return true; } catch (e) { /* ниже сами */ }
+    }
+    // страховка без health.js: полный формат (t — прошедшие часы)
+    p.sick = { id: hid, t: 0, fired: {}, compT: 0, tea: false };
     toast('Вы заболеваете: ' + def.name, 'bad');
     if (id === 'food_poisoning') {
       toast('Похоже, еда была скверной...', 'warn');
     }
-    try { WS.Ev.emit('player:sick', { id: id }); } catch (e) { /* пусто */ }
+    try { WS.Ev.emit('player:sick', { id: hid }); } catch (e) { /* пусто */ }
     return true;
   }
 
@@ -728,9 +736,15 @@
     var p = P();
     if (!p.sick) return;
     var def = SICK_DEF[p.sick.id];
-    if (!def) { p.sick = null; return; }
+    if (!def) { if (!WS.Health) p.sick = null; return; }
 
-    p.sick.t -= gMin(dt);
+    // ФОРМАТ health.js (t — прошедшие часы): механику (течение, урон,
+    // выздоровление, осложнения) ведёт health-тик. Здесь — только
+    // атмосферные эффекты: чихание, рвота, подсказки.
+    var viaHealth = !!(WS.Health && WS.Health.DISEASES && p.sick.fired);
+    if (!viaHealth) {
+      p.sick.t -= gMin(dt);
+    }
 
     // чихание — шум! (волки слышат: r 10)
     p._sneezeT = (p._sneezeT === undefined ? SNEEZE_MIN * 0.5 : p._sneezeT) - gMin(dt);
@@ -746,7 +760,7 @@
     }
 
     // рвота при отравлении
-    if (p.sick.id === 'food_poisoning') {
+    if (p.sick.id === 'food_poisoning' || p.sick.id === 'food_poison') {
       p._vomitT = (p._vomitT === undefined ? VOMIT_MIN * 0.5 : p._vomitT) - gMin(dt);
       if (p._vomitT <= 0) {
         p._vomitT = VOMIT_MIN * rnd(0.7, 1.4);
@@ -757,6 +771,8 @@
         snd('fall', 0.3);
       }
     }
+
+    if (viaHealth) return;                  // дальше — только health.js
 
     // урон от тяжёлых болезней
     if (def.hpH) systemDamage(-def.hpH * gH(dt), 'sick');
@@ -780,14 +796,39 @@
     var p = P();
     if (!p || !p.sick) return null;
     var def = SICK_DEF[p.sick.id];
+    if (!def && WS.Health && WS.Health.DISEASES && WS.Health.DISEASES[p.sick.id]) {
+      var hd = WS.Health.DISEASES[p.sick.id];
+      return { id: p.sick.id, name: hd.name, hours: Math.max(0, Math.round((hd.dur - (p.sick.t || 0)) * 10) / 10) };
+    }
     if (!def) return null;
-    return { id: p.sick.id, name: def.name, hours: Math.round(p.sick.t / 6) / 10 };
+    return { id: p.sick.id, name: def.name, hours: Math.round(Math.max(0, p.sick.t) / 6) / 10 };
   }
 
   /** Лечение предметами (вызывается из eat/drink). */
   function cureByFood(id) {
     var p = P();
     if (!p || !p.sick) return;
+    // формат health.js: t — прошедшие часы; «лечение» продвигает течение
+    var viaHealth = !!(WS.Health && WS.Health.DISEASES && p.sick.fired);
+    if (viaHealth) {
+      var add = 0;                     // сколько часов болезни «сожжено»
+      if (id === 'tea_brick') { add = 2.5; toast('Горячий чай согревает', 'good'); }
+      else if (id === 'honey_jar') { add = 4; toast('Мёд лечит горло', 'good'); }
+      else if (id === 'birch_chaga') { add = 1.5; }
+      else if (id === 'quinine') {
+        var qd = WS.Health.DISEASES[p.sick.id];
+        if (qd) p.sick.t = Math.max(p.sick.t, qd.dur - 1);
+        toast('Хинин сбивает лихорадку', 'good');
+      }
+      else if (id === 'milk_bottle' || id === 'kasha') { add = 1; }
+      p.sick.t = (p.sick.t || 0) + add;
+      var hd2 = WS.Health.DISEASES[p.sick.id];
+      if (hd2 && p.sick.t >= hd2.dur) {
+        toast('Болезнь отступает', 'good');
+        p.sick = null;
+      }
+      return;
+    }
     if (id === 'tea_brick') {
       p.sick.t -= 150;              // чай с холоду
       toast('Горячий чай согревает', 'good');

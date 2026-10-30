@@ -22,8 +22,11 @@
  *   день 55 — «дым на реке»: мостки, сигнальный костёр (3 факела);
  *   день 60 — пароход. Победа.
  *
- * Скорость демо ×10/×30/×60 (день ≈ 2.4/0.8/0.4 минуты реального времени
- * с учётом сна ×8). Панель демо: день, час, дело, журнал, скорость, стоп.
+ * ТЕМП: на улице часы идут ×6 (мороз честный — бег не успевает за стрелкой),
+ * в доме ×14, ожидание ×60, у печи ×90, сон ×120; темп игрока ×1/×2.
+ * Прогресс пишется в демо-слот сейва: вкладку можно закрыть и продолжить
+ * позже — кнопка «▶ Демо» предложит продолжение. Сейв игрока не трогается.
+ * Панель демо: день, час, дело, журнал, темп, стоп, выгрузка журнала (.txt).
  */
 (function () {
   'use strict';
@@ -44,10 +47,13 @@
   // четыре игровых часа, и герой замерзает насмерть на полдороге.
   // Поэтому демо само выбирает темп:
   //   на улице  ×6  — поход выглядит живым, мороз честный;
-  //   в доме  ×12  — обыски и быт;
-  //   у печи / ожидание ×24 — согрелся и дальше;
-  //   сон ×60  — ночь пролетает (внутренний ×8 сна умножается).
-  var SP_WALK = 6, SP_INDOOR = 12, SP_WAIT = 24, SP_WARM = 60, SP_SLEEP = 60;
+  //   в доме  ×14 — обыски и быт;
+  //   у печи / ожидание ×60-90 — согрелся и дальше;
+  //   сон ×120 — ночь пролетает.
+  // ГЛАВНОЕ ПРАВИЛО (фикс «смерть на подходе к теплу»): НА УЛИЦЕ темп
+  // ВСЕГДА шаг, какая бы задача ни шла — иначе часы съедают тепло быстрее,
+  // чем герой доходит. Высокие множители — только внутри и во сне.
+  var SP_WALK = 6, SP_INDOOR = 22, SP_WAIT = 100, SP_WARM = 140, SP_SLEEP = 200;
   var speedHold = 0;                    // сек до следующей смены темпа
 
   // пороги выживания (0..100)
@@ -97,6 +103,8 @@
     thinkT: 0,
     keysHeld: {},
     warmOK: false,                      // гистерезис тепла: недавно согрелись
+    warmFail: {},                       // id дома -> сколько раз не дошёл
+    warmToldId: '',                     // о каком доме warming уже сказано
     doorCd: 0,
     fireCd: 0,
     journal: [],                        // [{t, txt}]
@@ -146,6 +154,23 @@
   //  ЖУРНАЛ ДЕМО
   // ====================================================================
 
+  var JKEY = 'wsDemoJournal1917';       // журнал демо (переживает перезапуск вкладки)
+
+  function persistJournal() {
+    try { localStorage.setItem(JKEY, JSON.stringify(D.journal.slice(-400))); }
+    catch (e) { /* переполнение не критично */ }
+  }
+
+  function restoreJournal() {
+    try {
+      var raw = localStorage.getItem(JKEY);
+      if (raw) {
+        var a = JSON.parse(raw);
+        if (Object.prototype.toString.call(a) === '[object Array]') D.journal = a;
+      }
+    } catch (e) { /* пусто */ }
+  }
+
   function log(txt, cls) {
     D.journal.push({ t: stamp(), txt: String(txt), cls: cls || '' });
     if (D.journal.length > 900) D.journal.shift();
@@ -153,6 +178,7 @@
       if (WS.Story && WS.Story.chron) WS.Story.chron('[демо] ' + txt, 'anom');
     } catch (e) { /* хроники не критичны */ }
     updatePanelLog();
+    persistJournal();                   // пережить закрытие вкладки
   }
 
   /** Итоговый текст журнала для выгрузки. */
@@ -163,6 +189,10 @@
     lines.push('======================================');
     lines.push('Начало: ' + (D.startStamp || '?') +
       ' · профессия: телеграфист · зерно мира: ' + DEMO_SEED);
+    if (D.resumedFrom) {
+      lines.push('Продолжение сеанса с дня ' + D.resumedFrom +
+        ' (прогресс хранился в демо-слоте сейва).');
+    }
     lines.push('Скорость демо: адаптивная (ходьба ×' + SP_WALK + ', дом ×' + SP_INDOOR +
       ', сон ×' + SP_SLEEP + '), темп игрока ×' + D.pace + ' · результат: ' +
       (D.result === 'victory' ? 'ПОБЕДА — пароход пришёл' :
@@ -306,18 +336,16 @@
       }
     }
 
-    // база: тёплый дом с достижимой кроватью (и печью — не обязательно)
-    var base = null;
+    // база: ближайший к вокзалу ДОМ «С ДЫМОМ» с кроватью (дым = в доме
+    // реально тепло, см. Temp.heatedRoom). Дистанция важнее печи: до
+    // дальней тёплой избы бот не дойдёт живым в стартовой шинели.
+    // Скоринг: тепло +100, печь +15, −1.2 за тайл от вокзала.
+    var base = null, baseScore = -1e9;
     for (i = 0; i < bl.length; i++) {
       var c = bl[i];
-      if (c.heated && c.bed && c.type !== 'hermit_hut') {
-        if (!base || c.distSpawn < base.distSpawn) base = c;
-      }
-    }
-    if (!base) {
-      for (i = 0; i < bl.length; i++) {
-        if (bl[i].bed && bl[i].type !== 'hermit_hut') { base = bl[i]; break; }
-      }
+      if (c.type === 'hermit_hut' || !c.bed) continue;
+      var sc = (c.heated ? 100 : 0) + (c.stove ? 15 : 0) - c.distSpawn * 1.2;
+      if (sc > baseScore) { baseScore = sc; base = c; }
     }
 
     // достижимый внутренний тайл каждого здания (центр может быть занят
@@ -357,13 +385,29 @@
   /** Ближайший не обысканный контейнер (для походов).
    *  Пока герой не в «полной» теплоте — сперва тёплые дома: обыск
    *  без риска замерзнуть. Потом — всё подряд по близости. */
+  /** Дрова/трут/спички — «набор выживания»: без них дальняя ходьба
+   *  смертельна (костёр на снегу — единственное тепло в чистом поле). */
+  function woodCount() {
+    return invCount('firewood_bundle') + invCount('plank') + invCount('log');
+  }
+
+  /** Приоритет цели лута: без дров — прежде всего поленницы. */
+  function lootRank(t, p) {
+    var nm = String((t.o && t.o.name) || '').toLowerCase();
+    var s = p ? dist(p.x, p.y, t.o.x, t.o.y) : t.d;
+    if (woodCount() === 0 && nm.indexOf('оленн') >= 0) s -= 100;   // Поленница!
+    if (woodCount() === 0 && nm.indexOf('дровн') >= 0) s -= 100;
+    return s;
+  }
+
   function nextLootTarget(n) {
     var p = P();
     var cold = p && (p.temp || 37) < 37.2;
     var out = [];
     var i;
     if (cold) {
-      for (i = 0; i < D.world.loot.length && out.length < (n || 4); i++) {
+      // сначала — тёплые дома: обыск без риска замерзнуть
+      for (i = 0; i < D.world.loot.length && out.length < (n || 2); i++) {
         var t = D.world.loot[i];
         if (!t.o || t.o.looted || t.taken) continue;
         if (!t.home || !t.home.heated) continue;
@@ -371,13 +415,17 @@
         out.push(t);
       }
     }
-    for (i = 0; i < D.world.loot.length && out.length < (n || 4); i++) {
+    // остальные — по приоритету от игрока: без дров поленницы важнее
+    var byPlayer = [];
+    for (i = 0; i < D.world.loot.length; i++) {
       var t2 = D.world.loot[i];
       if (!t2.o || t2.o.looted || t2.taken) continue;
       if (out.indexOf(t2) >= 0) continue;
       if ((t2.o._demoFail || 0) >= 2) { t2.taken = true; continue; }
-      out.push(t2);
+      byPlayer.push({ t: t2, d: lootRank(t2, p) });
     }
+    byPlayer.sort(function (a, b2) { return a.d - b2.d; });
+    for (i = 0; i < byPlayer.length && out.length < (n || 2); i++) out.push(byPlayer[i].t);
     return out;
   }
 
@@ -706,6 +754,7 @@
           if (!np) {
             log('Не нашёл путь к ' + (t.label || ('(' + (t.x | 0) + ',' + (t.y | 0) + ')')));
             if (t.o) t.o._demoFail = (t.o._demoFail || 0) + 1;
+            if (t.bldg) D.warmFail[t.bldg.id] = (D.warmFail[t.bldg.id] || 0) + 1;
             return false;
           }
           D.path = np;
@@ -792,6 +841,13 @@
         if (p.sleeping) {
           releaseKeys();
           var h = hourF();
+          // замерзает во сне (холодный дом/полярная ночь) — разбудить:
+          // сон вычитает тепло, гипотермия во сне убивает незаметно
+          if ((p.temp || 37) < 34.9 && t.t > 4) {
+            try { WS.Needs.wake(); } catch (e) { /* пусто */ }
+            log('Проснулся от холода (' + (p.temp || 37).toFixed(1) + '°) — надо греться.', 'warn');
+            return false;
+          }
           var dayDone = (h >= WAKE_HOUR && h < 20);
           var napDone = (t.untilMax && h >= t.untilMax);
           if (dayDone || napDone || (p.needs.fatigue || 0) > 97) {
@@ -800,6 +856,9 @@
           }
           return true;
         }
+        // ЛОЖИТЬСЯ ЗАМЕРЗШИМ НЕЛЬЗЯ: сон вычитает тепло (SLEEP_CHILL) —
+        // сначала согреться (этим займётся холод-ветка think())
+        if ((p.temp || 37) < 35.9) return false;
         var bed = t.bed || (D.base && D.base.bed);
         if (bed && dist(p.x, p.y, bed.x, bed.y) > 1.6) {
           if (!D.path.length) {
@@ -885,7 +944,11 @@
         // погреться: внутри тёплого дома / у печи / у костра до 36.6°
         releaseKeys();
         var tempW = p.temp || 37;
-        if (tempW >= 36.6 || t.t > 300) return false;   // 5 мин реального — потолок
+        // без огня дом греет медленно (+0.2°/ч) — ждать полных 36.6
+        // бессмысленно: выходим в 36.2 и держим бюджет улицы
+        var fireHere = (WS.Fire && WS.Fire.near) ? WS.Fire.near(p.x, p.y, 2.5) : null;
+        var warmTargetT = fireHere ? 36.6 : 36.2;
+        if (tempW >= warmTargetT || t.t > 300) return false;   // 5 мин реального — потолок
         // зайти в точку укрытия
         if (t.spot && dist(p.x, p.y, t.spot.x, t.spot.y) > 1.4) {
           if (!D.path.length) {
@@ -913,9 +976,11 @@
           lightStoveNow(stoveW);
           return true;
         }
-        // без огня тёплый дом греет еле-еле: не стоять тут вечно —
-        // через 25 сек сдаёмся (нужны дрова/костёр — скажем об этом раз)
-        if (!fire2 && t.t > 25) {
+        // без огня холодный дом не греет вовсе: не стоять тут вечно —
+        // сдаёмся по ИГРОВОМУ времени (~40 мин), а не реальному: на ×90
+        // двадцать пять реальных секунд = целые сутки игрового холода
+        var warmGameMin = t.t * (D.curSpeed || 1);
+        if (!fire2 && (t.t > 25 || warmGameMin > 40)) {
           if (!D._saidNoFire) {
             D._saidNoFire = true;
             log('Без огня дом греет медленно: нужны дрова и печь. Ищу топливо.', 'warn');
@@ -927,6 +992,11 @@
 
       case 'wait':
         releaseKeys();
+        if (t.until !== undefined) {
+          var hu = hourF();
+          if (hu >= t.until && hu < 20) return false;   // дождались утра
+          return t.t < (t.sec || 3600);
+        }
         return t.t < (t.sec || 2);
 
       case 'hunt': {
@@ -1213,15 +1283,22 @@
     return !!(w && w.isInside && p && w.isInside(p.x, p.y));
   }
 
-  /** Ближайшее ОТЙПЛИВАЕМОЕ здание (дым из трубы) к точке. */
+  /** Ближайший дом, где можно согреться: с точкой входа (reachTile) и
+   *  «дымом» ИЛИ печью (печь можно растопить самому). БЕЗ reachTile дом
+   *  бесполезен: бот вечно «идёт к нему» и замерзает на полдороги —
+   *  именно так погибала первая версия демо (barn_10 без входа). */
   function nearestHeatedBuilding(x, y) {
     if (!D.world) return null;
     var best = null, bd = 1e9;
     for (var i = 0; i < D.world.buildings.length; i++) {
       var b = D.world.buildings[i];
-      if (!b.heated || !b.b) continue;
+      if (!b || !b.b) continue;
+      if (!b.heated && !b.stove) continue;          // ни дыма, ни печи
+      if (!b.reachTile) continue;                    // в дом не войти
+      if ((D.warmFail[b.id] || 0) >= 3) continue;    // уже сдавался — не ходим
       var d = dist(x, y, b.x + b.w / 2, b.y + b.h / 2);
-      if (d < bd) { bd = d; best = b; }
+      var score = b.heated ? d : d * 1.6 + 5;        // тёплый дом приоритетнее
+      if (score < bd) { bd = score; best = b; }
     }
     return best;
   }
@@ -1286,6 +1363,9 @@
         ', факелов: ' + invCount('torch') + '/' + TORCHES_NEED +
         ', спичек: ' + invCount('matches') + ', температура тела: ' +
         (p.temp || 37).toFixed(1) + '°');
+    // контрольная точка: день сменился — пишем демо-слот (переживёт
+    // закрытие вкладки и перезапуск браузера)
+    try { if (WS.Save && WS.Save.save) WS.Save.save('demo'); } catch (e) { /* пусто */ }
   }
 
   function countFood() {
@@ -1333,9 +1413,15 @@
         var pier = (WS.Story && WS.Story.pier) ? WS.Story.pier() : null;
         if (pier) {
           log('Дым на реке! Иду на мостки — зажигать сигнальный костёр.', 'good');
-          plan.push(taskGoto(pier.x, pier.y, 1.6, 'мостки-пристань'));
-          plan.push({ type: 'beacon' });
-          plan.push({ type: 'wait', sec: 4 });
+          var pg = taskGoto(pier.x, pier.y, 1.6, 'мостки-пристань');
+          pg.finalTrip = true;            // финальный забег: не рвётся сном/холодом
+          plan.push(pg);
+          var pb = { type: 'beacon' };
+          pb.finalTrip = true;
+          plan.push(pb);
+          var pw = { type: 'wait', sec: 4 };
+          pw.finalTrip = true;
+          plan.push(pw);
           return plan;
         }
       }
@@ -1355,6 +1441,11 @@
         var sl3 = { type: 'sleep', bed: D.base.bed };
         sl3.bedTrip = true;
         plan.push(sg);
+        // холодная база (без дыма) с печью: натопить ПЕРЕД сном —
+        // иначе сон в холодном доме выстужает до гипотермии
+        if (D.base.stove && !D.base.heated) {
+          plan.push({ type: 'warm', stove: D.base.stove, spot: bspot2, bedTrip: true });
+        }
         plan.push(sg2);
         plan.push(sl3);
         return plan;
@@ -1455,7 +1546,16 @@
 
     // === день: поход за лутом ===
     if (h >= 7 && h < HOME_HOUR) {
-      var targets = nextLootTarget(3);
+      var targets = nextLootTarget(2);
+      // ближе к вечеру — только короткие цели: дальний поход после 15:30
+      // не успеть до темноты, и бот встречает ночь на морозе (фикс
+      // «полночная вылазка за 27 тайлов от дома»)
+      if (h >= 15.5 && p) {
+        targets = targets.filter(function (tt) {
+          return tt.o && dist(p.x, p.y, tt.o.x, tt.o.y) <= 12;
+        });
+      }
+      if (h >= 16.6) targets = [];
       if (targets.length) {
         for (var i = 0; i < targets.length; i++) {
           var t = targets[i];
@@ -1513,9 +1613,12 @@
     if (!p.sleeping) D._faintSaid = false;
 
     // УСТАЛОСТЬ КРИТИЧНА: не спящего героя игра валит в обмороки, и все
-    // планы рассыпаются. Сон в кровати — абсолютный приоритет.
+    // планы рассыпаются. Сон в кровати — приоритет, НО ХОЛОД ПРИОРИТЕТНЕЕ:
+    // при температуре ядра ниже 35.6° сначала греемся (фикс «пинг-понг
+    // сон↔тепло», из-за которого бот стоял и замерзал насмерть).
     if (!p.sleeping && p.needs.fatigue < 22 && D.base && D.base.bed &&
-        !(D.task && D.task.bedTrip)) {
+        (p.temp || 37) >= 35.6 &&
+        !(D.task && (D.task.bedTrip || D.task.finalTrip))) {
       clearPlan();
       var bs = D.base.reachTile || { x: D.base.x + D.base.w / 2, y: D.base.y + D.base.h / 2 };
       var bg2 = taskGoto(bs.x, bs.y, 1.5, 'кровать (валюсь с ног)');
@@ -1570,11 +1673,14 @@
     //    маятником ходит «тёплый дом <-> две минуты улицы». Ночью и в пути
     //    домой отвлекаемся только на настоящий холод (PANIC_COLD).
     var temp = p.temp || 37;
-    if (temp >= 36.6) D.warmOK = true;
-    if (temp < 36.0) D.warmOK = false;
-    var headingHome = D.task && (D.task.homeTrip || D.task.type === 'sleep');
+    if (temp >= 36.6) { D.warmOK = true; D.warmToldId = ''; }
+    if (temp < 35.6) D.warmOK = false;   // гистерезис шире: без огня греемся медленно
+    var headingHome = D.task && (D.task.homeTrip || D.task.finalTrip || D.task.type === 'sleep');
     var nightH = (hourF() >= 20.0 || hourF() < 6.0);
     var coldLimit = (headingHome || D.warmOK) ? PANIC_COLD : WARM_AT;
+    // финальный забег к мосткам: миссия важнее — рвём план только на
+    // настоящем паническом холоде
+    if (D.task && D.task.finalTrip) coldLimit = 33.8;
     // короткий рывок за целью (до 9 тайлов) не прерываем: выскочить за
     // дровами к поленнице у крыльца — две секунды, иначе бот взаперти
     var dashNear = false;
@@ -1594,32 +1700,95 @@
         var warming = (D.task && D.task.warming) ||
                       (D.plan.length && D.plan[0] && D.plan[0].warming);
         if (!warming) {
-          // ночью греемся ТОЛЬКО на базе (там кровать и печь)
-          var hb = (nightH && D.base) ? D.base : nearestHeatedBuilding(p.x, p.y);
+          // цель тепла: ближайший ДОМ «С ДЫМОМ» (реально тёплый — см.
+          // Temp.heatedRoom); ночью своя база чуть приоритетнее (там кровать)
+          var hb = nearestHeatedBuilding(p.x, p.y);
+          if (nightH && D.base && D.base.heated && hb && hb !== D.base) {
+            var dBaseW = dist(p.x, p.y, D.base.x + D.base.w / 2, D.base.y + D.base.h / 2);
+            var dhbW = dist(p.x, p.y, hb.x + hb.w / 2, hb.y + hb.h / 2);
+            if (dBaseW < dhbW * 1.4) hb = D.base;
+          }
           var dh = hb ? dist(p.x, p.y, hb.x + hb.w / 2, hb.y + hb.h / 2) : 1e9;
-          if (temp < PANIC_COLD && (dh > 20 || !hb)) {
+          // сильный мороз + тёплый дом не рядом → костёр на месте
+          // (порог агрессивный: на 34° до дома можно не дойти)
+          if (temp < 34.4 && (dh > 5 || !hb)) {
             // совсем прихватило, а тёплый дом далеко — костёр на месте
             if (emergencyCampfire()) {
               clearPlan();
               D.plan = [{ type: 'warm', warming: true }];
+              D.task = D.plan.shift();
               return;
             }
           }
           if (hb && dh <= 60) {
             var spot = hb.reachTile || { x: hb.x + hb.w / 2, y: hb.y + hb.h / 2 };
-            log((temp < PANIC_COLD ? 'Мёрзну (' + temp.toFixed(1) + '°) — бегу в тёплый дом: ' : 'Иду греться в тёплый дом: ') +
-                hb.id + (dh > 8 ? ' (' + Math.round(dh) + ' тайлов)' : ''));
+            // стоим рядом с печью, если она есть — греться быстрее
+            var wSpot = spot;
+            if (hb.stove) {
+              var sSide = nearestPassable(Math.floor(hb.stove.x), Math.floor(hb.stove.y));
+              if (sSide) wSpot = { x: sSide.x + 0.5, y: sSide.y + 0.5 };
+            }
+            // СКАЗАТЬ ОДИН РАЗ: раньше каждые 3 игровых минуты бот
+            // перелогировал «бегу в тёплый дом» — журнал тонул в спаме,
+            // а герой всё это время стоял на морозе
+            if (D.warmToldId !== hb.id) {
+              D.warmToldId = hb.id;
+              log((temp < PANIC_COLD ? 'Мёрзну (' + temp.toFixed(1) + '°) — бегу в тёплый дом: ' : 'Иду греться в тёплый дом: ') +
+                  hb.id + (hb.heated ? '' : ' (растоплю печь)') + (dh > 8 ? ' (' + Math.round(dh) + ' тайлов)' : ''));
+            }
             clearPlan();
-            var wgoto = taskGoto(spot.x, spot.y, 1.2, 'тёплый дом ' + hb.id);
-            wgoto.warming = true;
+            var wgoto = taskGoto(wSpot.x, wSpot.y, 1.2, 'тёплый дом ' + hb.id);
+            wgoto.warming = true; wgoto.bldg = hb;
             D.plan = [
               wgoto,
-              { type: 'warm', warming: true, stove: hb.stove, spot: spot }
+              { type: 'warm', warming: true, stove: hb.stove, spot: wSpot }
             ];
+            // ВАЖНО: назначить задачу СРАЗУ — раньше план оставался в
+            // очереди без задачи, комендантский час видел «пустую» руку и
+            // рвал его каждый тик → пинг-понг «тепло↔домой» без движения
+            D.task = D.plan.shift();
             return;
           }
         }
       }
+    }
+
+    // 3.5) КОМЕНДАНТСКИЙ ЧАС (фикс «полночная вылазка за 27 тайлов»):
+    //      после 20:09 бот не начинает новых дел — только домой, в кровать.
+    //      Исключения: уже идём домой/спать/греемся/прячемся/ждём рассвета;
+    //      финальный забег к мосткам важнее коменданта.
+    var hc = hourF();
+    var taskSafe = (D.task && (D.task.homeTrip || D.task.bedTrip || D.task.warming ||
+      D.task.fleeing || D.task.finalTrip || D.task.type === 'sleep' ||
+      D.task.type === 'warm' || D.task.type === 'melt' ||
+      D.task.type === 'craftwait' || D.task.type === 'wait')) ||
+      (!D.task && D.plan.length > 0);   // план назначит задачу на этом же тике
+    if (!taskSafe && !p.sleeping && D.phase !== 'final' && D.base && D.base.bed &&
+        (hc >= 20.15 || hc < 5.4)) {
+      var tNow2 = p.temp || 37;
+      var bldg2 = buildingOf(p.x, p.y);
+      var warmBldg2 = !!(bldg2 && WS.Roofs && WS.Roofs.isHeated && WS.Roofs.isHeated(bldg2));
+      var dHome2 = dist(p.x, p.y, D.base.x + D.base.w / 2, D.base.y + D.base.h / 2);
+      if (warmBldg2 && tNow2 < 36.2 && dHome2 > 18) {
+        // ночь, чужой тёплый дом, идти далеко и мёрзнем — сидим до рассвета,
+        // утром (5:30) двинемся домой на свежую голову
+        clearPlan();
+        D.plan = [{ type: 'wait', sec: 3600, until: 5.5, label: 'ночую в тёплом доме' }];
+        D.task = D.plan.shift();
+        log('Ночь, мёрзну — ночую в тёплом доме до рассвета.', 'warn');
+        return;
+      }
+      clearPlan();
+      var cbs = D.base.reachTile || { x: D.base.x + D.base.w / 2, y: D.base.y + D.base.h / 2 };
+      var cg1 = taskGoto(cbs.x, cbs.y, 1.5, 'домой (комендантский час)');
+      cg1.homeTrip = true; cg1.bedTrip = true;
+      var cg2 = taskGoto(D.base.bed.x, D.base.bed.y, 1.4, 'кровать');
+      cg2.bedTrip = true;
+      var cs = { type: 'sleep', bed: D.base.bed };
+      cs.bedTrip = true;
+      D.plan = [cg1, cg2, cs];
+      D.task = D.plan.shift();
+      return;
     }
 
     // 4) перевес — выбросить хлам
@@ -1846,18 +2015,22 @@
     try { WS.Loop.setSpeed(n); } catch (e) { /* пусто */ }
   }
 
-  /** Адаптивный темп: контекст решает, насколько гнать время. */
+  /** Адаптивный темп: контекст решает, насколько гнать время.
+   *  ГЛАВНОЕ: на улице — ВСЕГДА шаг (×6). Раньше «идти греться» шло на
+   *  ×120: часы летели, тепло вымораживалось быстрее, чем герой доходит
+   *  до двери, — бот погибал на подходе к теплу. */
   function autoSpeed(dt) {
     if (speedHold > 0) { speedHold -= dt; return; }
     var p = P();
     if (!p) return;
     var want;
-    if (p.sleeping) want = SP_SLEEP;
+    var inside = insideBuilding();
+    if (p.sleeping) want = inside ? SP_SLEEP : SP_WALK;  // обморок на улице — часы честные
+    else if (!inside) want = SP_WALK;         // УЛИЦА: всегда шаг, любой задачей
     else if (D.task && (D.task.type === 'warm')) want = SP_WARM;
     else if (D.task && (D.task.type === 'wait' || D.task.type === 'melt' ||
              D.task.type === 'craftwait')) want = SP_WAIT;
-    else if (insideBuilding()) want = SP_INDOOR;
-    else want = SP_WALK;
+    else want = SP_INDOOR;
     want = Math.round(want * (D.pace || 1));
     if (want !== D.curSpeed) {
       setSpeed(want);
@@ -1891,22 +2064,78 @@
     }
   }
 
+  /** Загрузить партию из демо-слота (как Main.loadGame, но слот «demo»). */
+  function loadDemoSave() {
+    var data = null;
+    try { data = WS.Save.load('demo'); } catch (e) { return false; }
+    if (!data || !data.core) return false;
+    try {
+      if (WS.World && WS.World.reset) WS.World.reset();
+      if (WS.Fx && WS.Fx.clear) WS.Fx.clear();
+      if (WS.Snd && WS.Snd.stopAmbience) WS.Snd.stopAmbience();
+      WS.G = data.core;
+      if (WS.Gen && WS.Gen.generate) WS.Gen.generate(WS.G.seed);
+      if (WS.World && WS.World.deserialize) WS.World.deserialize(data.world);
+      if (WS.G.player && WS.World && WS.World.addEnt) {
+        var found = false;
+        for (var i = 0; i < WS.World.ents.length; i++) {
+          if (WS.World.ents[i] && WS.World.ents[i].id === 'player') { found = true; break; }
+        }
+        if (!found) WS.World.addEnt(WS.G.player);
+      }
+      if (WS.Weather && WS.Weather.deserialize && WS.G.weather) {
+        WS.Weather.deserialize(WS.G.weather);
+      }
+      WS.G.running = true;
+      if (WS.Cam) WS.Cam.follow = WS.G.player;
+      WS.Ev.emit('game:load', {});
+      return true;
+    } catch (e) {
+      WS.err('demo: загрузка демо-слота', e && e.message);
+      return false;
+    }
+  }
+
   function start(opts) {
     opts = opts || {};
     if (D.active) return false;
-    try {
-      if (!WS.Main.newGame(DEMO_PROF, DEMO_TRAITS, DEMO_SEED)) return false;
-    } catch (e) {
-      WS.err('demo: newGame', e && e.message);
-      return false;
+
+    // --- продолжение незавершённого демо? (прогресс — в демо-слоте сейва) ---
+    var resumed = false;
+    if (!opts.fresh && WS.Save && WS.Save.exists && WS.Save.exists('demo')) {
+      var meta = null;
+      try { meta = WS.Save.meta('demo'); } catch (e) { meta = null; }
+      var dayS = meta && meta.day ? meta.day : '?';
+      var go = false;
+      try {
+        go = window.confirm('Найдено незавершённое демо-прохождение (день ' + dayS +
+          ' из 60).\nПродолжить его? («Отмена» — начать демо заново.)');
+      } catch (e) { go = false; }
+      if (go) {
+        resumed = loadDemoSave();
+        if (!resumed) { try { WS.Save.remove('demo'); } catch (e2) { /* пусто */ } }
+      } else {
+        try { WS.Save.remove('demo'); } catch (e2) { /* пусто */ }
+      }
     }
-    applyProfession();
-    // ОДЕТЬСЯ НЕМЕДЛЕННО: на морозе каждая минута раздетым — минус градус
-    try {
-      if (WS.Action.equipBest) WS.Action.equipBest();
-    } catch (e) { /* пусто */ }
+
+    if (!resumed) {
+      try {
+        if (!WS.Main.newGame(DEMO_PROF, DEMO_TRAITS, DEMO_SEED)) return false;
+      } catch (e) {
+        WS.err('demo: newGame', e && e.message);
+        return false;
+      }
+      applyProfession();
+      // ОДЕТЬСЯ НЕМЕДЛЕННО: на морозе каждая минута раздетым — минус градус
+      try {
+        if (WS.Action.equipBest) WS.Action.equipBest();
+      } catch (e) { /* пусто */ }
+      try { localStorage.removeItem(JKEY); } catch (e) { /* пусто */ }
+    }
 
     D.active = true;
+    D.resumedFrom = resumed ? dayN() : 0;
     D.phase = 'intro';
     D.plan = [];
     D.task = null;
@@ -1917,10 +2146,13 @@
     D.huntsDone = 0;
     D.shotsDone = 0;
     D.melted = 0;
+    D.warmFail = {};
+    D.warmToldId = '';
     D.startStamp = stamp();
     D.startedAt = Date.now();
     D.world = scanWorld();
     D.base = D.world ? D.world.base : null;
+    if (resumed) restoreJournal();
 
     buildPanel();
     if (dom.root) dom.root.classList.remove('hidden');
@@ -1946,15 +2178,59 @@
         ', контейнеров: ' + sealed.containers + ' (недостижимы даже после ремонта дверей — пропускаю).', 'bad');
     }
 
-    // интро-план: сразу к тёплой базе — вокзал холодный, и обыски на
-    // нуле температуры — верная смерть. По дороге сработает автоподогрев
-    // в любом тёплом доме (barn_10 как раз по пути). Вокзал обыщем позже.
+    if (resumed) {
+      // продолжение: интро не нужно — бот сам разберётся (nextActivity)
+      D.phase = dayN() >= FINAL_DAY ? 'final' : 'live';
+      D.task = null;
+      D.plan = [];
+      log('▸ ПРОДОЛЖЕНИЕ демо с дня ' + dayN() + '/60 — партия восстановлена из демо-слота.', 'good');
+      if (D.base) log('База по-прежнему: ' + D.base.id + (D.base.heated ? ' (тёплая)' : '') + '.');
+      return true;
+    }
+
+    // ИНТРО-ПЛАН (выживание дня 1 — тот, что раньше убивал бота):
+    //   1) вокзал: обыскать контейнеры у спавна — тёплая одежда и хлам;
+    //      одеться сразу: в стартовой шинели дальняя ходьба смертельна;
+    //   2) поленница: дрова + трут + спички = костёр в чистом поле
+    //      (единственное быстрое тепло на маршруте);
+    //   3) база: тёплая изба с кроватью — жить там.
     var p = P();
+    if (p && D.world) {
+      var startLoot = [];
+      for (var s1 = 0; s1 < D.world.loot.length; s1++) {
+        var lt = D.world.loot[s1];
+        if (!lt.o || lt.o.looted) continue;
+        if (dist(p.x, p.y, lt.o.x, lt.o.y) <= 10) startLoot.push(lt);
+      }
+      startLoot.sort(function (a, b) {
+        return dist(p.x, p.y, a.o.x, a.o.y) - dist(p.x, p.y, b.o.x, b.o.y);
+      });
+      D.plan = [];
+      for (var s2 = 0; s2 < startLoot.length && s2 < 3; s2++) {
+        D.plan.push(taskGoto(startLoot[s2].o.x, startLoot[s2].o.y, 1.2, 'обыск: вокзал'));
+        D.plan.push({ type: 'search', o: startLoot[s2].o });
+      }
+      D.plan.push({ type: 'equip' });
+      // ближайшая поленница (в радиусе 30 тайлов) — дрова для костра/печи
+      var pile = null, pd = 30;
+      for (var s3 = 0; s3 < D.world.loot.length; s3++) {
+        var lo = D.world.loot[s3].o;
+        if (!lo || lo.looted) continue;
+        var nm = String(lo.name || '').toLowerCase();
+        if (nm.indexOf('оленн') < 0 && nm.indexOf('дровн') < 0) continue;
+        var dd = dist(p.x, p.y, lo.x, lo.y);
+        if (dd < pd) { pd = dd; pile = lo; }
+      }
+      if (pile) {
+        D.plan.push(taskGoto(pile.x, pile.y, 1.2, 'поленница (дрова)'));
+        D.plan.push({ type: 'search', o: pile });
+      }
+    }
     if (D.base) {
       var introSpot = D.base.reachTile || { x: D.base.x + D.base.w / 2, y: D.base.y + D.base.h / 2 };
       var ig = taskGoto(introSpot.x, introSpot.y, 1.4, 'тёплая изба (база)');
       ig.homeTrip = true;                 // поездка к базе неприкасаема для холод-ветки
-      D.plan = [ig];
+      D.plan.push(ig);
       for (var c2 = 0; c2 < D.base.containers.length; c2++) {
         D.plan.push(taskGoto(D.base.containers[c2].x, D.base.containers[c2].y, 1.2, 'обыск: изба (база)'));
         D.plan.push({ type: 'search', o: D.base.containers[c2] });
@@ -1962,7 +2238,7 @@
       if (D.base.bed) D.plan.push(taskGoto(D.base.bed.x, D.base.bed.y, 1.4, 'кровать'));
       D.plan.push({ type: 'equip' });
     } else {
-      D.plan = [taskGoto(35.5, 139.5, 1.4, 'вокзал (своя контора)')];
+      D.plan.push(taskGoto(35.5, 139.5, 1.4, 'вокзал (своя контора)'));
     }
     D.phase = 'live';
     return true;
@@ -1976,7 +2252,8 @@
     if (D.watchIv) { clearInterval(D.watchIv); D.watchIv = 0; }
     try { WS.Loop.setSpeed(1); } catch (e) { /* пусто */ }
     if (dom.root) dom.root.classList.add('hidden');
-    log('Демо остановлено: ' + (reason || 'причина не указана'));
+    log('Демо остановлено: ' + (reason || 'причина не указана') +
+      '. Прогресс сохранён: кнопка «▶ Демо-прохождение» предложит продолжить.');
     WS.log('[Demo] остановлен:', reason || '');
   }
 
@@ -2001,6 +2278,9 @@
     if (D.watchIv) { clearInterval(D.watchIv); D.watchIv = 0; }
     try { WS.Loop.setSpeed(1); } catch (e) { /* пусто */ }
     updatePanel();
+    // финал есть финал: демо-слот и журнал чистим (следующий старт — новый)
+    try { WS.Save.remove('demo'); } catch (e) { /* пусто */ }
+    try { localStorage.removeItem(JKEY); } catch (e) { /* пусто */ }
   }
 
   // ====================================================================

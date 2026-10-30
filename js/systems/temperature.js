@@ -830,7 +830,11 @@
       try { WS.Needs.makeSick('cold', COLD_DURATION); return; } catch (e) { /* ниже сами */ }
     }
     if (!p.sick) {
-      p.sick = { id: 'cold', t: COLD_DURATION };
+      // полный health-формат: {t: прошедшие часы, fired}
+      if (WS.Health && WS.Health.infectDisease) {
+        try { WS.Health.infectDisease('cold'); return; } catch (e2) { /* ниже сами */ }
+      }
+      p.sick = { id: 'cold', t: 0, fired: {}, compT: 0, tea: false };
       toast('Вы простудились', 'bad');
     }
   }

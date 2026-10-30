@@ -91,7 +91,8 @@
       try {
         t.fn(dt);
       } catch (e) {
-        WS.err('tick "' + t.name + '" failed:', e && e.message);
+        WS.err('tick "' + t.name + '" failed:', e && e.message,
+          e && e.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : '');
         // выкидываем падающий тик, чтобы не заспамить консоль
         tickers.splice(i, 1); i--;
       }

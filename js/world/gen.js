@@ -245,6 +245,49 @@
 
     for (var bi = 0; bi < W.buildings.length; bi++) {
       var b = W.buildings[bi];
+
+      // ФИКС «дверь в стену»: если ВСЕ внутренние соседи двери — стены/
+      // окна (перегородка прямо перед дверью, как в амбарах-закромах на
+      // сиде 1917), дверь не работает. ПРОБИВАЕМ КОРИДОР от двери внутрь
+      // до ближайшего ПОЛА (до 7 тайлов): однотайловый проруб оставлял
+      // мёртвый карман в стене-колонне — закрома оставались запертыми.
+      var doorsPre = b.door || [];
+      for (var dp = 0; dp < doorsPre.length; dp++) {
+        var drP = doorsPre[dp];
+        var neighP = [
+          { x: drP.x, y: drP.y - 1 }, { x: drP.x, y: drP.y + 1 },
+          { x: drP.x - 1, y: drP.y }, { x: drP.x + 1, y: drP.y }
+        ];
+        var anyOpen = false;
+        for (var npI = 0; npI < neighP.length; npI++) {
+          var nP = neighP[npI];
+          if (nP.x <= b.x || nP.x >= b.x + b.w - 1 ||
+              nP.y <= b.y || nP.y >= b.y + b.h - 1) continue;
+          var tP = W.tileAt(nP.x, nP.y);
+          if (tP === W.T.WALL_WOOD || tP === W.T.WALL_BRICK || tP === W.T.WALL_LOG ||
+              tP === W.T.WALL_STONE || tP === W.T.WINDOW || tP === W.T.FENCE) continue;
+          anyOpen = true; break;
+        }
+        if (!anyOpen) {
+          for (var npJ = 0; npJ < neighP.length; npJ++) {
+            var dxP = neighP[npJ].x - drP.x, dyP = neighP[npJ].y - drP.y;
+            var cxx = drP.x + dxP, cyy = drP.y + dyP;
+            var carvedRun = false;
+            for (var step = 0; step < 7; step++) {
+              if (cxx <= b.x || cxx >= b.x + b.w - 1 || cyy <= b.y || cyy >= b.y + b.h - 1) break;
+              var tQ = W.tileAt(cxx, cyy);
+              if (tQ !== W.T.WALL_WOOD && tQ !== W.T.WALL_BRICK && tQ !== W.T.WALL_LOG &&
+                  tQ !== W.T.WALL_STONE && tQ !== W.T.WINDOW) { carvedRun = true; break; }
+              // в этой клетке не должно стоять двери другого здания
+              W.setTile(cxx, cyy, T.DOORWAY);
+              carved++;
+              cxx += dxP; cyy += dyP;
+            }
+            if (carvedRun) break;
+          }
+        }
+      }
+
       // старты — внутренние соседи всех дверей
       var starts = [];
       var doors = b.door || [];
@@ -300,6 +343,36 @@
               if (aReach === cReach) continue;   // обе стороны одинаковы
               W.setTile(wx, wy, T.DOORWAY);
               carved++; carvedNow = true;
+            }
+          }
+        }
+        if (!carvedNow) {
+          // МЕБЕЛЬНОЕ КОЛЬЦО: карман отрезан не стеной, а прилавками/
+          // полками/ящиками (лавка и мастерская на сиде 1917). Убираем
+          // ОДИН предмет на границе «карман ↔ достижимое» — проход открыт.
+          var DIRS2 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          for (var py = b.y + 1; py < b.y + b.h - 1 && !carvedNow; py++) {
+            for (var px = b.x + 1; px < b.x + b.w - 1 && !carvedNow; px++) {
+              if (!reach[px + ',' + py]) continue;          // только достижимый тайл
+              for (var dd = 0; dd < 4 && !carvedNow; dd++) {
+                var qx = px + DIRS2[dd][0], qy = py + DIRS2[dd][1];
+                if (qx <= b.x || qx >= b.x + b.w - 1 || qy <= b.y || qy >= b.y + b.h - 1) continue;
+                if (reach[qx + ',' + qy]) continue;          // сосед уже достижим
+                if (!isFloorT(W.tileAt(qx, qy))) continue;   // карман — только пол
+                var qo = W.objsAt(qx, qy);
+                if (!qo) continue;
+                for (var qi = 0; qi < qo.length; qi++) {
+                  var qob = qo[qi];
+                  if (!qob || !qob.solid || qob.door) continue;
+                  // драгоценности (лут/печи/кровати) не ломаем — только мебель
+                  if (qob.container || qob.heat) continue;
+                  var qs = String(qob.sprName || '');
+                  if (qs.indexOf('bed') === 0) continue;
+                  try { W.removeObject(qob); } catch (e5) { continue; }
+                  carvedNow = true;
+                  break;
+                }
+              }
             }
           }
         }
@@ -375,6 +448,85 @@
     return { carved: carved, moved: moved };
   }
 
+  /**
+   * ФИНАЛЬНЫЙ ПРОХОД ДОСТУПНОСТИ (третий): к каждой печи, кровати и
+   * контейнеру должна быть подходная клетка — тайл-пол без глухой
+   * мебели. БАГ: интерьеры ставят стул/конторку ВПЛОТНУЮ к печи со
+   * всех четырёх сторон (станция на сиде 1917: печь обставлена
+   * конторкой, стулом и второй печью) — обыскать/растопить нельзя.
+   * Лечение: убрать ОДНУ наименее ценную загораживающую мебель;
+   * если всё вокруг — стены, прорубить проём в стене, за которой пол.
+   */
+  function freeApproach() {
+    var W = WS.World;
+    if (!W || !W.objects) return 0;
+    var T = W.T;
+    var freed = 0;
+
+    function isWallT(t) {
+      return t === T.WALL_WOOD || t === T.WALL_BRICK ||
+             t === T.WALL_LOG || t === T.WALL_STONE;
+    }
+    function isPrecious(o) {
+      if (!o) return false;
+      if (o.container || o.heat || o.door) return true;
+      var s = String(o.sprName || '');
+      return s.indexOf('bed') === 0;
+    }
+    function standable(x, y) {
+      if (!W.inB(x, y)) return false;
+      if (W.isTileBlocked(x, y)) return false;
+      var obs = W.objsAt(x, y);
+      if (obs) for (var i = 0; i < obs.length; i++) {
+        if (obs[i] && obs[i].solid && !obs[i].door) return false;
+      }
+      return true;
+    }
+    var DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+    for (var oi = 0; oi < W.objects.length; oi++) {
+      var o = W.objects[oi];
+      if (!o || !isPrecious(o)) continue;
+      var ox = Math.floor(o.x), oy = Math.floor(o.y);
+      // уже есть подходная клетка?
+      var ok = false;
+      for (var d = 0; d < 4; d++) {
+        if (standable(ox + DIRS[d][0], oy + DIRS[d][1])) { ok = true; break; }
+      }
+      if (ok) continue;
+
+      // 1) убрать наименее ценную глухую мебель рядом (стул, лавку…)
+      var removed = false;
+      for (var d2 = 0; d2 < 4 && !removed; d2++) {
+        var bx = ox + DIRS[d2][0], by = oy + DIRS[d2][1];
+        if (!W.inB(bx, by) || W.isTileBlocked(bx, by)) continue;
+        var obs = W.objsAt(bx, by);
+        if (!obs) continue;
+        for (var k = 0; k < obs.length; k++) {
+          var ob = obs[k];
+          if (!ob || !ob.solid || ob.door || isPrecious(ob)) continue;
+          try { W.removeObject(ob); } catch (e1) { continue; }
+          freed++; removed = true;
+          break;
+        }
+      }
+      if (removed) continue;
+
+      // 2) всё вокруг — стены: прорубить ту, за которой стоит пол
+      for (var d3 = 0; d3 < 4; d3++) {
+        var wx = ox + DIRS[d3][0], wy = oy + DIRS[d3][1];
+        if (!W.inB(wx, wy)) continue;
+        if (!isWallT(W.tileAt(wx, wy))) continue;
+        var fx = wx + DIRS[d3][0], fy = wy + DIRS[d3][1];
+        if (!standable(fx, fy)) continue;
+        W.setTile(wx, wy, T.DOORWAY);
+        freed++;
+        break;
+      }
+    }
+    return freed;
+  }
+
   var Gen = {
     /** Сгенерировать мир по семени. Возвращает true при успехе. */
     generate: function (seed) {
@@ -425,6 +577,8 @@
           WS.log('[Gen] связность интерьеров: прорублено проёмов — ' + conn.carved +
             ', перенесено предметов из запертых комнат — ' + conn.moved);
         }
+        var freed = freeApproach();
+        if (freed) WS.log('[Gen] доступ к печам/кроватям/луту: расчищено подходов — ' + freed);
       } catch (e3) {
         WS.err('Gen.clearDoorways failed:', e3 && e3.message);
       }
