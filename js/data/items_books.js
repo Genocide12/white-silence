@@ -171,11 +171,35 @@
     ] });
 
   // ================================================================ РЕГИСТРАЦИЯ
+  // Английские названия книг (осознанный выбор игрока F9/EN: библиотека
+  // не должна показывать «book carpentry full» — сырой id).
+  var EN_TITLES = {
+    book_carpentry_full: 'Carpenter\u2019s Manual',
+    book_medic_field: 'Field Medical Handbook',
+    book_hunting_timo: 'Notes of a Trapper',
+    book_cook_village: 'Village Housewife\u2019s Cookbook',
+    book_tailor_house: 'Home Cutting & Sewing',
+    book_survive_north: 'Winter Craft Handbook',
+    book_london_white: 'White Silence (a story)',
+    book_dead_souls: 'Dead Souls, Volume I',
+    book_chehov_north: 'Northern Stories',
+    book_psaltyr: 'Pocket Psalter',
+    book_children_azbuka: 'An Illustrated Primer',
+    book_weather_signs: 'Folk Signs of the North',
+    book_tariff: 'Customs Statute, ed.',
+    book_beekeeping: 'Beekeeping for Novices',
+    book_veterinary: 'Farrier\u2019s Remedies',
+    book_first_aid_self: 'Self-Help on the Trapline',
+    book_skazki: 'Northern Folk Tales',
+    book_telegraph_manual: 'Telegraphist\u2019s Manual'
+  };
+
   WS.boot(function initLibrary() {
     WS.Data = WS.Data || {};
     WS.Data.items = WS.Data.items || {};
     WS.Data.locales = WS.Data.locales || {};
     WS.Data.locales.ru = WS.Data.locales.ru || {};
+    WS.Data.locales.en = WS.Data.locales.en || {};
     for (var i = 0; i < BOOKS.length; i++) {
       var b = BOOKS[i];
       if (!WS.Data.items[b.id]) {
@@ -188,6 +212,8 @@
       }
       WS.Data.locales.ru['item.' + b.id + '.name'] = b.title;
       WS.Data.locales.ru['item.' + b.id + '.desc'] = b.author + '. ' + b.pages + ' стр.';
+      WS.Data.locales.en['item.' + b.id + '.name'] = EN_TITLES[b.id] || b.title;
+      WS.Data.locales.en['item.' + b.id + '.desc'] = 'An old volume, ' + b.pages + ' pages.';
     }
     WS.Data.books = BOOKS;
   }, 'library:reg');

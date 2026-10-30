@@ -419,7 +419,7 @@
     addRecipe({
       id: 'fish_trap', name: 'Верша', cat: 'survival',
       station: null, time: 6,
-      req: [{ id: 'pine_branches', n: 5 }, { id: 'rope', n: 1 }],
+      req: [{ id: 'pine_branch', n: 5 }, { id: 'rope', n: 1 }],
       tools: ['knife'],
       out: [{ id: 'fish_trap', n: 1 }],
       skill: { id: 'survive', lv: 0 }
@@ -1250,6 +1250,22 @@
   WS.boot(function initFishing() {
     defFishSprites();
     defFishItems();
+
+    // имена рыбьих предметов (тест-сьют S2: показывался сырой id)
+    (function fishNames() {
+      try {
+        WS.Data = WS.Data || {};
+        WS.Data.locales = WS.Data.locales || {};
+        var ru = WS.Data.locales.ru = WS.Data.locales.ru || {};
+        var en = WS.Data.locales.en = WS.Data.locales.en || {};
+        var RU = { pike_raw: 'Щука-сырец', burbot_raw: 'Налим-сырец', fish_trap: 'Верша', fish_net: 'Рыбацкая сеть' };
+        var EN = { pike_raw: 'Raw Pike', burbot_raw: 'Raw Burbot', fish_trap: 'Fish Trap', fish_net: 'Fishing Net' };
+        for (var k in RU) {
+          if (!ru['item.' + k + '.name']) ru['item.' + k + '.name'] = RU[k];
+          if (!en['item.' + k + '.name']) en['item.' + k + '.name'] = EN[k];
+        }
+      } catch (e) { /* пусто */ }
+    })();
 
     // страховка порядка загрузки относительно data/recipes.js
     WS.afterFirstFrame(function () {

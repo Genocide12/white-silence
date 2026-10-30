@@ -1255,8 +1255,17 @@
   WS.boot(function initRuLocale() {
     WS.Data = WS.Data || {};
     WS.Data.locales = WS.Data.locales || {};
-    WS.Data.locales.ru = RU;
-    WS.log('I18N: русский словарь — ' + size('ru') + ' ключей');
+    // СЛИЯНИЕ, а не перезапись: модули (items_books, items_cook, notes…)
+    // регистрируют свои ключи в Data.locales.ru ещё до этого бута —
+    // прежнее присваивание целиком затирало их (книги без имён и т.п.).
+    // Канонический словарь побеждает при конфликте ключей.
+    var cur = WS.Data.locales.ru;
+    if (!cur || cur === RU) {
+      WS.Data.locales.ru = RU;
+    } else {
+      for (var k in RU) if (Object.prototype.hasOwnProperty.call(RU, k)) cur[k] = RU[k];
+    }
+    WS.log('I18N: русский словарь — ' + size('ru') + ' ключей (слияние)');
   }, 'i18n:ru');
 
   WS.def('I18N', {

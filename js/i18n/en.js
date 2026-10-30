@@ -1428,10 +1428,18 @@
   WS.def('Data.locales.en', EN);
 
   // 2) Симметрично ru.js — обычная регистрация в boot (и лог).
+  //    СЛИЯНИЕ, а не перезапись: модули (notes, radio, dialogues…)
+  //    регистрируют EN-ключи в Data.locales.en до этого бута и не должны
+  //    затираться. Канонический словарь побеждает при конфликте ключей.
   WS.boot(function initEnLocale() {
     WS.Data = WS.Data || {};
     WS.Data.locales = WS.Data.locales || {};
-    WS.Data.locales.en = EN;
-    WS.log('I18N: английский словарь — ' + countKeys(EN) + ' ключей');
+    var cur = WS.Data.locales.en;
+    if (!cur || cur === EN) {
+      WS.Data.locales.en = EN;
+    } else {
+      for (var k in EN) if (Object.prototype.hasOwnProperty.call(EN, k)) cur[k] = EN[k];
+    }
+    WS.log('I18N: английский словарь — ' + countKeys(EN) + ' ключей (слияние)');
   }, 'i18n:en');
 })();
