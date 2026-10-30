@@ -32,11 +32,18 @@ const run = async () => {
   });
   console.log('WS до старта:', JSON.stringify(pre));
 
-  // Клик «Начать» (точное совпадение)
+  // Флоу: «Случайный герой» (валидный выбор) → «Начать»
+  const btnRnd = page.locator('text="Случайный герой"').first();
+  if (await btnRnd.isVisible().catch(() => false)) {
+    console.log('КЛИК: Случайный герой');
+    await btnRnd.click();
+    await page.waitForTimeout(600);
+  }
   const btn = page.locator('text="Начать"').first();
   if (await btn.isVisible().catch(() => false)) {
-    console.log('КЛИК: Начать');
-    await btn.click();
+    const disabled = await btn.isDisabled();
+    console.log('КНОПКА «Начать»:', disabled ? 'ВСЁ ЕЩЁ DISABLED (BUG!)' : 'активна');
+    if (!disabled) { console.log('КЛИК: Начать'); await btn.click(); }
   } else {
     console.log('КНОПКА «Начать» НЕ НАЙДЕНА');
   }

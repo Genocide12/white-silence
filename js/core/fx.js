@@ -125,6 +125,8 @@
     spawn: spawn,
     burst: burst,
     text: text,
+    drawWorld: drawWorld,
+    drawScreen: drawScreen,
     count: function () { return parts.length; },
     clear: function () { parts = []; texts = []; }
   });

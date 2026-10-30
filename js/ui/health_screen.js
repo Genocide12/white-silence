@@ -781,7 +781,7 @@
     applyBars(st);
     renderStates(st, fb);
     renderActions(st);
-    if (force) renderT = 0;
+    if (force) refreshT = 0;
   }
 
   /** Правая рука/нога получают те же классы, что и левая. */
