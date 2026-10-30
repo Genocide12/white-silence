@@ -50,6 +50,16 @@
   def({ id: 'toast', cat: 'food', w: 0.35, stack: 5, cal: 1100, thir: -10, per: 9, tags: ['edible'] });
   def({ id: 'rusk', cat: 'food', w: 0.12, stack: 20, cal: 400, thir: -14, per: 0, tags: ['edible'] });
   def({ id: 'water_flask', cat: 'drink', w: 0.9, stack: 1, thir: 55, per: 0, tags: ['drinkable'] });
+  // пустая фляга: возвращается после готовки/питья; наполняется у огня (fire.js).
+  // Каноническое объявление здесь (ранняя регистрация) — чтобы валидация
+  // рецептов не ругалась на неизвестный предмет (fallback в needs.js/fire.js остаётся страховкой).
+  def({ id: 'flask_empty', cat: 'container', w: 0.35, stack: 3, tags: ['container'] });
+  // котелок: инструмент 16 кулинарных рецептов (recipes.js), крафтится в кузнице.
+  def({ id: 'pot', cat: 'tool', w: 1.8, stack: 1, tags: ['cooking'] });
+  // зимние находки собирательства (сами спотыканцы — в systems/foraging.js;
+  // здесь — канонические объявления для ранней валидации рецептов)
+  def({ id: 'frozen_berries', cat: 'food', w: 0.1, stack: 10, cal: 200, thir: -5, per: 4, tags: ['perishable', 'edible'] });
+  def({ id: 'frozen_mushroom', cat: 'food', w: 0.12, stack: 10, cal: 180, thir: -5, per: 4, cook: 'dried_mushrooms', tags: ['perishable', 'edible', 'cookable'] });
   def({ id: 'canned_fish', cat: 'food', w: 0.35, stack: 10, cal: 900, thir: 5, per: 0, tags: ['edible'] });
   def({ id: 'salt_fish', cat: 'food', w: 0.5, stack: 5, cal: 800, thir: -25, per: 20, tags: ['perishable', 'edible'] });
   def({ id: 'fresh_fish', cat: 'food', w: 0.6, stack: 3, cal: 700, thir: -6, per: 3, cook: 'cooked_fish', sick: 35, tags: ['perishable', 'edible', 'cookable'] });
