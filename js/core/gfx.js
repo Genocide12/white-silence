@@ -18,10 +18,14 @@
     init: function () {
       cv = document.getElementById('game');
       ctx = cv.getContext('2d', { alpha: false });
-      Gfx.resize();
-      window.addEventListener('resize', Gfx.resize);
+      // ВАЖНО: lightCv создаётся ДО resize() — иначе resize пропустит его
+      // размер (if (lightCv)) и канвас тьмы останется дефолтным 300x150:
+      // ночью затемнялся только угол 300x150, весь остальной кадр оставался
+      // дневным (баг найден пиксельным аудитом ночного кадра).
       lightCv = document.createElement('canvas');
       lightCtx = lightCv.getContext('2d');
+      Gfx.resize();
+      window.addEventListener('resize', Gfx.resize);
       ctx.imageSmoothingEnabled = false;
     },
     resize: function () {
@@ -141,6 +145,25 @@
 
   var STAND_T = null;   // тайлы-«стоячие» декорации: база — центр ромба, как у сущностей
 
+  var _rimCache = {}, _rimSeq = 0;
+  /** Силуэт спрайта светлым тоном (для контура героя): рисуем картинку,
+   *   заливаем цветом через source-in. Кэшируется по ссылке на канвас. */
+  function rimSprite(img) {
+    var key = img._rimK || (img._rimK = 'rim' + (_rimSeq++));
+    var c = _rimCache[key];
+    if (c) return c;
+    var cv = document.createElement('canvas');
+    cv.width = img.width + 8; cv.height = img.height + 8;
+    var x = cv.getContext('2d');
+    x.imageSmoothingEnabled = false;
+    x.drawImage(img, 4, 4);
+    x.globalCompositeOperation = 'source-in';
+    x.fillStyle = '#e8f2ff';
+    x.fillRect(0, 0, cv.width, cv.height);
+    _rimCache[key] = cv;
+    return cv;
+  }
+
   function drawTile(octx, t, X, Y) {
     var s = M.toScreen(t.lx, t.ly);
     if (!STAND_T) {
@@ -172,6 +195,18 @@
     if (!list.length) return;
     var c = WS.Cam.canvasCenter();
     list.sort(function (a, b) { return (a.x + a.y) - (b.x + b.y); });
+    // Экранный прямоугольник героя — для заслонения крон: деревья, чьи
+    // спрайты перекрывают героя на экране И рисуются после него (ключ
+    // сортировки >=), притапливаются прозрачностью. Без этого в густом
+    // лесу герой полностью прятался под кронами (найдено VLM-аудитом
+    // кадра леса: маркер под ногами виден, спрайта нет).
+    var pEnt = (WS.G && WS.G.player && !WS.G.player.hidden) ? WS.G.player : null;
+    var pr = null;
+    if (pEnt && list.indexOf(pEnt) >= 0) {
+      var ps = M.toScreen(pEnt.x - WS.Cam.cx - WS.Cam._shakeX, pEnt.y - WS.Cam.cy - WS.Cam._shakeY);
+      var psx2 = c.x + ps.x * zoom, psy2 = c.y + (ps.y + M.HH) * zoom;
+      pr = { x0: psx2 - 18 * zoom, x1: psx2 + 18 * zoom, y0: psy2 - 50 * zoom, y1: psy2 + 4 * zoom };
+    }
     for (var i = 0; i < list.length; i++) {
       var e = list[i];
       if (e.hidden) continue;
@@ -207,7 +242,26 @@
         }
         var iw = img.width * zoom * sc;
         var ih = img.height * zoom * sc;
+        // крона заслоняет героя? — рисуем полупрозрачно (герой читается сквозь)
+        var occl = false;
+        if (pr && e !== pEnt && e.sprName && e.sprName.indexOf('tree_') === 0 &&
+            (e.x + e.y) >= (pEnt.x + pEnt.y) &&
+            sx - iw / 2 < pr.x1 && sx + iw / 2 > pr.x0 && sy - ih < pr.y1 && sy > pr.y0) {
+          occl = true;
+        }
+        if (occl) { ctx.save(); ctx.globalAlpha = 0.45; }
+        // морозный контур героя: светлый силуэт чуть крупнее — герой читается
+        // на любом фоне (тёмный лес, сумерки, кроны)
+        if (e.marker && !occl) {
+          var rim = rimSprite(img);
+          var rw = iw * 1.22, rh = ih * 1.22;
+          ctx.save();
+          ctx.globalAlpha = 0.65;
+          ctx.drawImage(rim, sx - rw / 2, sy - rh + 3 * zoom, rw, rh);
+          ctx.restore();
+        }
         ctx.drawImage(img, sx - iw / 2, sy - ih, iw, ih);
+        if (occl) ctx.restore();
       }
       // маркер игрока — ПОВЕРХ тени и спрайта обода: герой всегда виден на снегу
       if (e.marker) {
@@ -235,10 +289,14 @@
     var t = WS.Time.hourF();
     var day = WS.Time.day();
 
-    // ambient: от солнца (0 ночью .. 1 днём) с учётом погоды
+    // ambient: от солнца (0 ночью .. 1 днём) с учётом погоды.
+    // Подъём корнем: полярным днём (свет 0.3-0.7 в ноябре) мир остаётся
+    // читаемым, снег — белым; ночью тьма по-прежнему полная.
+    // Линейная формула затемняла утро 8:00 на 59% — кадр превращался
+    // в серую кашу (поймано пиксельным аудитом после фикса размера lightCv).
     var sun = WS.Time.light();
     var weatherDim = WS.Weather ? WS.Weather.lightDim() : 0;
-    var ambient = Math.max(0, sun * (1 - weatherDim * 0.5));
+    var ambient = Math.sqrt(Math.max(0, sun * (1 - weatherDim * 0.5)));
     var darkness = 1 - ambient;
 
     // тон времени суток
