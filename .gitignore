@@ -2,3 +2,6 @@ captures/
 *.log
 node_modules/
 .studioigor/captures/
+
+# local secrets
+.env
