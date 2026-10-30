@@ -535,6 +535,20 @@
     build();
     if (!root) return;
     if (!o.inv) o.inv = [];         // страховка (лут мог не наполниться)
+    // ДЕДОВСКИЕ ПОДАРКИ: бонусы изгнанников (_crazyExtra от crazy.js)
+    // вливаются в содержимое. Раньше это делала обёртка Ui.openContainer
+    // из crazy.js — но inventory_screen.js грузится позже и ПЕРЕЗАПИСЫВАЕТ
+    // точку входа своей uiOpenContainer, так что вливание стало мёртвым
+    // кодом (дед с fat×42 и 0 тряпок — живой пример Д51). Здесь — самое
+    // надёжное место: ContScreen.open не перепривязывается.
+    if (o._crazyExtra && o._crazyExtra.length && !o._crazyGiven) {
+      o._crazyGiven = 1;
+      o.inv = o.inv.concat(o._crazyExtra);
+      o._crazyExtra = [];
+      try {
+        if (WS.Ui && WS.Ui.toast) WS.Ui.toast('🎁 Изгнанник оставил подарок!', 'good');
+      } catch (eT) { /* пусто */ }
+    }
     cur = o;
     open = true;
     selC = -1;

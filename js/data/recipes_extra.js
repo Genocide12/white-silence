@@ -69,7 +69,7 @@
       desc: 'Плетёный короб за спину' }),
 
     // ================================================================ КОСТЁР И СВЕТ
-    R({ id: 'torch_make', out: [{ id: 'torch', n: 2 }], cat: 'survival',
+    R({ id: 'torch_make', name: 'Пара факелов', out: [{ id: 'torch', n: 2 }], cat: 'survival',
       req: [{ id: 'plank', n: 1 }, { id: 'fat', n: 1 }, { id: 'cloth_rag', n: 2 }],
       tools: [], station: null, time: 30, skill: { id: 'survive', lv: 0 },
       desc: 'Два факела: свет и страх волка' }),

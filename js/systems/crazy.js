@@ -359,9 +359,11 @@
               corpseObj._crazyExtra.push({ id: 'fat', count: 1 });
               if (Math.random() < 0.4) corpseObj._crazyExtra.push({ id: 'lamp_oil', count: 1 });
             }
-          } else if (ragN < 2 && Math.random() < 0.6) {
+          } else if (ragN < 2) {
+            // тряпьё — последнее звено: гарантируем (ранее 40% подарков
+            // приходили пустыми, дед стоял с fat×27 и 0 тряпок)
             corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 2 });
-          } else if (plankN < 1 && Math.random() < 0.6) {
+          } else if (plankN < 1) {
             corpseObj._crazyExtra.push({ id: 'plank', count: 1 });
           }
         }
