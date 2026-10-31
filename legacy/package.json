@@ -1,0 +1,12 @@
+{
+  "name": "white-silence",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Белое Безмолвие — изометрический сурвайвл: Русский Север, зима 1917 года. Чистый JavaScript + Canvas 2D, ноль зависимостей.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs 3000",
+    "start": "node scripts/serve.mjs 3000",
+    "serve": "node scripts/serve.mjs",
+    "qa": "node scripts/probe2.mjs http://localhost:3000 qa"
+  }
+}
