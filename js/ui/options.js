@@ -13,9 +13,10 @@
     volume: 0.7,
     music: 0.5,
     muted: false,
-    voiceDed: true,       // голос деда (озвучка мыслей, Web Speech)
-    voiceRadio: true,     // голос радио-диктора
+    voiceDed: true,       // голос деда (студийная озвучка, файлы)
+    voiceRadio: true,     // голос радио-диктора и новостей
     voiceVol: 1.0,        // громкость голоса (0..1)
+    matMode: true,        // угарный матерной режим деда (по умолчанию — да!)
     lang: null,            // null = авто
     difficulty: 'survivor',
     tutorial: true,
@@ -126,10 +127,11 @@
     el.appendChild(row('Громкость музыки', 'music', 'slider', 0, 1, 0.05));
     el.appendChild(row('Без звука', 'muted', 'check'));
 
-    // --- голос (озвучка мыслей деда и радио-диктора) ---
-    el.appendChild(row('Голос деда (озвучка мыслей)', 'voiceDed', 'check'));
-    el.appendChild(row('Голос радио-диктора', 'voiceRadio', 'check'));
+    // --- голос (студийная озвучка: дед/радио/новости разными голосами) ---
+    el.appendChild(row('Голос деда (студийная озвучка)', 'voiceDed', 'check'));
+    el.appendChild(row('Голоса радио и новостей', 'voiceRadio', 'check'));
     el.appendChild(row('Громкость голоса', 'voiceVol', 'slider', 0, 1, 0.05));
+    el.appendChild(row('Угарный матерной режим деда 🔞', 'matMode', 'check'));
 
     el.appendChild(hr());
 

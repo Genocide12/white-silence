@@ -262,6 +262,14 @@
     bRestart.className = bRestart.className + ' fin-restart';
     btns.appendChild(bRestart);
 
+    // «⭐ Отправить экспедицию» — превратить зиму в звёзды (мета-слой)
+    var bExped = btn('⭐ Отправить экспедицию', 'exped-btn', function () {
+      sendExpeditionFromFinale();
+    });
+    bExped.className = bExped.className + ' fin-exped';
+    bExped.title = 'Между зимами дед сходит за звёздами: дни, изгнания и Древо превратятся в перки.';
+    btns.appendChild(bExped);
+
     // «В меню»
     btns.appendChild(btn(T('ui.death.to_menu', 'В меню'), '', function () {
       toMenu();
@@ -453,6 +461,40 @@
   /** Экран победы. Вызывается из Main.victory(). */
   function victoryScreen() {
     show('victory', null);
+  }
+
+  /** Отправить экспедицию с финального экрана: зима → звёзды. */
+  function sendExpeditionFromFinale() {
+    if (!(WS.Expeditions && WS.Expeditions.sendExpedition)) {
+      try { WS.Ui.toast('Изба Экспедиций не загружена', 'warn'); } catch (e) { /* пусто */ }
+      return;
+    }
+    var g = WS.G;
+    if (!g) return;
+    var cz = (WS.Crazy && WS.Crazy.state) ? WS.Crazy.state() : null;
+    var treeLv = 0;
+    try {
+      if (cz && cz.spent) { for (var tk in cz.spent) treeLv += cz.spent[tk] || 0; }
+    } catch (e2) { /* пусто */ }
+    var fq = (WS.Story && WS.Story.finalQuest) ? WS.Story.finalQuest() : null;
+    var isWin = (dom.lastKind === 'victory');
+    var res = WS.Expeditions.sendExpedition({
+      result: isWin ? 'victory' : 'death',
+      day: g.time ? g.time.day : 1,
+      banished: cz ? cz.banished : 0,
+      treeLv: treeLv,
+      stardust: fq ? fq.dust : 0,
+      seed: g.seed || 0,
+      name: 'Дед (ручной заезд)',
+      ritual: fq ? fq.calls : 0
+    });
+    var bEx = dom.root ? dom.root.querySelector('.fin-exped') : null;
+    if (bEx) {
+      bEx.disabled = true;
+      bEx.textContent = '⭐ +' + res.stars + ' звёзд! (всего ' + res.total + ')';
+    }
+    try { WS.Ui.toast('⭐ Экспедиция отправлена: +' + res.stars + ' звёзд! Трать их в Избе Экспедиций [X].', 'good'); } catch (e3) { /* пусто */ }
+    try { WS.Snd.play('levelup', { vol: 0.5 }); } catch (e4) { /* пусто */ }
   }
 
   // ====================================================================

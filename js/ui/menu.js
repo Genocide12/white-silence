@@ -393,9 +393,36 @@
     // Демо-прохождение: автопилот сам играет партию до парохода (js/ui/demo.js)
     var btnDemo = el('button', 'ws-btn demo-btn', actions);
     setText(btnDemo, '▶ Демо-прохождение');
-    btnDemo.title = 'Автопилот сам сыграет всю партию: обыски, костёр, охота, ' +
-      'сигнальный огонь и пароход. Смотрите и ищите баги. Журнал — в .txt.';
+    btnDemo.title = 'Автопилот сам сыграет всю партию: обыски, изгнания, факелы, ' +
+      'Грибной Зов и тарелка. Смотри и ищи баги. Журнал — в .txt.';
     btnDemo.addEventListener('click', onDemo);
+
+    // Рой агентов: очередь дедов-личностей играет партии подряд (js/ai/swarm.js)
+    var btnSwarm = el('button', 'ws-btn demo-btn', actions);
+    setText(btnSwarm, '🤖 Рой агентов');
+    btnSwarm.title = 'Несколько дедов-агентов по очереди проходят игру: каждый со ' +
+      'своим характером и стратегией. Записи — в Кинозале.';
+    btnSwarm.addEventListener('click', onSwarm);
+
+    // Кинозал: записи прохождений на любой скорости (js/ui/cinema.js)
+    var btnCinema = el('button', 'ws-btn demo-btn', actions);
+    setText(btnCinema, '🎬 Кинозал');
+    btnCinema.title = 'Записи роя агентов и твоих демо: дед-призрак в живом мире, ' +
+      'любая скорость, перемотка.';
+    btnCinema.addEventListener('click', function () {
+      snd('click');
+      try { WS.Cinema.show(); } catch (e) { /* пусто */ }
+    });
+
+    // Изба Экспедиций: мета-слой — звёзды и перки между зимами
+    var btnExped = el('button', 'ws-btn demo-btn', actions);
+    setText(btnExped, '⭐ Изба Экспедиций');
+    btnExped.title = 'Между зимами дед ходит за звёздами. Звёзды → перманентные ' +
+      'перки: крепче череп, жирнее грибы, звонче Зов.';
+    btnExped.addEventListener('click', function () {
+      snd('click');
+      try { WS.ExpedScreen.show(); } catch (e) { /* пусто */ }
+    });
 
     var btnHow = el('button', 'ws-btn', actions);
     setText(btnHow, 'Как играть');
@@ -918,6 +945,35 @@
       ok = false;
     }
     if (!ok) { showErr('Не удалось запустить демо.'); return; }
+    hide();
+  }
+
+  /** Рой агентов: турнир дедов — кто раньше честно пройдёт игру. */
+  function onSwarm() {
+    if (!built) return;
+    snd('bell');
+    if (!(WS.Swarm && WS.Swarm.launch)) { showErr('Модуль роя не загружен.'); return; }
+    var ok = false;
+    try {
+      ok = WS.Swarm.launch({
+        count: 3,
+        onDone: function (results) {
+          var best = null;
+          for (var i = 0; i < results.length; i++) {
+            if (results[i].result === 'victory' &&
+                (!best || results[i].day < best.day)) best = results[i];
+          }
+          var msg = best ?
+            ('🤖 Рой отыграл! Быстрейший — «' + best.name + '»: победа на день ' + best.day + '.') :
+            '🤖 Рой отыграл, но никто не доехал до тарелки. Смотри записи в Кинозале!';
+          try { WS.Ui.toast(msg, best ? 'good' : 'warn'); } catch (e) { /* пусто */ }
+        }
+      });
+    } catch (e) {
+      WS.err('menu swarm start', e && e.message);
+      ok = false;
+    }
+    if (!ok) { showErr('Не удалось запустить рой.'); return; }
     hide();
   }
 

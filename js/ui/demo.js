@@ -212,6 +212,10 @@
     try {
       if (WS.Story && WS.Story.chron) WS.Story.chron('[демо] ' + txt, 'anom');
     } catch (e) { /* хроники не критичны */ }
+    // киноплёнка: действия — в запись Кинозала
+    try {
+      if (WS.Replay && WS.Replay.isActive && WS.Replay.isActive()) WS.Replay.noteAct(txt, cls);
+    } catch (eR) { /* плёнка не критична */ }
     updatePanelLog();
     persistJournal();                   // пережить закрытие вкладки
   }
@@ -220,6 +224,10 @@
   function thoughtLog(text) {
     D.journal.push({ t: stamp(), txt: '💭 ' + text, cls: 'think' });
     if (D.journal.length > 900) D.journal.shift();
+    // киноплёнка: мысли — в запись Кинозала
+    try {
+      if (WS.Replay && WS.Replay.isActive && WS.Replay.isActive()) WS.Replay.noteThink(text);
+    } catch (eR) { /* плёнка не критична */ }
     updatePanelLog();
     persistJournal();
   }
@@ -822,7 +830,7 @@
 
   /** Выполнение текущей задачи. Возвращает true, если задача ещё жива. */
   // потолок реального времени на задачу (страховка от вечных задач)
-  var TASK_TIMEOUT = { search: 30, hunt: 120, banish: 100, beacon: 90, melt: 180, warm: 360, sleep: 99999 };
+  var TASK_TIMEOUT = { search: 30, hunt: 120, banish: 100, beacon: 90, ritual: 120, melt: 180, warm: 360, sleep: 99999 };
 
   function runTask() {
     var t = D.task;
@@ -1168,7 +1176,7 @@
         if (bd2 <= 1.45) {
           t.deadlineT = 0;
         } else {
-          t.deadlineT = (t.deadlineT || 0) + 1 / 60;
+          t.deadlineT = (t.deadlineT || 0) + 0.2;   // 5 вызовов/сек — честные 25 сек
         }
         if ((t.deadlineT || 0) > 25) {
           bt._demoSkipUntil = absMin() + 180;
@@ -1227,6 +1235,37 @@
         tapKey('KeyE');
         t.fired = (t.fired || 0) + 1;
         if (t.fired > 40) return false;    // не вышло — не висим
+        return true;
+      }
+
+      case 'ritual': {
+        // ГРИБНОЙ ЗОВ у горящего Магического Огня: жмём [E] с пылью,
+        // пока тарелка не услышит (3 зова — и прилёт через 2 игровых часа)
+        var fqz = (WS.Story && WS.Story.finalQuest) ? WS.Story.finalQuest() : null;
+        if (!fqz || !fqz.lit || fqz.plateCalled) return false;
+        var pierZ = (WS.Story && WS.Story.pier) ? WS.Story.pier() : null;
+        if (!pierZ) return false;
+        var dz = dist(p.x, p.y, pierZ.x, pierZ.y);
+        if (dz > 2.0) {
+          if (!D.path.length) {
+            var np9 = findPath(p.x, p.y, pierZ.x, pierZ.y);
+            if (np9) D.path = np9; else return false;
+          }
+          return true;
+        }
+        releaseKeys();
+        if (t.calls0 == null) t.calls0 = fqz.calls;
+        if (fqz.calls > t.calls0) {
+          log('✨ ГРИБНОЙ ЗОВ ' + fqz.calls + '/' + fqz.callNeed +
+            ' — пыль вспыхнула зелёным, тарелка напряглась!', 'good');
+          if (fqz.calls >= fqz.callNeed) return false;   // всё — ждём луч
+          t.calls0 = fqz.calls;
+          t.fired = 0;
+        }
+        if (fqz.dust < 1 || shroomEnergy() < fqz.callCost) return false;  // доберём
+        tapKey('KeyE');
+        t.fired = (t.fired || 0) + 1;
+        if (t.fired > 30) return false;   // не жмётся — не висим
         return true;
       }
 
@@ -1297,13 +1336,18 @@
   }
 
   /** Ближайший зверь/бандит для ИЗГНАНИЯ (дед-режим): грибная энергия
-   *  + подарок с лутом (жир для факелов — тушки волка/медведя). */
-  function beastNear(r) {
+   *  + подарок с лутом (жир для факелов — тушки волка/медведя).
+   *  opts.prey: спидранеру — сперва ЗАЙЦЫ/ОЛЕНИ
+   *  (лёгкая добыча без клыков), хищники — только вплотную (<8 тайлов):
+   *  плейтест роя — погоня за волками давала переломы и 2 изгнания за 25
+   *  дней, а зайц превращается в подарок за два шлепка лодошкой. */
+  function beastNear(r, opts) {
     var p = P();
     if (!p || !W()) return null;
     var list;
     try { list = W().entsNear(p.x, p.y, r || 40); } catch (e) { return null; }
     var best = null, bd = 1e9;
+    var bestPrey = null, bdPrey = 1e9;
     for (var i = 0; i < list.length; i++) {
       var e = list[i];
       if (!e || e.dead || !e.hp || e.hp <= 0) continue;
@@ -1313,6 +1357,12 @@
       if (e._demoSkipUntil && e._demoSkipUntil > absMin()) continue;
       var d = dist(p.x, p.y, e.x, e.y);
       if (d < bd) { bd = d; best = e; }
+      if ((e.kind === 'hare' || e.kind === 'deer') && d < bdPrey) { bdPrey = d; bestPrey = e; }
+    }
+    if (opts && opts.prey) {
+      if (bestPrey) return bestPrey;
+      if (best && bd < 8) return best;      // хищник сам пришёл — можно
+      return null;
     }
     return best;
   }
@@ -1649,19 +1699,27 @@
     var plan = [];
 
     // === ФИНАЛ: Магический Огонь на мостках ===
+    // РАННЯЯ ПОБЕДА: «rush» идёт на мостки, как только факелы собраны.
+    // Классика ждёт 55-го дня. После розжига ОБА зовут тарелку Грибным
+    // Зовом (пыль + энергия) — побеждаем раньше 60-го дня.
     var fq = (WS.Story && WS.Story.finalQuest) ? WS.Story.finalQuest() : null;
-    if (day >= FINAL_DAY && fq && !fq.lit) {
+    var rush = !!(D.cfg && D.cfg.strategy === 'rush');
+    var callsLeft = (fq && fq.lit && !fq.plateCalled) ?
+      Math.max(0, fq.callNeed - fq.calls) : 0;
+    if ((day >= FINAL_DAY || (rush && torchesMissing() === 0)) && fq && !fq.lit) {
       D.phase = 'final';
       if (torchesMissing() > 0) {
         craftTorches();
-        fallbackTorches();
+        if (day >= FINAL_DAY) fallbackTorches();
       }
       if (torchesMissing() === 0) {
         var pier = (WS.Story && WS.Story.pier) ? WS.Story.pier() : null;
         if (pier) {
           if (!D._finalSaid) {
             D._finalSaid = true;
-            log('ЗОВ ТАРЕЛКИ! Иду на мостки — зажигать Магический Огонь (3 факела при мне).', 'good');
+            log(rush ?
+              'Факелы при мне! Не жду 55-го — иду на мостки жечь Магический Огонь прямо сейчас, бля!' :
+              'ЗОВ ТАРЕЛКИ! Иду на мостки — зажигать Магический Огонь (3 факела при мне).', 'good');
           }
           var pg = taskGoto(pier.x, pier.y, 1.6, 'мостки-пристань');
           pg.finalTrip = true;            // финальный забег: не рвётся сном/холодом
@@ -1676,6 +1734,40 @@
         }
       }
       // факелов нет — добираем днём (лут/изгнания), ночью спим
+    } else if (fq && fq.lit && callsLeft > 0) {
+      // === ГРИБНОЙ ЗОВ: ранняя победа без 60-дневного ожидания ===
+      D.phase = 'ritual';
+      var pierR = (WS.Story && WS.Story.pier) ? WS.Story.pier() : null;
+      if (pierR && fq.dust >= callsLeft && shroomEnergy() >= fq.callCost) {
+        if (!D._ritualSaid) {
+          D._ritualSaid = true;
+          log('Огонь горит, пыль при мне (' + fq.dust + '✨)! Иду звать тарелку Грибным Зовом — расписание нам не указ, нахер!', 'good');
+        }
+        var rg = taskGoto(pierR.x, pierR.y, 1.6, 'мостки-зов');
+        rg.finalTrip = true;
+        plan.push(rg);
+        var rb = { type: 'ritual' };
+        rb.finalTrip = true;
+        plan.push(rb);
+        var rw = { type: 'wait', sec: 4 };
+        rw.finalTrip = true;
+        plan.push(rw);
+        return plan;
+      }
+      // пыли/энергии не хватает — изгоняем: подарки несут и то и другое
+      var beastZ = (absMin() - (D._lastBanishPlanMin || -9999) > 30) ? beastNear(90, { prey: true }) : null;
+      if (beastZ) {
+        D._lastBanishPlanMin = absMin();
+        var zn = { wolf: 'волк', bear: 'медведь-шатун', bandit: 'бандит',
+                   deer: 'олень', hare: 'заяц' }[beastZ.kind] || beastZ.kind;
+        log('Зову нужна звёздная пыль и энергия — иду изгонять ' + zn +
+          '. Тарелка сама себя не вызовет, курва!');
+        var ztask = { type: 'banish', ent: beastZ };
+        ztask.banishing = true;
+        plan.push(ztask);
+        return plan;
+      }
+      // зверя нет — вскрываем подарки/лутаем (пыль лежит и там)
     } else if (fq && fq.lit) {
       D.phase = 'shipwait';
     }
@@ -1699,7 +1791,7 @@
     }
 
     // === день: добыча ===
-    var shipwait = !!(fq && fq.lit);          // огонь горит — ждём тарелку (60-й день, 06:00)
+    var shipwait = !!(fq && fq.lit && !callsLeft);      // зов завершён — ждём прилёта
     if (h >= 6.4 && h < 19.6) {
       // 0.9) ПОДАРКИ ИЗГНАННИКОВ: очередь переживает clearPlan (угрозы
       //      затирали задачу прямо на подходе — 29 изгнаний, 0 вскрытых
@@ -1713,14 +1805,22 @@
         for (var si = 0; si < objsS.length && D.gifts.length < 8; si++) {
           var so = objsS[si];
           if (so && so.sprName === 'crazy_gift' && !so.looted &&
+              !(so._demoSkipUntil && so._demoSkipUntil > absMin()) &&
               dist(p.x, p.y, so.x, so.y) < 55 && D.gifts.indexOf(so) < 0) {
             D.gifts.push(so);
           }
         }
       }
       if (D.gifts.length) {
-        // чистим мёртвые/обчистенные
+        // чистим мёртвые/обчистенные/недостижимые (плейтест роя: «Вскрываю
+        // подарок (4 в очереди)» висел ДНЯМИ — путь к трупу на льду/за
+        // лесом не строился, план пересоздавался, факелы не собирались)
         D.gifts = D.gifts.filter(function (g) {
+          if (g && (g._demoFail || 0) >= 2 && !g._demoSkipUntil) {
+            g._demoSkipUntil = absMin() + 1440;   // отдыхаем от него сутки
+            log('Подарок недостижим (путь не строится) — вернусь позже.', 'warn');
+            return false;
+          }
           return g && !g.looted && WS.World.objects.indexOf(g) >= 0;
         });
         if (D.gifts.length) {
@@ -1768,11 +1868,16 @@
         //      почти всегда).
         //      ДЕДЛАЙН: с Д45 жёстко давим без оглядки на остатки лута —
         //      факелы обязаны быть к Д55 (Магический Огонь).
-        var fuelHuntLoose = (day >= 45);
-        if (torchFuelMissing() > 0 && day >= 12 &&
-            absMin() - (D._lastBanishPlanMin || -9999) > 90 &&
+        // RUSH: спидранеру факелы нужны до 10-го дня — охота с Д3,
+        // кулдаун 30 мин, лут не ждём (плейтест роя: Турбо собирал
+        // факелы только к Д58 и победил «по расписанию», без Зова)
+        var isRushS = !!(D.cfg && D.cfg.strategy === 'rush');
+        var fuelHuntLoose = (day >= 45) || (isRushS && day >= 3);
+        var banishCd = isRushS ? 30 : 90;
+        if (torchFuelMissing() > 0 && day >= (isRushS ? 3 : 12) &&
+            absMin() - (D._lastBanishPlanMin || -9999) > banishCd &&
             (fuelHuntLoose || !nextLootTarget(1).length)) {
-          var beastF = beastNear(45);
+          var beastF = beastNear(isRushS ? 25 : 45, { prey: isRushS });
           if (beastF) {
             D._lastBanishPlanMin = absMin();
             var bfn = { wolf: 'волк', bear: 'медведь-шатун', bandit: 'бандит',
@@ -2843,6 +2948,7 @@
     var phaseTxt = {
       intro: 'обустройство', live: 'выживание',
       final: crazy() ? 'финал: Магический Огонь' : 'финал: сигнальный костёр',
+      ritual: 'ГРИБНОЙ ЗОВ: зову тарелку',
       shipwait: crazy() ? 'ждём тарелку' : 'ждём пароход',
       done: 'завершено' }[D.phase] || D.phase;
     dom.status.textContent = 'День ' + dayN() + '/60 · ' + fmtTime() + ' · ' + phaseTxt +
@@ -2895,7 +3001,19 @@
     else if (D.task && (D.task.type === 'wait' || D.task.type === 'melt' ||
              D.task.type === 'craftwait')) want = SP_WAIT;
     else want = SP_INDOOR;
-    want = Math.round(want * (D.pace || 1));
+    // турбо-множитель роя (вне снов): агент играет «на максимальной
+    // скорости», но действия остаются человеческими — лут/изгнания/сон
+    var sm = (D.cfg && D.cfg.speedMul && !p.sleeping) ? D.cfg.speedMul : 1;
+    want = Math.round(want * (D.pace || 1) * Math.max(1, Math.min(3, sm)));
+    // БОЙ НА ЧЕЛОВЕЧЕСКОЙ СКОРОСТИ: на ×30+ волк прыгает на 10+ тайлов
+    // между «мыслями» деда (5 раз/сек) — погоня и удар физически
+    // невозможны (плейтест роя: классик на ×32 сделал 0 изгнаний за
+    // 21 день, марафон ЭТАПА 7 на ×2 делал 171 за 60 дней). Ближний
+    // бой — единственное место, где скорость душится: ×6.
+    if (D.task && D.task.type === 'banish' && !p.sleeping) {
+      want = Math.min(want, 6);
+    }
+    if (want > 120) want = 120;                // потолок цикла
     if (want !== D.curSpeed) {
       setSpeed(want);
       speedHold = 0.4;                  // гистерезис: не дёргаем чаще 2/сек
@@ -2964,6 +3082,18 @@
     opts = opts || {};
     if (D.active) return false;
 
+    // --- профиль (рой агентов / кастомные демо): имя, сид, стратегия ---
+    D.cfg = {
+      name: opts.name || 'Дед-автопилот',
+      seed: opts.seed || DEMO_SEED,
+      prof: opts.prof || DEMO_PROF,
+      traits: opts.traits || DEMO_TRAITS,
+      strategy: opts.strategy || 'classic',   // classic | rush (зов тарелки как можно раньше)
+      record: opts.record !== false,          // писать киноплёнку (WS.Replay)
+      speedMul: opts.speedMul || 1,           // турбо-множитель для роя
+      human: opts.human !== false             // человеческие заминки (рой «естественен»)
+    };
+
     // --- продолжение незавершённого демо? (прогресс — в демо-слоте сейва) ---
     var resumed = false;
     if (!opts.fresh && WS.Save && WS.Save.exists && WS.Save.exists('demo')) {
@@ -2985,7 +3115,7 @@
 
     if (!resumed) {
       try {
-        if (!WS.Main.newGame(DEMO_PROF, DEMO_TRAITS, DEMO_SEED)) return false;
+        if (!WS.Main.newGame(D.cfg.prof, D.cfg.traits, D.cfg.seed)) return false;
       } catch (e) {
         WS.err('demo: newGame', e && e.message);
         return false;
@@ -3014,9 +3144,18 @@
     D.warmToldId = '';
     D.startStamp = stamp();
     D.startedAt = Date.now();
+    D.humanT = 6 + Math.random() * 20;         // до первой человеческой заминки
     D.world = scanWorld();
     D.base = D.world ? D.world.base : null;
     if (resumed) restoreJournal();
+    // КИНОПЛЁНКА: пишем запись для Кинозала (рой агентов / обычное демо)
+    if (D.cfg.record && WS.Replay && WS.Replay.begin) {
+      WS.Replay.begin({
+        name: D.cfg.name, seed: D.cfg.seed, prof: D.cfg.prof,
+        strategy: D.cfg.strategy, at: Date.now()
+      });
+      WS.Replay.noteChapter('Дед «' + D.cfg.name + '» открывает глаза. Зима. Дела!');
+    }
     // БЕЗУМНЫЙ ДЕД: бот прокачивает Древо Мудрости сам
     try { if (WS.Crazy && WS.Crazy.setAutoSpend) WS.Crazy.setAutoSpend(true); } catch (e) { /* пусто */ }
 
@@ -3150,6 +3289,28 @@
         log('✝ Герой погиб. Демо остановлено (' + mins + ' мин).', 'bad');
       }
     }
+    // КИНОПЛЁНКА: финал + сохранение записи в Кинозал
+    try {
+      if (D.cfg && D.cfg.record && WS.Replay && WS.Replay.isActive && WS.Replay.isActive()) {
+        var czF = (WS.Crazy && WS.Crazy.state) ? WS.Crazy.state() : null;
+        var treeF = 0;
+        try {
+          if (czF && czF.spent) { for (var tk in czF.spent) treeF += czF.spent[tk] || 0; }
+        } catch (eT) { /* пусто */ }
+        WS.Replay.noteResult(kind, dayN());
+        var rec = WS.Replay.exportRec({
+          result: kind, day: dayN(), realSec: Math.round((Date.now() - D.startedAt) / 1000),
+          banished: czF ? czF.banished : 0, treeLv: treeF,
+          calls: (WS.Story && WS.Story.finalQuest) ? (WS.Story.finalQuest().calls || 0) : 0
+        });
+        var rid = WS.Replay.saveLocal(rec, D.cfg.name);
+        log('🎬 Запись прохождения сохранена в Кинозал' + (rid ? '' : ' (не влезла — старые вычищены)') + '.', 'info');
+      }
+    } catch (eR2) { WS.err('demo: запись киноплёнки', eR2 && eR2.message); }
+    // ЭКСПЕДИЦИЯ: превращаем прожитую зиму в звёзды (мета-слой)
+    try {
+      if (kind === 'victory' || kind === 'death') sendRunExpedition(kind);
+    } catch (eE) { WS.err('demo: экспедиция', eE && eE.message); }
     // панель остаётся видимой (журнал + выгрузка); автопилот выключаем
     D.active = false;
     if (D.watchIv) { clearInterval(D.watchIv); D.watchIv = 0; }
@@ -3160,6 +3321,29 @@
     try { localStorage.removeItem(JKEY); } catch (e) { /* пусто */ }
   }
 
+  /** Отправить экспедицию из завершёншейся партии (мета-слой). */
+  function sendRunExpedition(kind) {
+    if (!WS.Expeditions || !WS.Expeditions.sendExpedition) return;
+    var czE = (WS.Crazy && WS.Crazy.state) ? WS.Crazy.state() : null;
+    var treeE = 0;
+    try {
+      if (czE && czE.spent) { for (var tk2 in czE.spent) treeE += czE.spent[tk2] || 0; }
+    } catch (e) { /* пусто */ }
+    var fqE = (WS.Story && WS.Story.finalQuest) ? WS.Story.finalQuest() : null;
+    var res = WS.Expeditions.sendExpedition({
+      result: kind === 'victory' ? 'victory' : 'death',
+      day: dayN(),
+      banished: czE ? czE.banished : 0,
+      treeLv: treeE,
+      stardust: fqE ? fqE.dust : 0,
+      seed: WS.G ? WS.G.seed : 0,
+      name: (D.cfg && D.cfg.name) || 'Дед-автопилот',
+      ritual: fqE ? fqE.calls : 0
+    });
+    log('⭐ Экспедиция отправлена: +' + res.stars + ' звёзд (всего ' + res.total +
+      '). Трать их в Избе Экспедиций!', 'good');
+  }
+
   // ====================================================================
   //  ТИК АВТОПИЛОТА
   // ====================================================================
@@ -3168,6 +3352,25 @@
     if (!D.active) return;
     var g = G();
     if (!g || !g.running) return;
+
+    // ЧЕЛОВЕЧНОСТЬ: рой агентов должен играть «как человек», а не как
+    // станок. Раз в 40–120 секунд дед «отвлекается»: стоит, смотрит,
+    // почёсывается, слушает радио. Никакой оптимизации — просто пауза.
+    if (D.cfg && D.cfg.human && D.humanT != null) {
+      D.humanT -= dt;
+      if (D.humanT <= 0 && D.task && D.task.type !== 'sleep' && !g.player.sleeping) {
+        var p0 = P();
+        if (p0 && !insideBuilding()) {
+          releaseKeys();
+          D.humanPause = 0.5 + Math.random() * 2.2;   // отвлёкся на 0.5–2.7 сек
+        }
+        D.humanT = 40 + Math.random() * 80;
+      }
+      if (D.humanPause > 0) {
+        D.humanPause -= dt;
+        return;                                      // стоим, любуемся зимой
+      }
+    }
 
     // адаптивный темп (до движения и «мыслей»)
     autoSpeed(dt);

@@ -129,7 +129,21 @@
 
     // --- костёр (свет) ---
     clearInv(); give('firewood_bundle', 3); give('newspaper_stack', 2); give('matches', 3);
-    var cf = WS.Fire && WS.Fire.lightCampfire ? WS.Fire.lightCampfire(p.x, p.y - 1) : null;
+    // ищем СВОБОДНУЮ клетку на улице (после телепорта к печи дед стоит в доме —
+    // p.y-1 упирается в мебель, «здесь не развести огонь» — тест, не игра)
+    var cf = null;
+    var vc = (WS.AI && WS.AI.village) ? WS.AI.village : { x: 110, y: 115 };
+    outer:
+    for (var ry = 0; ry < 14; ry++) {
+      for (var rx = 0; rx < 14; rx++) {
+        var cx = Math.floor(vc.x) + (rx - 7), cy = Math.floor(vc.y) + (ry - 7);
+        if (WS.World.isTileBlocked && WS.World.isTileBlocked(cx, cy)) continue;
+        if (WS.World.isInside && WS.World.isInside(cx + 0.5, cy + 0.5)) continue;
+        teleport(cx + 0.5, cy + 0.5);
+        cf = WS.Fire && WS.Fire.lightCampfire ? WS.Fire.lightCampfire(cx + 0.5, cy - 0.5) : null;
+        if (cf === true || (cf && cf.ok) || (cf && cf.x !== undefined)) break outer;
+      }
+    }
     ok('[S1] костёр: разжечь', cf === true || !!(cf && cf.ok) || !!(cf && cf.x !== undefined), { res: cf });
 
     // --- бой: манекен-волк ---

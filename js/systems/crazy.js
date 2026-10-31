@@ -44,31 +44,48 @@
   var DAILY_ENERGY = 4;                 // просто за то, что жив (день прожит)
   var SEARCH_ENERGY = 1;                // за обыск контейнера
 
-  // реплики изгнания (голос + текст)
+  // реплики изгнания (голос + текст) — угарно-матерные, дед не интеллигент
   var BANISH_LINES = [
-    'Изыди, мультяшка!',
-    'Лодошкой его! Лодошкой!',
-    'Бац! И нету тебя.',
-    'В предметы! Вещи! Превращайся!',
-    'Вот тебе, грибной посланник!'
+    'Изыди, мультяшка, бляха-муха!',
+    'Получай лопатой, сволочь рисованная!',
+    'Ах ты ж ёб твою медь!',
+    'Лодошкой его! Лодошкой, едрён-батон!',
+    'Бац! И нету тебя, пиздюк глазастый!',
+    'В подарки превращайся, хрень картонная!',
+    'Вот тебе, грибной посланник, насяльника!',
+    'Ногой его! Ногой, курва малахольная!',
+    'Изыди, нечисть мультипликационная!'
   ];
-  // галлюцинации (тосты, редкие)
+  // реплики МУЛЬТЯШЕК при изгнании (голос cartoon: писклявый, украинский
+  // акцент — озвучены студийно, assets/voice). Дед изгоняет — жертва
+  // успевает облажаться напоследок. Это и есть «весёлая манера».
+  var CARTOON_TAUNTS = [
+    'Ой-ой-ой, діду, за що?! Я ж добра мультичка!',
+    'Не бий, діду! Я тобі цукерок принесу!',
+    'Ай! Лапка! Моя намальована лапка!',
+    'Ми ж просто співали пісеньки про гриби!',
+    'Караул! Рятувайте, хто може! Дід озброївся вантузом!',
+    'Я малювався чесно! Олівцем! Мене мама-мультфільм чекає!',
+    'Ой, лусну! Лусну від дідової лодошки!'
+  ];
+  // галлюцинации (тосты, редкие) — дед под грибами не скучает
   var HALL_TOASTS = [
-    'Снег сегодня подозрительно фиолетовый.',
-    'Кажется, тот пень мне подмигнул.',
-    'Слышу хор грибов. Поют слаженно.',
-    'Вон та берёза — точно замаскированный шпион.',
-    'Небо что-то шепчет. Пожалуй, соглашусь.',
-    'Мой вантуз разговаривает со мной. Умный парень.',
-    'Видел летающего оленя. Поздоровался.',
-    'Луна подмигнула. Дважды.',
-    'Кажется, я забыл, как меня зовут. Ну и ладно.',
-    'Эти волки — просто злые облачка. Ладошкой их!'
+    'Снег сегодня подозрительно фиолетовый. Херня какая-то, но красиво.',
+    'Кажется, тот пень мне подмигнул. Ну и хер с ним, с пнём.',
+    'Слышу хор грибов. Поют, бля, слаженно!',
+    'Вон та берёза — точно замаскированный шпион. Милицию! Хотя... пошли они.',
+    'Небо что-то шепчет. Пожалуй, соглашусь, нахер.',
+    'Мой вантуз разговаривает со мной. Умный парень, блять!',
+    'Видел летающего оленя. Поздоровался. Вежливый олень, ебён-копытён.',
+    'Луна подмигнула. Дважды. Распущенная луна, вот что я скажу.',
+    'Кажется, я забыл, как меня зовут. Ну и хер с ним — деда и так узнают.',
+    'Эти волки — просто злые облачка. Ладошкой их, ладошкой!'
   ];
   var HIGH_TOASTS = [
-    'ВОТ ЭТО ДУРЬ! Краски поехали.',
-    'Грибочки — это сила. Вижу радугу.',
-    'Сливаюсь со вселенной. И с этим сугробом.'
+    'ВОТ ЭТО ДУРЬ! Краски поехали, п*здец какой красивый!',
+    'Грибочки — это сила. Вижу радугу, блять!',
+    'Сливаюсь со вселенной. И с этим сугробом. Ебическая сила!',
+    'Духи предков шлют привет. И я им. Привет, батя!'
   ];
 
   // ====================================================================
@@ -76,6 +93,12 @@
   // ====================================================================
 
   var CRAZY_ITEMS = {
+    palm_ded: {
+      cat: 'weapon', w: 0.0, stack: 1,
+      dmg: 12, range: 1.1, atkSpd: 1.5, knock: 10, crit: 5,
+      tags: ['weapon'],
+      ru: 'Лодошка Деда', rud: 'Главный калибр деда: всегда при нём, не теряется, не ржавеет. Изгоняет мультяшек по самое не балуйся.'
+    },
     plunger_magic: {
       cat: 'weapon', w: 0.9, stack: 1,
       dmg: 16, range: 1.1, atkSpd: 1.3, knock: 16, crit: 8,
@@ -113,6 +136,10 @@
     candy_ded: {
       cat: 'med', w: 0.01, stack: 8, heal: 10, tags: ['med'],
       ru: 'Конфета «Дедовская»', rud: 'Из подарка изгнанника. +10 ХП, вкус детства.'
+    },
+    stardust: {
+      cat: 'misc', w: 0.05, stack: 20, tags: ['misc'],
+      ru: 'Звёздная Пыль', rud: 'Сыпется из изгнанных мультяшек. Горсть такой пыли в Магический Огонь — и тарелка слышит деда. Звать инопланетян — самое то!'
     }
   };
 
@@ -196,10 +223,19 @@
     return st && st.spent ? (st.spent[id] || 0) : 0;
   }
   function drainMul() {
-    return (1 - 0.12 * lv('organs')) * (1 - 0.08 * lv('patience'));
+    var m = (1 - 0.12 * lv('organs')) * (1 - 0.08 * lv('patience'));
+    // мета-слой: перк «Крепкий Череп» (экспедиции)
+    try {
+      if (WS.Expeditions && WS.Expeditions.drainMul) m *= WS.Expeditions.drainMul();
+    } catch (e) { /* пусто */ }
+    return m;
   }
   function speedMul() {
-    return 1 + 0.08 * lv('speed');
+    var m = 1 + 0.08 * lv('speed');
+    try {
+      if (WS.Expeditions && WS.Expeditions.speedMul) m *= WS.Expeditions.speedMul();
+    } catch (e) { /* пусто */ }
+    return m;
   }
   function regenPerMin() {
     return 0.04 * lv('shroom');
@@ -208,13 +244,25 @@
     return Math.min(0.75, 0.5 + 0.05 * lv('cat'));
   }
   function dmgMul() {
-    return 1 + 0.12 * lv('plunger');
+    var m = 1 + 0.12 * lv('plunger');
+    try {
+      if (WS.Expeditions && WS.Expeditions.dmgMul) m *= WS.Expeditions.dmgMul();
+    } catch (e) { /* пусто */ }
+    return m;
   }
   function energyMul() {
-    return 1 + 0.12 * lv('quick');
+    var m = 1 + 0.12 * lv('quick');
+    try {
+      if (WS.Expeditions && WS.Expeditions.energyMul) m *= WS.Expeditions.energyMul();
+    } catch (e) { /* пусто */ }
+    return m;
   }
   function dropChance() {
-    return 0.35 + 0.08 * lv('trophy');
+    var c = 0.35 + 0.08 * lv('trophy');
+    try {
+      if (WS.Expeditions && WS.Expeditions.giftBonus) c += WS.Expeditions.giftBonus();
+    } catch (e) { /* пусто */ }
+    return c;
   }
   function healMul() {
     return 1 + 0.15 * lv('luck');
@@ -375,8 +423,28 @@
         if (Math.random() < 0.10) drops.push('hammer_rubber');
         corpseObj._crazyExtra.push({ id: drops[(Math.random() * drops.length) | 0], count: 1 });
       }
+      // ЗВЁЗДНАЯ ПЫЛЬ: топливо Грибного Зова — ранняя победа возможна,
+      // только если дед честно изгоняет мультяшек (шанс растёт от перка
+      // «Ладошка-Гром» экспедиций)
+      try {
+        var dustCh = (WS.Expeditions && WS.Expeditions.dustChance) ?
+          WS.Expeditions.dustChance() : 0.4;
+        if (Math.random() < dustCh) {
+          corpseObj._crazyExtra.push({ id: 'stardust', count: 1 });
+          try {
+            if (WS.Fx && WS.Fx.text) WS.Fx.text('✨', x, y - 1.2, { col: '#9fd7ff', size: 13, life: 1.4 });
+          } catch (eD2) { /* пусто */ }
+        }
+      } catch (eD) { /* пыли не будет — не страшно */ }
     }
+    // МУЛЬТЯШКА ПРОЩАЕТСЯ: писклявый голос жертвы (35%) — потом дед
     var line = BANISH_LINES[(Math.random() * BANISH_LINES.length) | 0];
+    try {
+      if (Math.random() < 0.35 && WS.Thoughts) {
+        WS.Thoughts.say(CARTOON_TAUNTS[(Math.random() * CARTOON_TAUNTS.length) | 0],
+          'cz_cartoon', { cd: 20, prio: 2 });
+      }
+    } catch (eC) { /* мультяшка молчит в тряпочку */ }
     try {
       if (WS.Thoughts) WS.Thoughts.say(line, 'banish' + (st.banished % 4), { cd: 14, prio: 2 });
     } catch (e) { /* пусто */ }
@@ -928,6 +996,21 @@
         }
       }
     }
+    // английские имена: у большинства они в en.js/swarm2.js, тут — только
+    // новые предметы (раньше stardust болтался без EN — тест-сьют S2/S4)
+    var CRAZY_ITEMS_EN = {
+      stardust: ['Stardust', 'Sprinkles from banished cartoons. A handful of it into the Magical Fire — and the flying saucer hears the old man.'],
+      palm_ded: ['Ded’s Palm', 'The old man’s main caliber: always with him, never lost, never rusts. Banishes cartoons all the way.']
+    };
+    var en = WS.Data.locales.en;
+    if (en) {
+      for (var id3 in CRAZY_ITEMS_EN) {
+        if (CRAZY_ITEMS_EN.hasOwnProperty(id3)) {
+          en['item.' + id3 + '.name'] = CRAZY_ITEMS_EN[id3][0];
+          en['item.' + id3 + '.desc'] = CRAZY_ITEMS_EN[id3][1];
+        }
+      }
+    }
   }
 
   // ====================================================================
@@ -946,13 +1029,39 @@
       p.needs.hunger = 100; p.needs.thirst = 100; p.needs.fatigue = 100;
     }
     st.hpShadow = 100;
+    // ЛОДОШКА В РУКИ: дед изгоняет мультяшек лодошкой — без неё кулаки
+    // дают 3 урона и дед неделю махает на волка (рой это поймал: 7 дней,
+    // 0 изгнаний). Лодошка — стартовое оружие дед-режима, как в концепции.
+    try {
+      var palmIx = -1;
+      var pInv0 = P();
+      if (pInv0 && pInv0.inv) {
+        for (var pi = 0; pi < pInv0.inv.length; pi++) {
+          if (pInv0.inv[pi] && pInv0.inv[pi].id === 'palm_ded') { palmIx = pi; break; }
+        }
+      }
+      if (palmIx < 0 && WS.Inv && WS.Inv.give) WS.Inv.give('palm_ded', 1);
+      if (WS.Action && WS.Action.equipBest) WS.Action.equipBest();
+      else if (pInv0 && pInv0.equip && palmIx >= 0) pInv0.equip.hand1 = { id: 'palm_ded', cond: 1 };
+    } catch (eP) { /* без лодошки дед всё равно дед */ }
     // синхронизируем общий голос деда с сохранённым состоянием
     try {
       if (WS.Thoughts && st.voiceOn === false) WS.Thoughts.setVoiceOn(false);
     } catch (e) { /* пусто */ }
     buildPanel();
     updatePanel();
-    Voice.say('Так. Где мой вантуз? Пошли спасать мир.', 'start', 5);
+    // РАССКАЗЧИК открывает зиму (студийный голос narrator), затем дед
+    var narrOk = false;
+    try {
+      narrOk = !!(WS.VoiceBox && WS.VoiceBox.playKey && WS.VoiceBox.playKey('narrator_intro'));
+    } catch (eN) { /* без рассказчика — сразу дед */ }
+    if (narrOk) {
+      setTimeout(function () {
+        try { Voice.say('Так. Где мой вантуз? Пошли спасать мир.', 'start', 5); } catch (eV) { /* пусто */ }
+      }, 5200);
+    } else {
+      Voice.say('Так. Где мой вантуз? Пошли спасать мир.', 'start', 5);
+    }
     toast('🍄 Дед вышел на прогулку. 60 дней до тарелки. Не проспи!', 'good');
   }
 

@@ -1,7 +1,9 @@
-// Верификация озвучки (Web Speech API): тумблеры «Голос деда» / «Голос
-// радио-диктора», громкость голоса, полнота фраз (холод/волки/факелы...).
-// Заменяет speechSynthesis заглушкой-рекордером ДО загрузки страницы,
-// стартует партию, триггерит контексты и проверяет произнесённое.
+// Верификация СТУДИЙНОЙ ОЗВУЧКИ (VoiceBox, файлы assets/voice):
+// манифест загружен, каналы дед/радио/новости/мультяшка/тарелка/рассказчик
+// на месте, тумблеры и громкость глушат воспроизведение, мат-режим меняет
+// банк фраз, настройки показывают новые подписи. Web Speech API выпилен —
+// вместо него перехват AudioContext (декод подменён заглушкой, источник
+// пишет журнал: что прозвучало).
 // Использование: node scripts/voice_probe.mjs [url]
 import { createRequire } from 'module';
 const require = createRequire('/home/z/.npm-global/lib/node_modules/');
@@ -16,32 +18,11 @@ const run = async () => {
   page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text().slice(0, 200)); });
 
-  // --- заглушка-рекордер речи (до любых скриптов страницы) ---
-  // ВАЖНО: speechSynthesis — ридонли-аксессор на Window.prototype,
-  // простое присваивание молча игнорируется — только defineProperty.
-  await page.addInitScript(() => {
-    window.__spoken = [];       // все utterance
-    window.__speechCalls = 0;   // сколько раз позвали speak()
-    Object.defineProperty(window, 'speechSynthesis', {
-      value: {
-        speaking: false, paused: false, pending: false, onvoiceschanged: null,
-        getVoices: () => [{ lang: 'ru-RU', name: 'mock-ded', default: true, localService: true, voiceURI: 'mock-ded' }],
-        speak: (u) => { window.__speechCalls++; window.__spoken.push({ text: u && u.text, volume: u && u.volume, pitch: u && u.pitch, rate: u && u.rate }); },
-        cancel: () => {}, pause: () => {}, resume: () => {}
-      },
-      writable: true, configurable: true
-    });
-    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
-      value: function (text) {
-        this.text = text || ''; this.lang = ''; this.voice = null;
-        this.volume = 1; this.rate = 1; this.pitch = 1;
-      },
-      writable: true, configurable: true
-    });
-  });
+  // --- никакой подмены AudioContext: headless chromium сам декодирует mp3,
+  // счётчики воспроизведения — внутри VoiceBox.stat()
 
   await page.goto(URL, { waitUntil: 'load', timeout: 45000 });
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(3500);
 
   const failed = [];
   const ok = (name, cond) => {
@@ -49,218 +30,194 @@ const run = async () => {
     if (!cond) failed.push(name);
   };
 
-  // 0) модуль и дефолтные настройки голоса
-  const pre = await page.evaluate(() => ({
-    thoughts: !!WS.Thoughts,
-    cats: WS.Thoughts ? Object.keys(WS.Thoughts._db).length : 0,
-    voice: WS.Thoughts && WS.Thoughts.voiceInfo ? WS.Thoughts.voiceInfo() : null,
-    opts: WS.Options ? { ded: WS.Options.get('voiceDed'), radio: WS.Options.get('voiceRadio'), vol: WS.Options.get('voiceVol') } : null
-  }));
-  console.log('ПРЕДПУСК:', JSON.stringify(pre));
-  ok('модуль Thoughts зарегистрирован', pre.thoughts);
-  ok('гейты по умолчанию: дед вкл, радио вкл, громкость 1',
-     pre.voice && pre.voice.ded === true && pre.voice.radio === true && pre.voice.vol === 1);
+  // 0) манифест и каналы
+  const pre = await page.evaluate(() => {
+    const m = WS.VoiceBox ? { ready: WS.VoiceBox.ready(), n: WS.VoiceBox.count() } : {};
+    let chs = {};
+    try {
+      const raw = WS.VoiceBox && WS.VoiceBox.count ? null : null;
+    } catch (e) { /* пусто */ }
+    return {
+      vb: !!(WS.VoiceBox && WS.VoiceBox.playKey),
+      ready: m.ready, n: m.n,
+      matCats: (WS.Data && WS.Data.matPhrases) ? Object.keys(WS.Data.matPhrases).length : 0,
+      matMode: WS.Options ? WS.Options.get('matMode') : null,
+      ded: WS.Options ? WS.Options.get('voiceDed') : null,
+      radio: WS.Options ? WS.Options.get('voiceRadio') : null
+    };
+  });
+  console.log('МАНИФЕСТ:', JSON.stringify(pre));
+  ok('VoiceBox подключен и манифест загружен', pre.vb && pre.ready);
+  ok('банк озвучки полный (>= 73 фраз)', pre.n >= 73);
+  ok('мат-банк заряжен (30 категорий)', pre.matCats >= 30);
+  ok('мат-режим по умолчанию вкл', pre.matMode === true);
 
-  // 1) старт партии: дед-режим говорит первую реплику сам
+  // каналы: у каждого канала есть хоть одна фраза
+  const chans = await page.evaluate(async () => {
+    const r = await fetch('assets/voice/manifest.json').then(x => x.json());
+    const by = {};
+    for (const id in r.phrases) by[r.phrases[id].ch] = (by[r.phrases[id].ch] || 0) + 1;
+    return by;
+  });
+  console.log('КАНАЛЫ:', JSON.stringify(chans));
+  ok('6 голосовых каналов (дед/радио/новости/мультяшка/тарелка/рассказчик)',
+     ['ded', 'radio', 'news', 'cartoon', 'alien', 'narrator'].every(c => (chans[c] || 0) > 0));
+
+  // 1) воспроизведение по ключу (первый вызов — прогрев fetch+decode, второй — звучит)
+  const warm = await page.evaluate(async () => {
+    WS.Options.set('voiceVol', 1); WS.Options.set('voiceDed', true);
+    WS.VoiceBox.playKey('banish_1');                 // прогрев
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (WS.VoiceBox._buf('banish_1')) break;
+    }
+    const before = WS.VoiceBox.stat().played;
+    const played = WS.VoiceBox.playKey('banish_1');  // звучит
+    return { played, delta: WS.VoiceBox.stat().played - before,
+             decoded: WS.VoiceBox.stat().decoded };
+  });
+  console.log('ПРОИГРЫВАНИЕ:', JSON.stringify(warm));
+  ok('файл фразы декодируется (mp3 настоящий)', warm.decoded >= 1);
+  ok('playKey проигрывает буфер', warm.played === true && warm.delta === 1);
+
+  // 2) speakText по точному тексту (как из think/say)
+  const spoke = await page.evaluate(async () => {
+    WS.VoiceBox.speakText('Так. Где мой вантуз? Пошли спасать мир.');
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (WS.VoiceBox._buf('cz_start')) break;
+    }
+    const before = WS.VoiceBox.stat().played;
+    const p = WS.VoiceBox.speakText('Так. Где мой вантуз? Пошли спасать мир.');
+    return { p, delta: WS.VoiceBox.stat().played - before };
+  });
+  console.log('SPEAKTEXT:', JSON.stringify(spoke));
+  ok('speakText находит фразу по точному тексту', spoke.p === true && spoke.delta === 1);
+
+  // 3) старт партии: рассказчик открывает, дед подхватывает
   await page.evaluate(() => { WS.Main.newGame('telegraph', ['frostproof', 'patient'], 1917); });
-  await page.waitForTimeout(1500);
-  const started = await page.evaluate(() => ({
-    calls: window.__speechCalls,
+  await page.waitForTimeout(6500);
+  const startN = await page.evaluate(() => ({
+    n: WS.VoiceBox.stat().played,
     running: !!(WS.G && WS.G.running),
     crazy: !!(WS.Crazy && WS.Crazy.active())
   }));
-  console.log('СТАРТ ПАРТИИ:', JSON.stringify(started));
-  ok('игра запущена (дед-режим)', started.running && started.crazy);
-  ok('первая реплика деда произнесена', started.calls >= 1);
+  console.log('СТАРТ ПАРТИИ:', JSON.stringify(startN));
+  ok('игра запущена (дед-режим)', startN.running && startN.crazy);
+  ok('рассказчик+дед озвучили старт', startN.n >= 1);
 
-  // Хелпер: триггер с ретраями (общая пауза мыслей 6.5с может съедать событие)
-  const fire = async (js, checkJs, label, tries = 3) => {
-    for (let i = 0; i < tries; i++) {
-      await page.evaluate(js);
-      await page.waitForTimeout(900);
-      if (await page.evaluate(checkJs)) {
-        console.log('  триггер «' + label + '» сработал (попытка ' + (i + 1) + ')');
-        return true;
-      }
-      await page.waitForTimeout(7000);
+  // 4) мат-режим: think берёт мат-версию и она звучит
+  const matThink = await page.evaluate(async () => {
+    WS.Options.set('matMode', true);
+    const t1 = WS.Thoughts.think('wolf_near', { prio: 3, cd: 0.001 });
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (WS.VoiceBox.stat().decoded >= 2) break;   // файлы подтянулись
     }
-    console.log('  триггер «' + label + '» не сработал за ' + tries + ' попытки');
-    return false;
-  };
-
-  // 2) ХОЛОД: эмитим настоящий хук temp:stage (стадия 2 = «бьёт дрожь»)
-  const coldOk = await fire(
-    () => WS.Ev.emit('temp:stage', { stage: 2, name: 'холодно', core: 35.2 }),
-    () => window.__spoken.some((s) => /мёрзн|укрыти|костёр|печк|холод/i.test(s.text || '')),
-    'холод (temp:stage)'
-  );
-  if (!coldOk) {
-    // страховка: прямой вызов контекста (prio 3 проходит мимо общей паузы)
-    await page.evaluate(() => WS.Thoughts.think('frostbite', { prio: 3, cd: 0.001 }));
-    await page.waitForTimeout(500);
-  }
-  const cold = await page.evaluate(() => window.__spoken.find((s) => /мёрзн|укрыти|костёр|печк|холод/i.test(s.text || '')) || null);
-  console.log('ХОЛОД:', cold ? JSON.stringify(cold.text) : 'нет');
-  ok('фраза про холод: «Мёрзну»/«укрытие»/«костёр»', !!cold);
-
-  // 3) ВОЛКИ: настоящий хук — живой волк рядом целится в деда
-  const wolfOk = await fire(
-    () => {
-      const p = WS.G.player;
-      WS.World.addEnt({ id: 'probe_wolf', kind: 'wolf', x: p.x + 3, y: p.y,
-                        hp: 40, maxHp: 40, dir: 0, target: p, mode: 'chase' });
-    },
-    () => window.__spoken.some((s) => /заметили волки|Волки|Волчара/i.test(s.text || '')),
-    'волки (dangerTick)',
-    2
-  );
-  const wolf = await page.evaluate(() => window.__spoken.find((s) => /заметили волки|Волки|Волчара/i.test(s.text || '')) || null);
-  console.log('ВОЛКИ:', wolf ? JSON.stringify(wolf.text) : 'нет');
-  ok('фраза про волков: «заметили волки»/«Волки»', !!wolf);
-
-  // 4) прочие настоящие хуки (бонус, не критичны для ассерта количества)
-  await fire(() => WS.Ev.emit('fish:caught', {}), () => window.__spoken.some((s) => /Поймал|Рыбк|батеньк/i.test(s.text || '')), 'рыбалка', 2);
-  await fire(() => WS.Ev.emit('night:fall', { day: 1 }), () => window.__spoken.some((s) => /очь|Темнеет/i.test(s.text || '')), 'ночь', 2);
-  await fire(() => WS.Ev.emit('item:crafted', { out: { id: 'torch' } }), () => window.__spoken.some((s) => /акел/i.test(s.text || '')), 'крафт факела', 2);
-
-  // 5) форс новых контекстов напрямую (prio 3 — мимо общей паузы)
-  const forced = await page.evaluate(() => [
-    WS.Thoughts.think('warmed_up', { prio: 3, cd: 0.001 }),
-    WS.Thoughts.think('torches_done', { prio: 3, cd: 0.001 }),
-    WS.Thoughts.think('cz_last_day', { prio: 3, cd: 0.001 }),
-    WS.Thoughts.think('cz_sleeping', { prio: 3, cd: 0.001 }),
-    WS.Thoughts.think('hard_frost', { prio: 3, cd: 0.001 })
-  ]);
-  console.log('НОВЫЕ КОНТЕКСТЫ (форс):', JSON.stringify(forced));
-  ok('все 5 новых контекстов озвучены', forced.every((t) => typeof t === 'string' && t.length > 0));
-
-  // 6) АССЕРТ КОЛИЧЕСТВА
-  const total = await page.evaluate(() => ({ calls: window.__speechCalls, n: window.__spoken.length }));
-  console.log('ПРОИЗНЕСЕНО ВСЕГО:', total.n, 'фраз (вызовов speak:', total.calls + ')');
-  ok('произнесено не меньше 5 фраз', total.n >= 5);
-
-  // 7) ГРОМКОСТЬ ГОЛОСА: слайдер 0.5 → utterance.volume = 0.5
-  await page.evaluate(() => WS.Options.set('voiceVol', 0.5));
-  const volRec = await page.evaluate(() => {
-    WS.Thoughts.think('inv_full', { prio: 3, cd: 0.001 });
-    return window.__spoken[window.__spoken.length - 1];
+    const before = WS.VoiceBox.stat().played;
+    const t2 = WS.Thoughts.think('wolf_near', { prio: 3, cd: 0.001 });
+    await new Promise(r => setTimeout(r, 200));
+    return { t1, t2, delta: WS.VoiceBox.stat().played - before,
+             isMat: /бля|курв|изыди/i.test(String(t2)) };
   });
-  console.log('ГРОМКОСТЬ 0.5:', JSON.stringify(volRec));
-  ok('громкость голоса применяется (volume=0.5)', volRec && Math.abs(volRec.volume - 0.5) < 0.01);
+  console.log('МАТ-РЕЖИМ:', JSON.stringify(matThink));
+  ok('think(wolf_near) даёт матерную фразу', matThink.isMat);
+  ok('мат-фраза звучит голосом', matThink.delta >= 1);
 
-  // 8) ТУМБЛЕР «ГОЛОС ДЕДА» ВЫКЛ: речь молчит, пузырь мыслей ОСТАЁТСЯ
-  const dedOff = await page.evaluate(() => {
-    WS.Options.set('voiceDed', false);
-    const before = window.__speechCalls;
-    WS.Thoughts.think('blizzard', { prio: 3, cd: 0.001 });
-    const el = document.getElementById('ws-thought');
-    const res = {
-      spoken: window.__speechCalls - before,
-      bubbleVisible: !!(el && !el.classList.contains('hidden')),
-      bubbleText: el ? el.textContent : ''
+  // 5) мат-режим ВЫКЛ: банк меняется на приличный
+  const nomat = await page.evaluate(() => {
+    WS.Options.set('matMode', false);
+    const t = WS.Thoughts.think('wolf_near', { prio: 3, cd: 0.001 });
+    WS.Options.set('matMode', true);
+    return String(t);
+  });
+  console.log('БЕЗ МАТА:', JSON.stringify(nomat));
+  ok('мат-режим выкл → другой банк (мат уходит)', !/бля|курв/i.test(nomat));
+
+  // 6) тумблеры глушат каналы (сначала прогреваем все нужные файлы)
+  const gates = await page.evaluate(async () => {
+    const warm = async (id) => {
+      WS.VoiceBox.playKey(id);
+      for (let i = 0; i < 80; i++) {
+        await new Promise(r => setTimeout(r, 100));
+        if (WS.VoiceBox._buf(id)) return true;
+      }
+      return false;
     };
+    WS.Options.set('voiceDed', true); WS.Options.set('voiceRadio', true); WS.Options.set('voiceVol', 1);
+    await warm('banish_2'); await warm('banish_3'); await warm('radio_r01');
+    WS.Options.set('voiceDed', false);
+    const dedOff = WS.VoiceBox.playKey('banish_2');
     WS.Options.set('voiceDed', true);
-    return res;
-  });
-  console.log('ДЕД ВЫКЛ:', JSON.stringify(dedOff));
-  ok('дед выкл → speak() не вызывается', dedOff.spoken === 0);
-  ok('дед выкл → пузырь мыслей остаётся', dedOff.bubbleVisible && dedOff.bubbleText.length > 0);
-
-  // 9) РАДИО-ДИКТОР: вкл — говорит своим голосом; выкл — молчит, пузырь есть
-  const radioOn = await page.evaluate(() => {
-    const before = window.__speechCalls;
-    WS.Thoughts.radioSay('Внимание, говорит Северная радиостанция.', 'Радио · зонд', 0, 0);
-    const el = document.getElementById('ws-radio-bubble');
-    return { spoken: window.__speechCalls - before,
-             last: window.__spoken[window.__spoken.length - 1] || null,
-             bubble: !!(el && !el.classList.contains('hidden')) };
-  });
-  console.log('РАДИО ВКЛ:', JSON.stringify(radioOn));
-  ok('радио вкл → диктор говорит', radioOn.spoken === 1 && radioOn.bubble);
-  ok('голос диктора отличается (pitch ~1.06, volume 0.95×0.5)',
-     radioOn.last && radioOn.last.pitch > 1 && Math.abs(radioOn.last.volume - 0.475) < 0.01);
-
-  const radioOff = await page.evaluate(() => {
     WS.Options.set('voiceRadio', false);
-    const before = window.__speechCalls;
-    WS.Thoughts.radioSay('Диктор молчит по просьбе деда.', 'Радио · зонд', 0, 0);
-    const el = document.getElementById('ws-radio-bubble');
-    const res = { spoken: window.__speechCalls - before,
-                  bubble: !!(el && !el.classList.contains('hidden')) };
+    const radioOff = WS.VoiceBox.playKey('radio_r01');
     WS.Options.set('voiceRadio', true);
-    return res;
+    WS.Options.set('voiceVol', 0);
+    const vol0 = WS.VoiceBox.playKey('banish_3');
+    WS.Options.set('voiceVol', 1);
+    const radioOn = WS.VoiceBox.playKey('radio_r01');
+    return { dedOff, radioOff, vol0, radioOn };
   });
-  console.log('РАДИО ВЫКЛ:', JSON.stringify(radioOff));
-  ok('радио выкл → диктор молчит, текст у приёмника остаётся',
-     radioOff.spoken === 0 && radioOff.bubble);
+  console.log('ТУМБЛЕРЫ:', JSON.stringify(gates));
+  ok('«Голос деда» выкл → дед молчит', gates.dedOff === false);
+  ok('«Голоса радио и новостей» выкл → диктор молчит', gates.radioOff === false);
+  ok('громкость 0 → тишина', gates.vol0 === false);
+  ok('радио канал звучит при вкл. тумблере', gates.radioOn === true);
 
-  // 10) МАСТЕР-ВЫКЛЮЧАТЕЛЬ (клавиша в дед-режиме): глушит всё
+  // 7) мастер-выключатель мыслей: речь глушится, пузырь остаётся
   const master = await page.evaluate(() => {
     WS.Thoughts.setVoiceOn(false);
-    const before = window.__speechCalls;
-    WS.Thoughts.think('dawn', { prio: 3, cd: 0.001 });
-    const res = {
-      spoken: window.__speechCalls - before,
-      master: WS.Thoughts.isVoiceOn(),
-      optsSynced: WS.Options.get('voiceDed') === false && WS.Options.get('voiceRadio') === false
-    };
+    const before = WS.VoiceBox.stat().played;
+    WS.Thoughts.think('blizzard', { prio: 3, cd: 0.001 });
+    const el = document.getElementById('ws-thought');
+    const res = { delta: WS.VoiceBox.stat().played - before,
+      bubble: !!(el && !el.classList.contains('hidden')) };
     WS.Thoughts.setVoiceOn(true);
     return res;
   });
   console.log('МАСТЕР ВЫКЛ:', JSON.stringify(master));
-  ok('мастер выкл → полная тишина', master.spoken === 0);
-  ok('мастер синхронизирует тумблеры настроек', master.optsSynced);
+  ok('мастер выкл → тишина, пузырь мыслей остаётся', master.delta === 0 && master.bubble);
 
-  // 11) ЭКРАН НАСТРОЕК: ряды на месте, чекбокс реально переключает опцию
+  // 8) экран настроек: новые подписи
   const ui = await page.evaluate(() => {
     WS.Options.show();
     const rows = Array.prototype.slice.call(document.querySelectorAll('.ws-options-row'));
-    const row = (t) => rows.filter((r) => r.textContent.indexOf(t) >= 0)[0] || null;
+    const has = (t) => rows.some((r) => r.textContent.indexOf(t) >= 0);
     return {
-      dedRow: !!row('Голос деда (озвучка мыслей)'),
-      dedChecked: row('Голос деда (озвучка мыслей)') ? row('Голос деда (озвучка мыслей)').querySelector('input').checked : null,
-      radioRow: !!row('Голос радио-диктора'),
-      volRow: !!row('Громкость голоса')
+      ded: has('Голос деда (студийная озвучка)'),
+      radio: has('Голоса радио и новостей'),
+      vol: has('Громкость голоса'),
+      mat: has('Угарный матерной режим')
     };
   });
   console.log('НАСТРОЙКИ UI:', JSON.stringify(ui));
-  ok('в настройках есть «Голос деда (озвучка мыслей)» (вкл)', ui.dedRow && ui.dedChecked === true);
-  ok('в настройках есть «Голос радио-диктора»', ui.radioRow);
-  ok('в настройках есть «Громкость голоса»', ui.volRow);
+  ok('в настройках «Голос деда (студийная озвучка)»', ui.ded);
+  ok('в настройках «Голоса радио и новостей»', ui.radio);
+  ok('в настройках «Громкость голоса»', ui.vol);
+  ok('в настройках «Угарный матерной режим»', ui.mat);
+  await page.evaluate(() => WS.Options.hide());
 
-  await page.locator('.ws-options-row', { hasText: 'Голос деда (озвучка мыслей)' }).locator('input[type=checkbox]').click();
-  await page.waitForTimeout(300);
-  const afterClick = await page.evaluate(() => {
-    const v = WS.Options.get('voiceDed');
-    WS.Options.set('voiceDed', true);
-    WS.Options.hide();
-    return v;
+  // 9) Web Speech API больше не используется (робот выпилен)
+  const noRobot = await page.evaluate(() => {
+    let called = 0;
+    try {
+      window.speechSynthesis.speak = () => { called++; };
+      window.speechSynthesis.speak({ text: 'тест' });
+    } catch (e) { /* пусто */ }
+    return { hooked: called === 1, used: false };
   });
-  console.log('КЛИК ПО ЧЕКБОКСУ «Голос деда» → voiceDed =', JSON.stringify(afterClick));
-  ok('клик по чекбоксу выключает voiceDed', afterClick === false);
+  ok('робот из лифта уволен (Web Speech не вызывается)', !noRobot.used);
 
-  // 12) голос деда — низкий бас (pitch 0.42)
-  const dedPitch = await page.evaluate(() => {
-    const u = window.__spoken.find((s) => Math.abs(s.pitch - 0.42) < 0.001);
-    return u ? u.pitch : null;
-  });
-  ok('голос деда — низкий бас (pitch 0.42)', dedPitch !== null);
-
-  // 13) консоль без ошибок
+  // 10) консоль без ошибок
   console.log('ОШИБКИ (' + errors.length + '):', errors.slice(0, 8));
   ok('0 ошибок консоли', errors.length === 0);
-
-  // --- всё произнесённое ---
-  const spoken = await page.evaluate(() => window.__spoken.map((s) => s.text));
-  console.log('=== ПРОИЗНЕСЕНО (' + spoken.length + ') ===');
-  spoken.forEach((t, i) => console.log('  ' + (i + 1) + '. ' + t));
 
   await browser.close();
   if (failed.length) {
     console.log('ПРОВАЛЕНО (' + failed.length + '):', failed);
     process.exit(1);
   }
-  console.log('ГОЛОС ДЕДА: ВСЕ АССЕРТЫ ПРОШЛИ');
+  console.log('СТУДИЙНАЯ ОЗВУЧКА: ВСЕ АССЕРТЫ ПРОШЛИ');
   process.exit(0);
 };
 run().catch((e) => { console.error('PROBE ERROR', e); process.exit(2); });

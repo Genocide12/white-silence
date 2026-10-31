@@ -360,6 +360,8 @@
     setMuted: function (m) { muted = !!m; if (master) master.gain.value = muted ? 0 : volume; },
     isMuted: function () { return muted; },
     stopAmbience: stopAmbience,
-    ctx: function () { return ac; }
+    ctx: function () { return ac; },
+    // мастер-гейн для файловой озвучки (voice_audio.js): общий mute/громкость
+    bus: function () { return master; }
   });
 })();

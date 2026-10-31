@@ -35,7 +35,7 @@ const run = async () => {
   }
 
   // инжект набора и прогон
-  await page.addScriptTag({ path: '/home/z/my-project/scripts/test_inpage.js' });
+  await page.addScriptTag({ path: new URL('./test_inpage.js', import.meta.url).pathname });
   const t0 = Date.now();
   const result = await page.evaluate(() => window.__WS_RUN_TESTS__());
   const dt = ((Date.now() - t0) / 1000).toFixed(1);

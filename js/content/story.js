@@ -1463,11 +1463,22 @@
     snd('match', st.pier.x, st.pier.y, 1);
     snd('victory', undefined, undefined, 0.4);
     toast('Магический Огонь взвился над рекой. Тарелка такой не пропустит!', 'good');
-    chron('Магический Огонь на пристани зажжён. Тарелка уже снижается!', 'find');
+    chron('Магический Огонь на пристани зажжён (день ' + day() + ').', 'find');
     try { WS.Ev.emit('story:signal_lit', { x: st.pier.x, y: st.pier.y, day: day() }); }
     catch (e) { WS.err('story: signal_lit emit', e && e.message); }
     if (WS.Fx && WS.Fx.burst) {
       WS.Fx.burst('spark', st.pier.x, st.pier.y, 14);
+    }
+    // РАННЯЯ ПОБЕДА: огонь горит — можно звать тарелку Грибным Зовом
+    // (звёздная пыль + энергия), не дожидаясь 60-го дня
+    if (day() < SHIP_DAY) {
+      var needCalls = callNeed();
+      setTimeout(function () {
+        try {
+          toast('Огонь горит! ГРИБНОЙ ЗОВ: жми [E] у огня со Звёздной Пылью (×' +
+            needCalls + ') — и тарелка прилетит, не ждём 60-й день, бля!', 'good');
+        } catch (eT) { /* пусто */ }
+      }, 2600);
     }
     // тарелка уже на реке — заметили мгновенно
     if (day() >= SHIP_DAY) {
@@ -1501,6 +1512,10 @@
     fs('story_victory', 1);
     toast(why, 'good');
     chron('ПАРОХОД ПРИШЁЛ. Вы выжили в Белом Безмолвии.', 'find');
+    // ТАРЕЛКА говорит с дедом финальную реплику (студийный голос alien)
+    try {
+      if (WS.VoiceBox && WS.VoiceBox.playKey) WS.VoiceBox.playKey('alien_win');
+    } catch (eA) { /* тарелка немая — но прилетела */ }
     if (WS.Main && typeof WS.Main.victory === 'function') {
       try { WS.Main.victory(); } catch (e) { WS.err('story: victory', e && e.message); }
     }
@@ -1686,6 +1701,12 @@
     // ---- финальный квест: мостки ----
     pierTick();
 
+    // ---- Грибной Зов у горящего огня (ранняя победа) ----
+    callTick();
+
+    // ---- тарелка вызвана — следим за прилётом ----
+    plateArriveCheck();
+
     // ---- сигнальный костёр: поддерживать дым ----
     beaconTick(dt);
   }
@@ -1719,16 +1740,131 @@
     }
   }
 
-  /** Мостки: подсказка и поджиг сигнального костра. */
+  /** Мостки: подсказка и поджиг сигнального костра.
+   *  РАННЯЯ ПОБЕДА: Магический Огонь можно зажечь В ЛЮБОЙ ДЕНЬ —
+   *  были бы 3 факела (не ждём 55-го, если дед шустрый). */
   function pierTick() {
-    if (!fg('final_started') || fg('signal_lit') || !st.pier) return;
+    if (fg('signal_lit') || !st.pier) return;
     var d = playerDist(st.pier.x, st.pier.y);
     if (d < 2.0 && noOtherInteract()) {
       var have = invCount('torch');
-      showHint('Разжечь сигнальный костёр (' + have + '/' + BEACON_TORCHES + ' факела)');
+      showHint('Разжечь Магический Огонь (' + have + '/' + BEACON_TORCHES + ' факела)');
       if (hitInteract()) {
         lightBeacon();
       }
+    }
+  }
+
+  // ====================================================================
+  //  ГРИБНОЙ ЗОВ — ранняя победа (раньше 60-го дня)
+  //
+  //  Магический Огонь горит → дед зовёт тарелку ритуалом: бросает
+  //  Звёздную Пыль (сыплется из изгнанных мультяшек) в огонь и
+  //  тратит грибную энергию. need зова (3 без перков, 2 с «Звёздным
+  //  Зовом») — и тарелка вылетает к деду ЧЕРЕЗ 2 ИГРОВЫХ ЧАСА.
+  //  Так игра проходится хоть на 4-й день — честно, грибами и лодошкой.
+  // ====================================================================
+
+  function callNeed() {
+    try {
+      if (WS.Expeditions && WS.Expeditions.ritualDustNeed) return WS.Expeditions.ritualDustNeed();
+    } catch (e) { /* пусто */ }
+    return 3;
+  }
+
+  function callCost() {
+    try {
+      if (WS.Expeditions && WS.Expeditions.ritualEnergyCost) return WS.Expeditions.ritualEnergyCost();
+    } catch (e) { /* пусто */ }
+    return 30;
+  }
+
+  function callsDone() { return fg('calls_done') || 0; }
+
+  /** Зов у горящего огня: подсказка + [E]. */
+  function callTick() {
+    if (!fg('signal_lit') || fg('story_victory') || !st.pier) return;
+    if (callsDone() >= callNeed()) return;
+    var d = playerDist(st.pier.x, st.pier.y);
+    if (d < 2.2 && noOtherInteract()) {
+      var dust = invCount('stardust');
+      var cst = WS.Crazy && WS.Crazy.state ? (WS.Crazy.state() || { energy: 0 }).energy : 0;
+      showHint('Грибной Зов Тарелки (' + callsDone() + '/' + callNeed() +
+        ') — пыль: ' + dust + ', энергия: ' + Math.floor(cst) + '/' + callCost());
+      if (hitInteract()) {
+        doRitualCall();
+      }
+    }
+  }
+
+  /** Один Грибной Зов: пыль в огонь, пляска деда, тарелка слышит. */
+  function doRitualCall() {
+    var need = callNeed();
+    var done = callsDone();
+    if (done >= need) return;
+    var dust = invCount('stardust');
+    var cst = callCost();
+    var cz = WS.Crazy && WS.Crazy.state ? WS.Crazy.state() : null;
+    var en = cz ? cz.energy : 0;
+    if (dust < 1) {
+      toast('Нужна Звёздная Пыль! Изгоняй мультяшек, бля — они ею сыплют.', 'warn');
+      try {
+        if (WS.Thoughts) WS.Thoughts.say('Пыли нет. Пойду налажу кому-нибудь лодошкой, по-семейному.', 'no_dust', { cd: 25 });
+      } catch (e) { /* пусто */ }
+      return;
+    }
+    if (en < cst) {
+      toast('Грибной энергии мало: надо ' + cst + '. Изгоняй нахер мультяшек — энергия капает!', 'warn');
+      return;
+    }
+    invConsume('stardust', 1);
+    cz.energy -= cst;
+    fs('calls_done', done + 1);
+    // представление: искры, конфетти, реплика
+    try {
+      if (WS.Fx && WS.Fx.burst) WS.Fx.burst('spark', st.pier.x, st.pier.y, 16);
+      if (WS.Fx && WS.Fx.text) WS.Fx.text('✨ ЗОВ ' + (done + 1) + '/' + need + ' ✨', st.pier.x, st.pier.y - 1.5, { col: '#7bff9f', size: 15, life: 2 });
+    } catch (e) { /* пусто */ }
+    snd('levelup', st.pier.x, st.pier.y, 0.5);
+    snd('match', st.pier.x, st.pier.y, 0.6);
+    var n = done + 1;
+    var LINES = [
+      'Тарелка-а-а! Это дед! Забирай скорее, нахер!',
+      'Слышишь меня, жестянка летающая?! Дед ждёт!',
+      'Эгей! Пыль свою подарил — давай, подлетай, курва!'
+    ];
+    try {
+      if (WS.Thoughts) WS.Thoughts.say(LINES[Math.min(n - 1, LINES.length - 1)], 'call' + n, { cd: 5, prio: 3 });
+    } catch (e2) { /* пусто */ }
+    chron('Грибной Зов ' + n + '/' + need + ': звёздная пыль брошена в Магический Огонь.', 'anom');
+    try { WS.Ev.emit('story:call', { n: n, need: need }); } catch (e3) { /* пусто */ }
+    if (n >= need) {
+      schedulePlateArrival();
+    } else {
+      toast('ЗОВ ' + n + '/' + need + '! Огонь полыхнул зелёным — тарелка напряглась.', 'good');
+    }
+  }
+
+  /** Тарелка услышала: прилёт через 2 игровых часа. */
+  function schedulePlateArrival() {
+    fs('plate_called', 1);
+    try { st.plateAt = (WS.G.time && WS.G.time.totalMin ? WS.G.time.totalMin : 0) + 120; }
+    catch (e) { st.plateAt = 0; }
+    toast('🛸 ТАРЕЛКА УСЛЫШАЛА ДЕДА! Зелёный луч уже ищет пристань...', 'good');
+    chron('ГРИБНОЙ ЗОВ ЗАВЕРШЁН. Тарелка снижается к Пристани-Тихой!', 'find');
+    snd('victory', undefined, undefined, 0.5);
+    try {
+      if (WS.VoiceBox && WS.VoiceBox.playKey) WS.VoiceBox.playKey('alien_heard');
+    } catch (e) { /* пусто */ }
+    try { WS.Ev.emit('story:plate_called', { at: st.plateAt }); } catch (e2) { /* пусто */ }
+  }
+
+  /** Проверка прилёта вызванной тарелки (раз в тик). */
+  function plateArriveCheck() {
+    if (!fg('plate_called') || fg('story_victory')) return;
+    var total = WS.G && WS.G.time && WS.G.time.totalMin ? WS.G.time.totalMin : 0;
+    if (st.plateAt && total >= st.plateAt) {
+      victoryNow('Зелёный луч упёрся в мостки — тарелка спускается за дедом!');
     }
   }
 
@@ -1958,13 +2094,24 @@
     /** Точка сигнального костра (или null). */
     pier: function () { return st.pier ? { x: st.pier.x, y: st.pier.y } : null; },
 
-    /** Финальный квест: {started, lit, torches, need}. */
+    /** Финальный квест: {started, lit, torches, need, calls, callNeed, callCost, dust}. */
     finalQuest: function () {
       return {
         started: !!fg('final_started'),
         lit: !!fg('signal_lit'),
         torches: invCount('torch'),
-        need: BEACON_TORCHES
+        need: BEACON_TORCHES,
+        calls: fg('calls_done') || 0,
+        callNeed: (function () {
+          try { return (WS.Expeditions && WS.Expeditions.ritualDustNeed) ? WS.Expeditions.ritualDustNeed() : 3; }
+          catch (e) { return 3; }
+        })(),
+        callCost: (function () {
+          try { return (WS.Expeditions && WS.Expeditions.ritualEnergyCost) ? WS.Expeditions.ritualEnergyCost() : 30; }
+          catch (e) { return 30; }
+        })(),
+        dust: invCount('stardust'),
+        plateCalled: !!fg('plate_called')
       };
     },
 

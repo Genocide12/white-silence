@@ -1297,10 +1297,12 @@
   }
 
   // ====================================================================
-  //  РЕЧЬ (Web Speech API): голос деда и диктор радио
+  //  РЕЧЬ: СТУДИЙНАЯ ОЗВУЧКА (файлы, разные голоса) — робот выпилен
+  //  по приговору игрока («этот роботизированный голос не подходит»).
+  //  Фразы деда/радио/новостей/мультяшек начитаны заранее и лежат в
+  //  assets/voice/*.mp3 (манифест — voice_audio.js, WS.VoiceBox).
+  //  Нет файла в банке — дед просто молчит и пишет текст в пузыре.
   // ====================================================================
-
-  var ruVoice = null;
 
   /** Булеана из настроек (WS.Options) с защитой на случай его отсутствия. */
   function optBool(key, def) {
@@ -1334,71 +1336,30 @@
     };
   }
 
-  function pickVoice() {
-    if (!('speechSynthesis' in window)) return;
-    try {
-      var vs = window.speechSynthesis.getVoices() || [];
-      // предпочитаем русский мужской (Milena/Artur/Yuri =male в Chrome)
-      var best = null, ruAny = null;
-      for (var i = 0; i < vs.length; i++) {
-        var v = vs[i];
-        if (!/ru/i.test(v.lang)) continue;
-        if (!ruAny) ruAny = v;
-        var nm = (v.name || '').toLowerCase();
-        if (nm.indexOf('male') >= 0 || nm === 'artur' || nm === 'yuri' ||
-            nm === 'pavel' || nm === 'dmitry') { best = v; break; }
-      }
-      ruVoice = best || ruAny || null;
-    } catch (e) { ruVoice = null; }
-  }
-  if ('speechSynthesis' in window) {
-    try {
-      pickVoice();
-      window.speechSynthesis.onvoiceschanged = pickVoice;
-    } catch (e) { /* пусто */ }
-  }
-
-  /** Произнести текст заданным голосом. opt: {pitch, rate, volume, force, radio}.
+  /** Произнести текст студийным голосом из банка озвучки.
    *
    *  ГЕЙТЫ (молчание касается только речи — пузырь мыслей остаётся):
    *   - S.voiceOn — общий мастер-выключатель (клавиша в дед-режиме);
-   *   - настройка voiceDed — голос деда;
-   *   - настройка voiceRadio — голос радио-диктора (opt.radio);
-   *   - настройка voiceVol — множитель громкости utterance.volume.
+   *   - тумблеры voiceDed / voiceRadio — внутри VoiceBox.playId;
+   *   - voiceVol — множитель громкости (тоже в VoiceBox).
+   *  РОБОТ ВЫПИЛЕН: Web Speech API больше не используется — фразы без
+   *  файла в банке просто не звучат (текст в пузыре остаётся).
    */
   function speak(text, opt) {
     opt = opt || {};
     if (!S.voiceOn) return;                              // мастер выключен
-    if (opt.radio) {
-      if (!optBool('voiceRadio', true)) return;          // диктор выключен
-    } else {
-      if (!optBool('voiceDed', true)) return;            // дед выключен
-    }
-    if (!('speechSynthesis' in window)) return;
     try {
-      var now = Date.now();
-      if (window.speechSynthesis.speaking) {
-        if (!opt.force) return;      // не перекрикиваем себя
-        window.speechSynthesis.cancel();
+      if (optVol() <= 0.001) return;                     // тише тишины — молчим
+      if (WS.VoiceBox && WS.VoiceBox.speakText) {
+        WS.VoiceBox.speakText(text, opt);
       }
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = 'ru-RU';
-      if (ruVoice) u.voice = ruVoice;
-      u.pitch = (opt && opt.pitch) || VOICE_DED.pitch;
-      u.rate = (opt && opt.rate) || VOICE_DED.rate;
-      var base = (opt && opt.volume != null) ? opt.volume
-                : (opt.radio ? VOICE_RADIO.volume : VOICE_DED.volume);
-      // громкость голоса из настроек применяется и к деду, и к диктору
-      u.volume = Math.max(0, Math.min(1, base * optVol()));
-      if (u.volume <= 0.001) return;   // тише тишины не бывает — молчим
-      window.speechSynthesis.speak(u);
     } catch (e) { /* безголосый дед — тоже дед */ }
   }
 
   function stopSpeech() {
-    if ('speechSynthesis' in window) {
-      try { window.speechSynthesis.cancel(); } catch (e) { /* пусто */ }
-    }
+    try {
+      if (WS.VoiceBox && WS.VoiceBox.stopAll) WS.VoiceBox.stopAll();
+    } catch (e) { /* пусто */ }
   }
 
   // ====================================================================
@@ -1436,12 +1397,33 @@
   // ====================================================================
   //  ГЛАВНАЯ ФУНКЦИЯ: подумать вслух
   //  key — категория из T (или спец. текст через thinkText).
+  //  МАТ-РЕЖИМ: если в WS.Data.matPhrases есть категория и настройка
+  //  matMode не выключена — дед говорит угарно-матерную версию (эти
+  //  фразы заранее озвучены студийными голосами, см. mat_phrases.js).
   // ====================================================================
+
+  function matOn() {
+    try {
+      if (WS.Options && WS.Options.get) {
+        var v = WS.Options.get('matMode');
+        return v === undefined ? true : !!v;
+      }
+    } catch (e) { /* пусто */ }
+    return true;
+  }
+
+  function listFor(key) {
+    try {
+      var M = WS.Data && WS.Data.matPhrases;
+      if (M && M[key] && M[key].length && matOn()) return M[key];
+    } catch (e) { /* пусто */ }
+    return T[key];
+  }
 
   function think(key, opt) {
     if (!S.enabled) return null;
     opt = opt || {};
-    var list = T[key];
+    var list = listFor(key);
     if ((!list || !list.length) && !opt.text) return null;
     var meta = META[key] || {};
     var now = Date.now();
