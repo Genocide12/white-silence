@@ -7,6 +7,13 @@
 // телеграф, престиж + обыск посёлка, крафт, охота.
 //
 // Запуск: bun scripts/sim-incremental.ts [дни]
+//
+// Режимы роя (для параллельности и прогонов длиннее таймаута вызова):
+//   полный прогон:          bun scripts/sim-incremental.ts [дни]
+//   один бот:               SIM_BOT=1 SIM_DAYS=7 SIM_OUT=/tmp/sim/bot-1.json bun scripts/...
+//   чанками (возобновляемо): SIM_BOT=1 SIM_DAYS=100 SIM_CHUNK=/tmp/sim/mara.chunk.json \
+//                           SIM_OUT=/tmp/sim/marathon.json SIM_BUDGET=400000 bun scripts/...
+//   отчёт из JSON:          SIM_REPORT=/tmp/sim bun scripts/sim-incremental.ts
 // ============================================================
 import {
   createInitialState, doClick, buyGenerator, buyUpgrade, buyMine, buyTelegraph, buyFurnace,
@@ -14,10 +21,12 @@ import {
   furnaceCost, prestigeGain, genVisible, totalGenerators, coalUnlocked, telegraphUnlocked,
   upgradeAvailable, doScavenge, doCraft, doHunt, scavengeCost, craftCost, huntCost,
   buildingUnlocked, craftUnlocked, huntUnlocked, uniqueItems, totalHunts, globalMult,
-  checkEndings, type GameState,
+  checkEndings, serialize, deserialize, type GameState,
 } from '../src/game/engine';
 import { GENERATORS, UPGRADES, MINES, TELEGRAPHS, INVENTIONS } from '../src/game/content';
-import { BUILDINGS, BEASTS, CRAFTS } from '../src/game/legacy';
+import { BUILDINGS, BEASTS, CRAFTS, TOTAL_ITEMS, NOTES } from '../src/game/legacy';
+import fs from 'node:fs';
+import path from 'node:path';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -65,7 +74,7 @@ interface SimResult {
   clicky: boolean;
 }
 
-const BOTS: Bot[] = [
+export const BOTS: Bot[] = [
   {
     name: 'Новичок', clicksPerSec: 2, decideEvery: 30, buyRule: 'cheapest',
     scavenges: 1, crafts: 1, hunts: 0,
@@ -116,7 +125,7 @@ const BOTS: Bot[] = [
   },
 ];
 
-function decide(s: GameState, bot: Bot, purchaseTimes: number[], rand: () => number): void {
+export function decide(s: GameState, bot: Bot, purchaseTimes: number[], rand: () => number): void {
   const wps = woodPerSec(s);
   let bought = true;
   let guard = 0;
@@ -272,11 +281,19 @@ function decide(s: GameState, bot: Bot, purchaseTimes: number[], rand: () => num
   }
 }
 
-function runBot(bot: Bot, days: number): SimResult {
-  const s = createInitialState();
+interface ChunkOpts {
+  chunkPath?: string;   // файл чанка: прогон переживает таймауты и продолжаетcя
+  budgetMs?: number;    // реальный бюджет времени на этот вызов
+  outPath?: string;     // куда записать итоговый JSON
+}
+interface RunOut { r: SimResult; finished: boolean; }
+
+function runBot(bot: Bot, days: number, opts: ChunkOpts = {}): RunOut {
+  const totalSec = days * 86400;
+  let s = createInitialState();
   s.auroraNext = 200; // детерминированность
-  const rand = mulberry32(20261031);
-  const purchaseTimes: number[] = [];
+  let rand = mulberry32(20261031);
+  let purchaseTimes: number[] = [];
   const events: Record<string, number | null> = {
     'первый генератор': null,
     'уголь открыт': null,
@@ -295,11 +312,31 @@ function runBot(bot: Bot, days: number): SimResult {
     '300 предметов': null,
     'первый эпилог': null,
   };
-  const totalSec = days * 86400;
   let nextDecide = 0;
-  const t0 = Date.now();
+  let t = 0;
+  let doneWallMs = 0;
 
-  for (let t = 0; t < totalSec; t += 1) {
+  // возобновление чанка (длинные прогоны кусками)
+  if (opts.chunkPath && fs.existsSync(opts.chunkPath)) {
+    try {
+      const ch = JSON.parse(fs.readFileSync(opts.chunkPath, 'utf8')) as {
+        state: string; t: number; wallMs: number; purchaseTimes: number[];
+        events: Record<string, number | null>; nextDecide: number;
+      };
+      s = deserialize(ch.state) ?? createInitialState();
+      t = ch.t; doneWallMs = ch.wallMs; purchaseTimes = ch.purchaseTimes;
+      for (const k of Object.keys(events)) {
+        if (ch.events && ch.events[k] !== undefined) events[k] = ch.events[k];
+      }
+      nextDecide = ch.nextDecide;
+      rand = mulberry32((20261031 + Math.floor(t)) >>> 0); // чанковый детерминизм
+    } catch { /* битый чанк — начинаем заново */ }
+  }
+
+  const t0 = Date.now();
+  let finished = true;
+
+  for (; t < totalSec; t += 1) {
     if (bot.clicksPerSec > 0) doClick(s, bot.clicksPerSec);
     else if (t < 10) doClick(s, 2);
     if (t >= nextDecide) {
@@ -307,6 +344,12 @@ function runBot(bot: Bot, days: number): SimResult {
       decide(s, bot, purchaseTimes, rand);
     }
     tick(s, 1, rand);
+
+    // бюджет реального времени: сохраняем чанк и выходим — прогон продолжится
+    if (opts.budgetMs && (t & 2047) === 0 && Date.now() - t0 > opts.budgetMs) {
+      finished = false;
+      break;
+    }
 
     // события проверяем раз в 10 тиков — экономим время роя
     if (t % 10 !== 0) continue;
@@ -327,7 +370,7 @@ function runBot(bot: Bot, days: number): SimResult {
     if (events['первый эпилог'] === null && s.endings.length >= 1) events['первый эпилог'] = t;
   }
 
-  const wallMs = Date.now() - t0;
+  const wallMs = doneWallMs + (Date.now() - t0);
 
   let maxGap = 0;
   for (let i = 1; i < purchaseTimes.length; i++) {
@@ -336,7 +379,7 @@ function runBot(bot: Bot, days: number): SimResult {
   }
   const endGap = purchaseTimes.length > 0 ? totalSec - purchaseTimes[purchaseTimes.length - 1] : totalSec;
 
-  return {
+  const r: SimResult = {
     name: bot.name,
     wallMs,
     events,
@@ -358,6 +401,17 @@ function runBot(bot: Bot, days: number): SimResult {
     endGap,
     clicky: bot.clicksPerSec > 0,
   };
+  if (!finished && opts.chunkPath) {
+    fs.mkdirSync(path.dirname(opts.chunkPath), { recursive: true });
+    fs.writeFileSync(opts.chunkPath, JSON.stringify({
+      state: serialize(s), t, wallMs, purchaseTimes, events, nextDecide,
+    }));
+  }
+  if (finished && opts.outPath) {
+    fs.mkdirSync(path.dirname(opts.outPath), { recursive: true });
+    fs.writeFileSync(opts.outPath, JSON.stringify(r));
+  }
+  return { r, finished };
 }
 
 function fmt(t: number | null): string {
@@ -377,14 +431,42 @@ function fnum(n: number): string {
   return Math.floor(n).toString();
 }
 
-const days = Number(process.argv[2] ?? 7);
+const days = Number(process.argv[2] ?? process.env.SIM_DAYS ?? 7);
+
+if (import.meta.main) {
+
+// ---- режим «один бот» (для параллельного роя и чанковых прогонов) ----
+if (process.env.SIM_BOT !== undefined) {
+  const i = Number(process.env.SIM_BOT);
+  const bot = BOTS[i];
+  if (!bot) throw new Error(`SIM_BOT=${i} за пределами (0..${BOTS.length - 1})`);
+  const { r, finished } = runBot(bot, days, {
+    chunkPath: process.env.SIM_CHUNK,
+    budgetMs: Number(process.env.SIM_BUDGET ?? 0) || undefined,
+    outPath: process.env.SIM_OUT,
+  });
+  if (finished) {
+    console.log(`✅ ${bot.name} (${bot.note}): ${days} дн. за ${(r.wallMs / 1000).toFixed(0)}с (${Math.round(days * 86400 / Math.max(1, r.wallMs / 1000)).toLocaleString('ru-RU')}x)`);
+  } else {
+    console.log(`⏳ ${bot.name}: чанк сохранён, пройдено ${fmt(r.events['квадриллион всего'] !== null ? r.events['квадриллион всего'] : 0)}... продолжи тем же вызовом`);
+  }
+} else {
+
 console.log(`\n❄️  «БЕЛАЯ ТИШИНА: ТОПКА» v2 (весь контент репозитория) — рой ботов, ${days} игровых дней каждый\n`);
 
 const results: SimResult[] = [];
-for (const bot of BOTS) {
-  const r = runBot(bot, days);
-  results.push(r);
-  console.log(`— ${bot.name} (${bot.note}): ${days * 86400} игровых секунд за ${(r.wallMs / 1000).toFixed(1)}с реальных (${Math.round(days * 86400 / (r.wallMs / 1000)).toLocaleString('ru-RU')}x)`);
+if (process.env.SIM_REPORT) {
+  const dir = process.env.SIM_REPORT;
+  for (const f of fs.readdirSync(dir).filter((x) => /^bot-\d+\.json$/.test(x)).sort()) {
+    results.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')) as SimResult);
+  }
+  if (results.length === 0) throw new Error(`в ${dir} нет bot-*.json`);
+} else {
+  for (const bot of BOTS) {
+    const { r } = runBot(bot, days);
+    results.push(r);
+    console.log(`— ${bot.name} (${bot.note}): ${days * 86400} игровых секунд за ${(r.wallMs / 1000).toFixed(1)}с реальных (${Math.round(days * 86400 / (r.wallMs / 1000)).toLocaleString('ru-RU')}x)`);
+  }
 }
 
 console.log('\n=== ТАБЛИЦА ТЕМПА (время до события) ===');
@@ -437,9 +519,11 @@ if (issues === 0) console.log('✅ мёртвых зон и завалов не 
 
 // глубокий прогон: 30 дней оптимальным ботом — проверка эндгейма
 console.log('\n=== ГЛУБОКИЙ ПРОГОН: Оптимальный × 30 дней ===');
-const deep = runBot(BOTS[1], 30);
+const deep = process.env.SIM_REPORT && fs.existsSync(path.join(process.env.SIM_REPORT, 'deep.json'))
+  ? JSON.parse(fs.readFileSync(path.join(process.env.SIM_REPORT, 'deep.json'), 'utf8')) as SimResult
+  : runBot(BOTS[1], 30).r;
 console.log(`дров/с: ${fnum(deep.wps)}, всего: ${fnum(deep.totalWood)}, множитель: ×${fnum(deep.mult)}, звёзд: ${deep.totalStars}, экспедиций: ${deep.prestiges}`);
-console.log(`склад: ${deep.items}/517 предметов, рецептов: ${deep.crafted}/284, облав: ${deep.huntsTotal}, записок: ${deep.notes}/121, эпилогов: ${deep.endings}/7`);
+console.log(`склад: ${deep.items}/${TOTAL_ITEMS} предметов, рецептов: ${deep.crafted}/${CRAFTS.length}, облав: ${deep.huntsTotal}, записок: ${deep.notes}/${NOTES.length}, эпилогов: ${deep.endings}/7`);
 if (deep.totalWood < 1e15) console.log('⚠️  за 30 дней не достигнут квадриллион — эндгейм зажат');
 else console.log('✅ квадриллион достигнут — гигантизм чисел на месте');
 if (deep.items < 150) console.log('⚠️  склад маловат для 30 дней — обыск дорог');
@@ -449,9 +533,15 @@ else console.log('✅ кривая крафта работает');
 
 // марафон: 100 дней мародёром — проверка коллекции и эпилогов
 console.log('\n=== МАРАФОН: Мародёр × 100 дней ===');
-const marathon = runBot(BOTS[2], 100);
-console.log(`склад: ${marathon.items}/517, рецептов: ${marathon.crafted}/284, записок: ${marathon.notes}/121, эпилогов: ${marathon.endings}/7, звёзд: ${marathon.totalStars}`);
+const marathon = process.env.SIM_REPORT && fs.existsSync(path.join(process.env.SIM_REPORT, 'marathon.json'))
+  ? JSON.parse(fs.readFileSync(path.join(process.env.SIM_REPORT, 'marathon.json'), 'utf8')) as SimResult
+  : runBot(BOTS[2], 100).r;
+console.log(`склад: ${marathon.items}/${TOTAL_ITEMS}, рецептов: ${marathon.crafted}/${CRAFTS.length}, записок: ${marathon.notes}/${NOTES.length}, эпилогов: ${marathon.endings}/7, звёзд: ${marathon.totalStars}`);
 if (marathon.endings >= 1) console.log('✅ эпилоги достигаются долгой игрой');
 else console.log('ℹ️  эпилогов пока нет — они для марафонцев (100 часов, 100 волков и т.д.)');
 if (marathon.notes < 60) console.log('⚠️  записок маловато за 100 дней — шанс 12% скуп?');
 else console.log('✅ летопись наполняется');
+
+} // конец режима «полный прогон / отчёт»
+
+} // import.meta.main
