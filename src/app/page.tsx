@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Axe, Pickaxe, RadioTower, Star, Flame, Lock, X,
+  Axe, Pickaxe, RadioTower, Star, Flame, Lock, X, ScrollText,
 } from 'lucide-react';
 import { Snowfall } from '@/components/game/Snowfall';
 import { FurnacePanel } from '@/components/game/FurnacePanel';
 import {
-  AchievementsPanel, ArtelPanel, BuyAmountToggle, CoalPanel, PrestigePanel, SettingsPanel,
+  AchievementsPanel, ArtelPanel, BuyAmountToggle, ChroniclePanel, CoalPanel, CraftPanel,
+  EndingsPanel, HuntPanel, PrestigePanel, ProfessionPicker, SettingsPanel, VillagePanel,
   StarsPanel, StatsPanel, TABS, TelegraphPanel, UpgradesPanel,
   type BuyAmount, type TabId,
 } from '@/components/game/panels';
@@ -18,9 +19,10 @@ import {
 } from '@/game/store';
 import {
   auroraMultiplier, coalPerSec, coalUnlocked, depeshiPerSec, isAuroraActive, prestigeUnlocked,
-  telegraphUnlocked, woodPerSec,
+  telegraphUnlocked, woodPerSec, uniqueItems, totalHunts,
 } from '@/game/engine';
 import { COAL_UNLOCK, PRESTIGE_UNLOCK, TELEGRAPH_UNLOCK } from '@/game/content';
+import { PROVERBS, calendarDay, TOTAL_ITEMS } from '@/game/legacy';
 
 function isTabLocked(s: ReturnType<typeof useGame>, id: TabId): string | null {
   switch (id) {
@@ -32,10 +34,28 @@ function isTabLocked(s: ReturnType<typeof useGame>, id: TabId): string | null {
   }
 }
 
+/** Тикер пословиц Севера — ротация каждые 18 секунд. */
+function ProverbTicker() {
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * PROVERBS.length));
+  useEffect(() => {
+    const t = window.setInterval(() => setIdx((i) => (i + 1 + Math.floor(Math.random() * 3)) % PROVERBS.length), 18000);
+    return () => window.clearInterval(t);
+  }, []);
+  return (
+    <div className="border-b border-white/5 bg-[#040814]/80" aria-hidden>
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-1.5 flex items-center gap-2.5">
+        <ScrollText className="w-3.5 h-3.5 text-teal-400/70 shrink-0" />
+        <p className="text-[11px] sm:text-xs text-teal-200/60 italic truncate">{PROVERBS[idx]}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
-  const [tab, setTab] = useState<TabId>('artel');
+  const [tab, setTab] = useState<TabId>('village');
   const [buyAmount, setBuyAmount] = useState<BuyAmount>(1);
   const [offlineClosed, setOfflineClosed] = useState(false);
+  const [showProfession, setShowProfession] = useState(false);
 
   useEffect(() => {
     startGame();
@@ -45,6 +65,7 @@ export default function Home() {
   const s = useGame();
   const aurora = started ? isAuroraActive(s) : false;
   const offline = started && !offlineClosed ? takeOfflineReport() : null;
+  const cal = calendarDay(s.playTime);
 
   if (!started) {
     return (
@@ -64,12 +85,19 @@ export default function Home() {
       <div className={`aurora-band ${aurora ? 'active' : ''}`} aria-hidden />
       <Snowfall />
 
+      <ProverbTicker />
+
       {/* Верхняя панель */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-[#060b1a]/85 border-b border-white/5">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 flex items-center gap-3 sm:gap-6 flex-wrap">
           <div className="shrink-0 leading-none">
             <h1 className="font-black text-base sm:text-xl tracking-widest text-slate-100">БЕЛАЯ ТИШИНА</h1>
             <span className="text-[10px] sm:text-xs font-bold text-teal-300/80 tracking-[0.35em] uppercase">топка</span>
+          </div>
+
+          <div className="hidden sm:block shrink-0 leading-tight" title={cal.note}>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">день зимовки</div>
+            <div className="text-xs font-black text-teal-200 tabular-nums">{cal.n}/60 · {cal.name}</div>
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
@@ -98,6 +126,13 @@ export default function Home() {
               <span className="font-black text-amber-200 tabular-nums">{formatNum(s.totalStars)}</span>
             </div>
           )}
+          {started && uniqueItems(s) > 0 && (
+            <div className="hidden md:flex items-center gap-1.5" title={`Предметов на складе: ${uniqueItems(s)} из ${TOTAL_ITEMS}`}>
+              <Axe className="w-4 h-4 text-amber-200/70" aria-hidden />
+              <span className="font-bold text-amber-100/80 text-sm tabular-nums">{uniqueItems(s)}</span>
+              <span className="text-[10px] text-slate-500">/ {TOTAL_ITEMS}</span>
+            </div>
+          )}
           {aurora && (
             <div className="ml-auto sm:ml-0 rounded-full bg-teal-500/20 border border-teal-400/40 px-3 py-1 text-xs font-black text-teal-200 animate-pulse">
               СИЯНИЕ ×{auroraMultiplier(s)}
@@ -112,7 +147,7 @@ export default function Home() {
           <FurnacePanel />
         </div>
 
-        <section aria-label="Панели игры">
+        <section aria-label="Панели игры" className="min-w-0">
           {/* Вкладки */}
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="relative flex-1 min-w-0">
@@ -151,12 +186,17 @@ export default function Home() {
 
           {/* Панель */}
           <div className="lg:max-h-[calc(100vh-160px)] lg:overflow-y-auto game-scroll lg:pr-1.5 pb-8">
+            {tab === 'village' && <VillagePanel />}
+            {tab === 'craft' && <CraftPanel />}
+            {tab === 'hunt' && <HuntPanel />}
             {tab === 'artel' && <ArtelPanel buyAmount={buyAmount} />}
             {tab === 'upgrades' && <UpgradesPanel />}
             {tab === 'coal' && <CoalPanel buyAmount={buyAmount} />}
             {tab === 'telegraph' && <TelegraphPanel buyAmount={buyAmount} />}
-            {tab === 'prestige' && <PrestigePanel />}
+            {tab === 'prestige' && <PrestigePanel onExpedition={() => setShowProfession(true)} />}
             {tab === 'stars' && <StarsPanel />}
+            {tab === 'chronicle' && <ChroniclePanel />}
+            {tab === 'endings' && <EndingsPanel />}
             {tab === 'achievements' && <AchievementsPanel />}
             {tab === 'stats' && <StatsPanel />}
             {tab === 'settings' && <SettingsPanel />}
@@ -190,6 +230,7 @@ export default function Home() {
       )}
 
       <EventToaster />
+      {showProfession && <ProfessionPicker onDone={() => setShowProfession(false)} />}
     </main>
   );
 }
@@ -205,6 +246,12 @@ function EventToaster() {
     aurora: 'border-teal-300/50 bg-teal-300/15',
     info: 'border-white/15 bg-white/5',
     prestige: 'border-amber-300/60 bg-amber-300/15',
+    scavenge: 'border-amber-200/30 bg-amber-100/5',
+    craft: 'border-orange-300/40 bg-orange-300/10',
+    hunt: 'border-red-300/40 bg-red-300/10',
+    radio: 'border-sky-300/40 bg-sky-300/10',
+    gazette: 'border-yellow-300/40 bg-yellow-300/10',
+    ending: 'border-purple-400/60 bg-purple-400/15',
   };
 
   return (

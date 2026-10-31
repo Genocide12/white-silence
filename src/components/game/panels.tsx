@@ -6,7 +6,8 @@ import {
   Pickaxe, Mountain, Warehouse, KeyRound, RadioTower, GraduationCap,
   Compass, Star, Trophy, BarChart3, Settings, Lock, Check, Zap, Sparkles,
   Copy, Download, Upload, Trash2, Wrench, BookOpen, Flame, Snowflake,
-  type LucideIcon,
+  Home, CookingPot, Crosshair, ScrollText, Landmark, Search, Package, PawPrint,
+  Newspaper, Radio, MoonStar, type LucideIcon,
 } from 'lucide-react';
 import type { GameState } from '@/game/engine';
 import {
@@ -14,32 +15,43 @@ import {
   globalMult, isAuroraActive, maxBuyCount, maxBuyFurnace, maxBuyMine, maxBuyTelegraph,
   mineCost, prestigeGain, prestigeUnlocked, starBonusPerStar, telegraphCost,
   coalUnlocked, telegraphUnlocked, totalGenerators, upgradeAvailable, woodPerSec,
-  deserialize, SAVE_KEY,
+  deserialize, SAVE_KEY, scavengeCost, buildingUnlocked, craftUnlocked, craftCost,
+  huntCost, huntUnlocked, uniqueItems, totalHunts, craftEffects, profession, radioThreshold, gazetteMilestone,
 } from '@/game/engine';
 import {
   ACHIEVEMENTS, GENERATORS, INVENTIONS, MILESTONES, MINES, STAR_UPGRADES, TELEGRAPHS, UPGRADES,
   COAL_UNLOCK, PRESTIGE_UNLOCK, TELEGRAPH_UNLOCK,
   type UpgradeDef,
 } from '@/game/content';
+import {
+  BUILDINGS, BEASTS, CRAFTS, PROFESSIONS, ENDINGS, NOTES, RADIO, GAZETTE, BESTIARY, WINTER_RULES,
+  CAT_RU_CRAFT, itemTier, TIER_RU, itemName, ALL_ITEMS, TOTAL_ITEMS, calendarDay,
+} from '@/game/legacy';
 import { formatNum, formatFull, formatTime } from '@/game/format';
 import {
   actBuyFurnace, actBuyGen, actBuyInvention, actBuyMine, actBuyStarUpgrade, actBuyTelegraph,
   actBuyUpgrade, actPrestige, hardReset, saveGame, setAutoBuy, setAutoFurnace, useGame,
+  actScavenge, actCraft, actHunt, actChooseProfession, applyImportedSave,
 } from '@/game/store';
 
 export type TabId =
-  | 'artel' | 'upgrades' | 'coal' | 'telegraph' | 'prestige'
-  | 'stars' | 'achievements' | 'stats' | 'settings';
+  | 'village' | 'craft' | 'hunt' | 'artel' | 'upgrades' | 'coal' | 'telegraph' | 'prestige'
+  | 'stars' | 'chronicle' | 'endings' | 'achievements' | 'stats' | 'settings';
 
 export interface TabDef { id: TabId; label: string; icon: LucideIcon; }
 
 export const TABS: TabDef[] = [
+  { id: 'village', label: 'Посёлок', icon: Home },
+  { id: 'craft', label: 'Хозяйство', icon: CookingPot },
+  { id: 'hunt', label: 'Охота', icon: Crosshair },
   { id: 'artel', label: 'Артель', icon: Users },
   { id: 'upgrades', label: 'Улучшения', icon: Wrench },
   { id: 'coal', label: 'Шахта', icon: Pickaxe },
   { id: 'telegraph', label: 'Телеграф', icon: RadioTower },
   { id: 'prestige', label: 'Экспедиция', icon: Compass },
   { id: 'stars', label: 'Звёзды', icon: Star },
+  { id: 'chronicle', label: 'Летопись', icon: ScrollText },
+  { id: 'endings', label: 'Эпилоги', icon: MoonStar },
   { id: 'achievements', label: 'Подвиги', icon: Trophy },
   { id: 'stats', label: 'Статистика', icon: BarChart3 },
   { id: 'settings', label: 'Настройки', icon: Settings },
@@ -398,7 +410,7 @@ export function TelegraphPanel({ buyAmount }: { buyAmount: BuyAmount }) {
 
 // ---------------- Экспедиция (престиж) ----------------
 
-export function PrestigePanel() {
+export function PrestigePanel({ onExpedition }: { onExpedition?: () => void }) {
   const s = useGame();
   const gain = prestigeGain(s);
   const [confirming, setConfirming] = useState(false);
@@ -448,7 +460,7 @@ export function PrestigePanel() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => { actPrestige(); setConfirming(false); }}
+                  onClick={() => { actPrestige(); setConfirming(false); if (onExpedition) onExpedition(); }}
                   className="rounded-xl bg-red-500 hover:bg-red-400 text-white font-black px-4 py-2.5 cursor-pointer transition-colors"
                 >
                   Точно. В путь!
@@ -599,23 +611,37 @@ function StatRow({ label, value }: { label: string; value: string }) {
 
 export function StatsPanel() {
   const s = useGame();
+  const prof = profession(s);
   return (
-    <div className="panel-card rounded-2xl p-5">
-      <h3 className="font-black text-lg mb-3">Журнал станции</h3>
-      <StatRow label="День полярной ночи" value={formatFull(Math.floor(s.playTime / 600) + 1)} />
-      <StatRow label="Время у печи" value={formatTime(s.playTime)} />
-      <StatRow label="Дров за всё время" value={formatFull(s.totalWood)} />
-      <StatRow label="Дров за экспедицию" value={formatFull(s.runWood)} />
-      <StatRow label="Лучшая добыча" value={`${formatNum(s.bestWps)}/с`} />
-      <StatRow label="Ударов топором" value={formatFull(Math.floor(s.clicks))} />
-      <StatRow label="Техники в артели" value={formatFull(totalGenerators(s))} />
-      <StatRow label="Угля добыто" value={formatFull(s.totalCoal)} />
-      <StatRow label="Уровень топки" value={formatFull(s.furnace)} />
-      <StatRow label="Депеш принято" value={formatFull(Math.floor(s.totalDepeshi))} />
-      <StatRow label="Экспедиций отправлено" value={formatFull(s.prestiges)} />
-      <StatRow label="Полярных звёзд" value={formatFull(s.totalStars)} />
-      <StatRow label="Сияний поймано" value={formatFull(s.aurorasSeen)} />
-      <StatRow label="Общий множитель производства" value={`×${formatNum(globalMult(s))}`} />
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-5">
+        <h3 className="font-black text-lg mb-3">Журнал станции</h3>
+        <StatRow label="Профессия" value={prof ? prof.name : '—'} />
+        <StatRow label="День зимовки (из 60)" value={formatFull(Math.min(60, Math.floor(s.playTime / 600) + 1))} />
+        <StatRow label="Время у печи" value={formatTime(s.playTime)} />
+        <StatRow label="Дров за всё время" value={formatFull(s.totalWood)} />
+        <StatRow label="Дров за экспедицию" value={formatFull(s.runWood)} />
+        <StatRow label="Лучшая добыча" value={`${formatNum(s.bestWps)}/с`} />
+        <StatRow label="Ударов топором" value={formatFull(Math.floor(s.clicks))} />
+        <StatRow label="Техники в артели" value={formatFull(totalGenerators(s))} />
+        <StatRow label="Угля добыто" value={formatFull(s.totalCoal)} />
+        <StatRow label="Уровень топки" value={formatFull(s.furnace)} />
+        <StatRow label="Депеш принято" value={formatFull(Math.floor(s.totalDepeshi))} />
+        <StatRow label="Экспедиций отправлено" value={formatFull(s.prestiges)} />
+        <StatRow label="Полярных звёзд" value={formatFull(s.totalStars)} />
+        <StatRow label="Сияний поймано" value={formatFull(s.aurorasSeen)} />
+        <StatRow label="Общий множитель производства" value={`×${formatNum(globalMult(s))}`} />
+      </div>
+      <div className="panel-card rounded-2xl p-5">
+        <h3 className="font-black text-lg mb-3">Зимовка по-репозиторному</h3>
+        <StatRow label="Предметов на складе" value={`${uniqueItems(s)} / ${TOTAL_ITEMS}`} />
+        <StatRow label="Рецептов освоено" value={`${s.crafted.length} / ${CRAFTS.length}`} />
+        <StatRow label="Облав проведено" value={formatFull(totalHunts(s))} />
+        <StatRow label="Записок найдено" value={`${s.notesFound.length} / ${NOTES.length}`} />
+        <StatRow label="Радиопередач принято" value={`${s.radioHeard.length} / ${RADIO.length}`} />
+        <StatRow label="Выпусков газеты" value={`${s.gazetteSeen.length} / ${GAZETTE.length}`} />
+        <StatRow label="Эпилогов открыто" value={`${s.endings.length} / ${ENDINGS.length}`} />
+      </div>
     </div>
   );
 }
@@ -647,13 +673,11 @@ export function SettingsPanel() {
   const doImport = () => {
     try {
       const json = decodeURIComponent(escape(atob(importText.trim())));
-      if (!deserialize(json)) {
+      if (applyImportedSave(json)) {
+        setMsg('Сейв принят! Зимуем дальше.');
+      } else {
         setMsg('Это не похоже на сейв «Топки». Проверь текст.');
-        return;
       }
-      localStorage.setItem(SAVE_KEY, json);
-      setMsg('Сейв принят! Перезагружаю…');
-      window.setTimeout(() => window.location.reload(), 900);
     } catch { setMsg('Кажется, сейв повреждён. Проверь текст.'); }
   };
 
@@ -696,6 +720,459 @@ export function SettingsPanel() {
         <p><b className="text-slate-200">«Белая Тишина: Топка»</b> — полярная инкременталка. Русский Север, 1917 год,
         до парохода — вся зима. Автор игры — <b className="text-slate-200">DirtyG</b>.</p>
         <p className="mt-2 text-xs">Сеанс: {formatTime(s.playTime)}. Сейв живёт в этом браузере.</p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ПОСЁЛОК — обыск 26 мест с настоящими лут-таблицами
+// ============================================================
+
+const HIDDEN_LOC_RU = 'Тайник';
+
+export function VillagePanel() {
+  const s = useGame();
+  const prof = profession(s);
+  const uniq = uniqueItems(s);
+  const [filter, setFilter] = useState<'all' | 'new'>('all');
+
+  const rows = BUILDINGS.map((b, i) => {
+    const unlocked = buildingUnlocked(s, i);
+    const cost = scavengeCost(s, i);
+    const canBuy = unlocked && s.wood >= cost;
+    const hidden = b.unlock >= 1e12;
+    return { b, i, unlocked, cost, canBuy, hidden };
+  }).filter((r) => r.unlocked || r.b.unlock <= s.totalWood * 50);
+
+  return (
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Package className="w-6 h-6 text-amber-300" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="font-black text-lg">Склад зимовщика</div>
+            <p className="text-xs text-slate-400">
+              {uniq} из {TOTAL_ITEMS} предметов репозитория. Каждый уникальный — +0.5% ко всему производству, трофеи — +2%.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="font-black text-2xl text-amber-200 tabular-nums">{uniq}</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">предметов</div>
+          </div>
+        </div>
+        <div className="h-2 bg-white/10 rounded-full mt-3 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-amber-500 to-teal-400 rounded-full transition-all" style={{ width: `${(uniq / TOTAL_ITEMS) * 100}%` }} />
+        </div>
+        <p className="text-[11px] text-slate-500 mt-2">
+          {prof ? `Профессия: ${prof.name} — ${prof.bonus}. ` : ''}
+          Дубликаты сдаёт барахолка — дровами по курсу редкости.
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setFilter('all')} className={`rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer transition-colors ${filter === 'all' ? 'bg-amber-500/20 text-amber-200 border border-amber-400/40' : 'bg-white/[0.04] text-slate-400 border border-white/10'}`}>Все места</button>
+        <button type="button" onClick={() => setFilter('new')} className={`rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer transition-colors ${filter === 'new' ? 'bg-amber-500/20 text-amber-200 border border-amber-400/40' : 'bg-white/[0.04] text-slate-400 border border-white/10'}`}>Ещё не обысканы</button>
+      </div>
+
+      {rows
+        .filter((r) => filter === 'all' || r.unlocked === false || s.searches[r.i] === 0)
+        .map(({ b, i, unlocked, cost, canBuy, hidden }) => {
+          const searched = s.searches[i];
+          const known = new Set(b.tables.flatMap((t) => (ALL_ITEMS as Record<string, unknown>)[t] ? [] : []));
+          return (
+            <div key={b.key} className="panel-card rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+              <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                {hidden ? <Landmark className="w-5 h-5 text-purple-300" aria-hidden /> : <Search className="w-5 h-5 text-amber-200/80" aria-hidden />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="font-bold text-sm sm:text-base">{hidden ? `${b.name} (${HIDDEN_LOC_RU})` : b.name}</span>
+                  {searched > 0 && <span className="text-xs font-black text-teal-300 bg-teal-400/10 rounded-full px-2 py-0.5">обыщено ×{formatFull(searched)}</span>}
+                </div>
+                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-snug">{b.desc}</p>
+              </div>
+              {unlocked ? (
+                <BuyButton
+                  cost={formatNum(cost)}
+                  currency="дров"
+                  canBuy={canBuy}
+                  onClick={() => actScavenge(i)}
+                  label="Обыскать"
+                />
+              ) : (
+                <div className="shrink-0 text-right">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider">откроется</div>
+                  <div className="text-xs font-bold text-slate-400 tabular-nums">при {formatNum(b.unlock)} дров всего</div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ХОЗЯЙСТВО — 284 рецепта оригинальной игры
+// ============================================================
+
+const CRAFT_EFFECT_RU: Record<string, string> = {
+  click: '+2% к силе клика',
+  offline: '+1.5% к оффлайн-доходу',
+  genDisc: '−0.3% к цене генераторов',
+  hunt: '+2% к добыче охоты',
+  coal: '+1.5% к добыче угля',
+  offlineCap: '+20 минут оффлайн-капа',
+  global: '+0.5% ко всему производству',
+};
+
+export function CraftPanel() {
+  const s = useGame();
+  const ef = craftEffects(s);
+  const [cat, setCat] = useState<string>('all');
+  const cats = ['all', ...Object.keys(CAT_RU_CRAFT)];
+
+  const available = CRAFTS.filter((c) => craftUnlocked(s, c.id));
+  const nextLocked = CRAFTS.find((c) => !craftUnlocked(s, c.id));
+  const done = new Set(s.crafted);
+  const shown = available
+    .filter((c) => cat === 'all' || c.cat === cat)
+    .filter((c) => !done.has(c.id))
+    .slice(0, 40);
+  const doneCount = s.crafted.length;
+
+  return (
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <CookingPot className="w-6 h-6 text-amber-300" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <div className="font-black text-lg">Ремёсла зимовки</div>
+            <p className="text-xs text-slate-400">Освоено {doneCount} из {CRAFTS.length} рецептов оригинальной игры. Материалы заготавливает артель — плати дровами. Найденные на складе ингредиенты снижают цену до 35%.</p>
+          </div>
+          <div className="text-right">
+            <div className="font-black text-2xl text-amber-200 tabular-nums">{Math.round((doneCount / CRAFTS.length) * 100)}%</div>
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider">мастерство</div>
+          </div>
+        </div>
+        <div className="h-2 bg-white/10 rounded-full mt-3 overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all" style={{ width: `${(doneCount / CRAFTS.length) * 100}%` }} />
+        </div>
+        {doneCount > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3 text-[10px] font-bold">
+            {ef.click > 0 && <span className="rounded-full bg-amber-400/10 text-amber-200 px-2 py-1">клик +{Math.round(ef.click * 100)}%</span>}
+            {ef.offline > 0 && <span className="rounded-full bg-sky-400/10 text-sky-200 px-2 py-1">оффлайн +{Math.round(ef.offline * 100)}%</span>}
+            {ef.genDisc > 0 && <span className="rounded-full bg-emerald-400/10 text-emerald-200 px-2 py-1">генераторы −{Math.round(ef.genDisc * 100)}%</span>}
+            {ef.hunt > 0 && <span className="rounded-full bg-red-400/10 text-red-200 px-2 py-1">охота +{Math.round(ef.hunt * 100)}%</span>}
+            {ef.coal > 0 && <span className="rounded-full bg-slate-300/10 text-slate-200 px-2 py-1">уголь +{Math.round(ef.coal * 100)}%</span>}
+            {ef.offlineCapMin > 0 && <span className="rounded-full bg-teal-400/10 text-teal-200 px-2 py-1">оффлайн-кап +{ef.offlineCapMin} мин</span>}
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {cats.map((c) => (
+          <button key={c} type="button" onClick={() => setCat(c)}
+            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold cursor-pointer transition-colors ${cat === c ? 'bg-amber-500/20 text-amber-200 border border-amber-400/40' : 'bg-white/[0.04] text-slate-400 border border-white/10'}`}>
+            {c === 'all' ? `Все (${CRAFTS.length - doneCount})` : `${CAT_RU_CRAFT[c]} (${CRAFTS.filter((x) => x.cat === c && !done.has(x.id)).length})`}
+          </button>
+        ))}
+      </div>
+
+      {shown.map((c) => {
+        const cost = craftCost(s, c.id);
+        const canBuy = s.wood >= cost;
+        return (
+          <div key={c.id} className="panel-card rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+              <CookingPot className="w-5 h-5 text-amber-200/80" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-bold text-sm sm:text-base">{c.name}</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{CAT_RU_CRAFT[c.cat] || c.cat}</span>
+              </div>
+              {c.desc && <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-snug line-clamp-2">{c.desc}</p>}
+              <p className="text-[11px] sm:text-xs text-emerald-300/90 mt-0.5 font-semibold">{CRAFT_EFFECT_RU[c.effect]}</p>
+            </div>
+            <BuyButton cost={formatNum(cost)} currency="дров" canBuy={canBuy} onClick={() => actCraft(c.id, c.name)} label="Освоить" />
+          </div>
+        );
+      })}
+
+      {shown.length === 0 && (
+        <div className="panel-card rounded-2xl p-6 text-center text-sm text-slate-400">
+          {available.length === 0 || doneCount === CRAFTS.filter((c) => cat === 'all' || c.cat === cat).length
+            ? 'Все рецепты этой линейки освоены. Мастер!'
+            : 'Пока ничего не открыто — копи дрова.'}
+        </div>
+      )}
+
+      {nextLocked && (
+        <div className="panel-card rounded-xl p-3 text-center text-xs text-slate-500">
+          Следующее ремесло откроется при {formatNum(nextLocked.unlock)} дров за всё время
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ОХОТА — 6 целей облавы с настоящими таблицами добычи
+// ============================================================
+
+export function HuntPanel() {
+  const s = useGame();
+  const hunts = totalHunts(s);
+  const ef = craftEffects(s);
+
+  return (
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-4 flex flex-wrap items-center gap-3">
+        <PawPrint className="w-6 h-6 text-red-300" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="font-black text-lg">Промысел</div>
+          <p className="text-xs text-slate-400">
+            {hunts} облав за всё время — каждая +0.3% ко всему производству. Снаряжение охотника: +{Math.round(ef.hunt * 100)}% к добыче.
+            В трофейных облавах — шанс на редчайшие находки.
+          </p>
+        </div>
+      </div>
+
+      {BEASTS.map((b, i) => {
+        const unlocked = huntUnlocked(s, i);
+        const cost = huntCost(s, i);
+        const canBuy = unlocked && s.wood >= cost;
+        const count = s.hunts[i];
+        return (
+          <div key={b.key} className="panel-card rounded-xl p-3 sm:p-4 flex items-center gap-3 sm:gap-4">
+            <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+              <Crosshair className={`w-5 h-5 ${b.danger >= 5 ? 'text-red-300' : 'text-amber-200/80'}`} aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-bold text-sm sm:text-base">{b.name}</span>
+                <span className="text-[10px] font-bold text-red-300/80">опасность {b.danger}/10</span>
+                {count > 0 && <span className="text-xs font-black text-red-200 bg-red-400/10 rounded-full px-2 py-0.5">облав ×{formatFull(count)}</span>}
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 leading-snug">{b.desc}</p>
+              {b.bonusTable && <p className="text-[11px] text-purple-300/90 mt-0.5 font-semibold">Шанс трофея: редчайшая добыча</p>}
+            </div>
+            {unlocked ? (
+              <BuyButton cost={formatNum(cost)} currency="дров" canBuy={canBuy} onClick={() => actHunt(i)} label="Облава" />
+            ) : (
+              <div className="shrink-0 text-right">
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider">откроется</div>
+                <div className="text-xs font-bold text-slate-400 tabular-nums">при {formatNum(b.unlock)} дров всего</div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <div className="panel-card rounded-2xl p-4">
+        <h3 className="font-black text-base text-slate-200 mb-2 flex items-center gap-2"><BookOpen className="w-4 h-4 text-teal-300" aria-hidden /> Бестиарий Тихой</h3>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {BESTIARY.map((a) => (
+            <details key={a.id} className="rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2">
+              <summary className="text-xs font-bold text-slate-200 cursor-pointer list-none flex items-center justify-between">
+                <span>{a.name}</span>
+                <span className={`text-[10px] font-black ${a.danger >= 5 ? 'text-red-300' : a.danger >= 1 ? 'text-amber-300' : 'text-slate-500'}`}>опасность {a.danger}</span>
+              </summary>
+              <p className="text-[11px] text-slate-400 mt-1.5 leading-snug whitespace-pre-line">{a.text}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ЛЕТОПИСЬ — записки, газета, радио, правила, календарь
+// ============================================================
+
+export function ChroniclePanel() {
+  const s = useGame();
+  const [section, setSection] = useState<'notes' | 'gazette' | 'radio' | 'rules' | 'calendar'>('notes');
+  const cal = calendarDay(s.playTime);
+  const notesFound = NOTES.filter((n) => s.notesFound.includes(n.id));
+  const radioList = RADIO.slice(0, s.radioHeard.length);
+
+  const sections: Array<[typeof section, string, number, number]> = [
+    ['notes', 'Записки', notesFound.length, NOTES.length],
+    ['gazette', 'Газета', s.gazetteSeen.length, GAZETTE.length],
+    ['radio', 'Радио', s.radioHeard.length, RADIO.length],
+    ['rules', 'Правила зимовки', 0, 0],
+    ['calendar', 'Календарь', cal.n, 60],
+  ];
+
+  return (
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-4">
+        <div className="font-black text-lg flex items-center gap-2"><ScrollText className="w-5 h-5 text-teal-300" aria-hidden /> Летопись Пристани-Тихой</div>
+        <p className="text-xs text-slate-400 mt-1">
+          День {cal.n} из 60 — святой {cal.name}. {cal.note}
+        </p>
+      </div>
+
+      <div className="flex gap-1.5 flex-wrap">
+        {sections.map(([id, label, a, b]) => (
+          <button key={id} type="button" onClick={() => setSection(id)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold cursor-pointer transition-colors ${section === id ? 'bg-teal-500/20 text-teal-200 border border-teal-400/40' : 'bg-white/[0.04] text-slate-400 border border-white/10'}`}>
+            {label}{b > 0 && ` ${a}/${b}`}
+          </button>
+        ))}
+      </div>
+
+      {section === 'notes' && (
+        <div className="space-y-2">
+          {notesFound.length === 0 && <div className="panel-card rounded-2xl p-6 text-center text-sm text-slate-400">Записок пока нет. Обыскивай посёлок — бумага переживает людей.</div>}
+          {notesFound.map((n) => (
+            <details key={n.id} className="panel-card rounded-xl px-4 py-3">
+              <summary className="text-sm font-bold text-slate-100 cursor-pointer">{n.title}</summary>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed whitespace-pre-line">{n.text}</p>
+            </details>
+          ))}
+        </div>
+      )}
+
+      {section === 'gazette' && (
+        <div className="space-y-2">
+          {s.gazetteSeen.length === 0 && <div className="panel-card rounded-2xl p-6 text-center text-sm text-slate-400">Газет нет. Первая выйдет при 1 тысяче дров.</div>}
+          {GAZETTE.slice(0, s.gazetteSeen.length).map((g) => (
+            <details key={g.id} className="panel-card rounded-xl px-4 py-3">
+              <summary className="text-sm font-black text-slate-100 cursor-pointer">
+                <span className="inline-flex items-center gap-1.5"><Newspaper className="w-3.5 h-3.5 text-amber-300" aria-hidden /> {g.title} — {g.date}</span>
+              </summary>
+              <div className="grid gap-3 mt-2 sm:grid-cols-2">
+                {g.cols.map((col, i) => (
+                  <div key={i} className="rounded-lg bg-white/[0.03] p-3">
+                    <div className="text-[11px] font-black text-amber-200/90 uppercase tracking-wide">{col.h}</div>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{col.t}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+
+      {section === 'radio' && (
+        <div className="space-y-2">
+          {radioList.length === 0 && <div className="panel-card rounded-2xl p-6 text-center text-sm text-slate-400">Эфир молчит. Передачи принимаются по мере накопления депеш.</div>}
+          {radioList.map((r) => (
+            <div key={r.id} className="panel-card rounded-xl px-4 py-3 flex gap-3">
+              <Radio className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" aria-hidden />
+              <p className="text-xs text-slate-300 leading-relaxed">{r.text}</p>
+            </div>
+          ))}
+          {s.radioHeard.length < RADIO.length && (
+            <div className="panel-card rounded-xl p-3 text-center text-xs text-slate-500">
+              Следующая передача — при {formatNum(radioThreshold(s.radioHeard.length))} депеш (сейчас {formatNum(s.totalDepeshi)})
+            </div>
+          )}
+        </div>
+      )}
+
+      {section === 'rules' && (
+        <div className="space-y-2">
+          {WINTER_RULES.map((r) => (
+            <div key={r.n} className="panel-card rounded-xl px-4 py-3">
+              <div className="text-sm font-black text-slate-100">Правило {r.n}. {r.title}</div>
+              <p className="text-xs text-amber-200/90 font-bold mt-1">«{r.law}»</p>
+              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{r.story}</p>
+              <p className="text-[11px] text-teal-300/70 mt-1">{r.why}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {section === 'calendar' && (
+        <div className="panel-card rounded-2xl p-4">
+          <div className="text-sm font-black text-slate-100 mb-3">60 дней зимовки (святцы 1917 года)</div>
+          <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 60 }, (_, i) => i + 1).map((d) => {
+              const day = calendarDay(d * 600 - 300);
+              const passed = cal.n >= d;
+              return (
+                <div key={d} className={`rounded-lg px-2.5 py-1.5 text-xs ${passed ? 'bg-amber-400/10 border border-amber-400/20' : 'bg-white/[0.02] border border-white/5'}`}>
+                  <span className={`font-black ${passed ? 'text-amber-200' : 'text-slate-500'}`}>Д{d}</span>
+                  <span className="text-slate-400 ml-1.5">{day.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ЭПИЛОГИ — 7 финалов оригинальной игры
+// ============================================================
+
+export function EndingsPanel() {
+  const s = useGame();
+  return (
+    <div className="space-y-3">
+      <div className="panel-card rounded-2xl p-4 flex flex-wrap items-center gap-3">
+        <MoonStar className="w-6 h-6 text-purple-300" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="font-black text-lg">Эпилоги</div>
+          <p className="text-xs text-slate-400">{s.endings.length} из {ENDINGS.length} финалов открыто. Семь концовок оригинальной «Белой Тишины» — здесь они стали целями.</p>
+        </div>
+      </div>
+      {ENDINGS.map((e) => {
+        const got = s.endings.includes(e.id);
+        return (
+          <details key={e.id} className={`panel-card rounded-xl px-4 py-3 ${got ? 'border border-purple-400/30' : 'opacity-70'}`} open={got}>
+            <summary className="text-sm font-black cursor-pointer flex items-center gap-2 flex-wrap">
+              {got ? <MoonStar className="w-4 h-4 text-purple-300" aria-hidden /> : <Lock className="w-4 h-4 text-slate-500" aria-hidden />}
+              <span className={got ? 'text-purple-200' : 'text-slate-400'}>{got ? e.title : '???'}</span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${got ? 'text-purple-300/80' : 'text-slate-500'}`}>{e.kind}</span>
+            </summary>
+            <p className="text-[11px] text-slate-400 mt-2">{got ? e.condition : `Условие: ${e.condition}`}</p>
+            {got && (
+              <div className="mt-2 rounded-lg bg-black/30 border border-purple-400/20 p-3">
+                <p className="text-xs text-amber-200/90 italic mb-2">{e.epigraph}</p>
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">{e.text}</p>
+              </div>
+            )}
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================
+// v2: ПРОФЕССИИ — выбор при новой экспедиции
+// ============================================================
+
+export function ProfessionPicker({ onDone }: { onDone: () => void }) {
+  const s = useGame();
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Выбор профессии">
+      <div className="panel-card rounded-2xl p-6 max-w-lg w-full bg-[#0a1226] max-h-[90vh] overflow-y-auto game-scroll">
+        <h2 className="font-black text-xl text-amber-100">Кем зимовать?</h2>
+        <p className="text-xs text-slate-400 mt-1 mb-4">Профессии из оригинальной игры. Стартовый набор — сразу на склад, бонус — до конца экспедиции.</p>
+        <div className="space-y-2">
+          {PROFESSIONS.map((p) => (
+            <button key={p.id} type="button"
+              onClick={() => { actChooseProfession(p.id, p.name); onDone(); }}
+              className={`w-full text-left rounded-xl border px-4 py-3 transition-colors cursor-pointer ${s.profession === p.id ? 'border-amber-400/50 bg-amber-500/10' : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.07]'}`}>
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="font-black text-sm text-slate-100">{p.name}</span>
+                <span className="text-[10px] font-bold text-amber-300">{p.bonus}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 leading-snug">{p.desc}</p>
+              <p className="text-[10px] text-slate-500 mt-1">С собой: {p.items.slice(0, 5).map((it) => `${itemName(it.id)}${it.n > 1 ? '×' + it.n : ''}`).join(', ')}{p.items.length > 5 ? '…' : ''}</p>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

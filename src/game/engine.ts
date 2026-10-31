@@ -9,9 +9,15 @@ import {
   COAL_UNLOCK, TELEGRAPH_UNLOCK, PRESTIGE_UNLOCK,
   FURNACE_BASE_COST, FURNACE_GROWTH, FURNACE_STEP,
 } from './content';
+import {
+  BUILDINGS, BEASTS, CRAFTS, PROFESSIONS, ENDINGS, NOTES, RADIO, GAZETTE, DREAMS,
+  SCAVENGE_GROWTH, HUNT_GROWTH, TROPHY_CHANCE, ALL_ITEMS,
+  rollLoot, itemName, itemRefund, craftDiscount, churchItems,
+  type CraftDef, type ProfessionDef, type EndingDef,
+} from './legacy';
 
 export const SAVE_KEY = 'tishina-topka-save-v1';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface GameState {
   rev: number; // счётчик изменений для React-снапшотов
@@ -44,11 +50,26 @@ export interface GameState {
   offlineEarned: number; // последний оффлайн-доход (для модалки)
   bestWps: number;
   milestones: string[];// показанные вехи
+  // ---- v2: системы из репозитория ----
+  profession: string;              // текущая профессия (6 из оригинала)
+  searches: number[];              // обысков по зданиям (26) — сбрасывается престижем
+  itemsFound: Record<string, number>; // склад: предмет → сколько (навсегда)
+  crafted: string[];               // освоенные рецепты (навсегда)
+  runHunts: number[];              // облавы за экспедицию (6) — растят цену
+  hunts: number[];                 // облавы всего (6) — бонусы и эпилоги
+  notesFound: string[];            // записки (121) — навсегда
+  radioHeard: string[];            // радиопередачи (64) — навсегда
+  gazetteSeen: string[];           // выпуски газеты (5) — навсегда
+  endings: string[];               // полученные эпилоги (7) — навсегда
+  lastDream: string | null;        // сон после последнего престижа
 }
 
 export interface TickResult {
   newAchievements: string[];
   auroraStarted: boolean;
+  newEndings: EndingDef[];         // полученные эпилоги
+  radioHeard: typeof RADIO[number] | null; // новая передача
+  gazetteSeen: typeof GAZETTE[number] | null; // новый выпуск газеты
 }
 
 export function createInitialState(): GameState {
@@ -75,10 +96,111 @@ export function createInitialState(): GameState {
     offlineEarned: 0,
     bestWps: 0,
     milestones: [],
+    // v2
+    profession: 'telegraph',
+    searches: new Array(BUILDINGS.length).fill(0),
+    itemsFound: {},
+    crafted: [],
+    runHunts: new Array(BEASTS.length).fill(0),
+    hunts: new Array(BEASTS.length).fill(0),
+    notesFound: [],
+    radioHeard: [],
+    gazetteSeen: [],
+    endings: [],
+    lastDream: null,
   };
 }
 
 const has = (list: string[], id: string) => list.indexOf(id) >= 0;
+
+// ---------------- профессия и склад ----------------
+
+const CRAFTS_INDEX = new Map<string, CraftDef>(CRAFTS.map((c) => [c.id, c]));
+const COOK_IDS = CRAFTS.filter((c) => c.cat === 'cook').map((c) => c.id);
+const CHURCH_ITEMS = churchItems();
+const CAT_TOTALS: Record<string, number> = {};
+for (const c of CRAFTS) CAT_TOTALS[c.cat] = (CAT_TOTALS[c.cat] || 0) + 1;
+const BANDIT_I = BEASTS.findIndex((b) => b.key === 'bandit');
+const WOLF_I = BEASTS.findIndex((b) => b.key === 'wolf');
+
+export function profession(s: GameState): ProfessionDef | null {
+  return PROFESSIONS.find((p) => p.id === s.profession) || null;
+}
+
+/** Кэш коллекции: uniqueItems/trophyCount гоняются каждый тик и клик. */
+const collCache = new WeakMap<object, { uniq: number; trophies: number }>();
+function collInfo(s: GameState): { uniq: number; trophies: number } {
+  const n = Object.keys(s.itemsFound).length;
+  const c = collCache.get(s);
+  if (c && c.uniq === n) return c;
+  let tr = 0;
+  for (const id of Object.keys(s.itemsFound)) {
+    const t = ALL_ITEMS[id];
+    if (t && (t.tags || []).indexOf('trophy') >= 0) tr++;
+  }
+  const info = { uniq: n, trophies: tr };
+  collCache.set(s, info);
+  return info;
+}
+
+/** Уникальных предметов на складе. */
+export function uniqueItems(s: GameState): number {
+  return collInfo(s).uniq;
+}
+
+function trophyCount(s: GameState): number {
+  return collInfo(s).trophies;
+}
+
+/** Облав за всё время по всем зверям. */
+export function totalHunts(s: GameState): number {
+  return s.hunts.reduce((a, b) => a + b, 0);
+}
+
+export interface CraftEffects {
+  click: number;      // + к силе клика
+  offline: number;    // + к оффлайн-доходу
+  genDisc: number;    // − к цене генераторов
+  hunt: number;       // + к добыче охоты
+  coal: number;       // + к добыче угля
+  offlineCapMin: number; // + минут к оффлайн-капу
+  global: number;     // + к общему множителю
+}
+
+/** Эффекты крафта: каждый рецепт — маленький вечный бонус своей категории. */
+export function craftEffects(s: GameState): CraftEffects {
+  const e: CraftEffects = { click: 0, offline: 0, genDisc: 0, hunt: 0, coal: 0, offlineCapMin: 0, global: 0 };
+  const perCat: Record<string, number> = {};
+  for (const id of s.crafted) {
+    const c = CRAFTS_INDEX.get(id);
+    if (!c) continue;
+    perCat[c.cat] = (perCat[c.cat] || 0) + 1;
+    switch (c.effect) {
+      case 'click': e.click += 0.02; break;
+      case 'offline': e.offline += 0.015; break;
+      case 'genDisc': e.genDisc += 0.003; break;
+      case 'hunt': e.hunt += 0.02; break;
+      case 'coal': e.coal += 0.015; break;
+      case 'offlineCap': e.offlineCapMin += 20; break;
+      default: e.global += 0.005;
+    }
+  }
+  // полностью освоенная категория удваивает свой эффект (тоталы предвычислены)
+  for (const cat of Object.keys(CAT_TOTALS)) {
+    if ((perCat[cat] || 0) >= CAT_TOTALS[cat]) {
+      switch (cat) {
+        case 'cook': e.click *= 2; break;
+        case 'survival': e.offline *= 2; break;
+        case 'carpentry': e.genDisc *= 2; break;
+        case 'tailor': e.coal *= 2; break;
+        case 'ammo': case 'weapon': e.hunt *= 2; break;
+        case 'med': e.offlineCapMin *= 2; break;
+        default: e.global *= 2; break;
+      }
+    }
+  }
+  return e;
+}
 
 // ---------------- selectors ----------------
 
@@ -114,6 +236,9 @@ export function globalMult(s: GameState): number {
   m *= 1 + starBonusPerStar(s) * s.totalStars;
   m *= 1 + 0.01 * s.achievements.length;
   if (has(s.starUpgrades, 'ship')) m *= 10;
+  // v2: склад (уникальные предметы и трофеи), крафт и охотничьи трофеи
+  const ef = craftEffects(s);
+  m *= 1 + uniqueItems(s) * 0.005 + trophyCount(s) * 0.02 + ef.global + totalHunts(s) * 0.003;
   if (isAuroraActive(s)) {
     m *= auroraMultiplier(s);
   }
@@ -140,6 +265,10 @@ export function clickPower(s: GameState): number {
     if (u.kind === 'clickMult') mult *= u.value;
     if (u.kind === 'clickShare') share += u.value;
   }
+  // v2: кулинарное мастерство и профессия
+  const prof = profession(s);
+  mult *= 1 + craftEffects(s).click;
+  if (prof && prof.effect.clickMult) mult *= prof.effect.clickMult;
   return mult + share * woodPerSec(s);
 }
 
@@ -152,17 +281,26 @@ export function autoClickRate(s: GameState): number {
 export function coalPerSec(s: GameState): number {
   let base = 0;
   for (let i = 0; i < MINES.length; i++) base += s.mines[i] * MINES[i].baseProd;
-  return base * (has(s.starUpgrades, 'rich_vein') ? 2 : 1);
+  // v2: портновское дело утепляет шахты
+  return base * (has(s.starUpgrades, 'rich_vein') ? 2 : 1) * (1 + craftEffects(s).coal);
 }
 
 export function depeshiPerSec(s: GameState): number {
   let base = 0;
   for (let i = 0; i < TELEGRAPHS.length; i++) base += s.telegraphs[i] * TELEGRAPHS[i].baseProd;
+  // v2: телеграфист слышит эфир лучше
+  const prof = profession(s);
+  if (prof && prof.effect.depeshiMult) base *= prof.effect.depeshiMult;
   return base;
 }
 
 export function genCostReduction(s: GameState): number {
-  return has(s.inventions, 'logistics') ? 0.95 : 1;
+  // v2: плотницкое дело + профессия «Плотник»
+  const prof = profession(s);
+  let k = has(s.inventions, 'logistics') ? 0.95 : 1;
+  k *= Math.max(0.6, 1 - craftEffects(s).genDisc);
+  if (prof && prof.effect.genDisc) k *= prof.effect.genDisc;
+  return k;
 }
 
 export function upgradeCostReduction(s: GameState): number {
@@ -328,6 +466,16 @@ export function doPrestige(s: GameState): number {
   if (gain <= 0) return 0;
   const keepAchievements = s.achievements;
   const keepMilestones = s.milestones;
+  // v2: что переживает экспедицию — склад, рецепты, записки, радио, газета, эпилоги, облавы (итог)
+  const keepItems = s.itemsFound;
+  const keepCrafted = s.crafted;
+  const keepNotes = s.notesFound;
+  const keepRadio = s.radioHeard;
+  const keepGazette = s.gazetteSeen;
+  const keepEndings = s.endings;
+  const keepHunts = s.hunts;
+  const keepProfession = s.profession;
+  const dream = DREAMS.length ? DREAMS[Math.floor(Math.random() * DREAMS.length)] : null;
   const fresh = createInitialState();
   // что переживает экспедицию
   fresh.totalWood = s.totalWood;
@@ -345,6 +493,16 @@ export function doPrestige(s: GameState): number {
   fresh.totalCoal = s.totalCoal;
   fresh.totalDepeshi = s.totalDepeshi;
   fresh.aurorasSeen = s.aurorasSeen;
+  // v2: вечные ценности зимовщика
+  fresh.itemsFound = keepItems;
+  fresh.crafted = keepCrafted;
+  fresh.notesFound = keepNotes;
+  fresh.radioHeard = keepRadio;
+  fresh.gazetteSeen = keepGazette;
+  fresh.endings = keepEndings;
+  fresh.hunts = keepHunts;
+  fresh.profession = keepProfession;
+  fresh.lastDream = dream ? dream.txt : null;
   if (has(s.starUpgrades, 'capital')) fresh.wood = 100_000;
   else if (has(s.starUpgrades, 'legacy')) fresh.wood = 1_000;
   fresh.runWood = fresh.wood;
@@ -352,6 +510,197 @@ export function doPrestige(s: GameState): number {
   // копируем в текущий объект (React держит ссылку)
   Object.assign(s, fresh);
   return gain;
+}
+
+// ---------------- v2: посёлок, хозяйство, охота ----------------
+
+export function scavengeCost(s: GameState, i: number): number {
+  const b = BUILDINGS[i];
+  if (!b) return Infinity;
+  const prof = profession(s);
+  return b.baseCost * Math.pow(SCAVENGE_GROWTH, s.searches[i]) * ((prof && prof.effect.scavengeDisc) || 1);
+}
+
+export function buildingUnlocked(s: GameState, i: number): boolean {
+  const b = BUILDINGS[i];
+  return !!b && s.totalWood >= b.unlock;
+}
+
+export interface ScavengeResult {
+  building: string;
+  found: Array<{ id: string; n: number; isNew: boolean; name: string }>;
+  refund: number;
+  note: { id: string; title: string } | null;
+}
+
+/** Обыск здания: лут из настоящих таблиц оригинальной игры. */
+export function doScavenge(s: GameState, i: number, rand: () => number = Math.random): ScavengeResult | null {
+  if (!buildingUnlocked(s, i)) return null;
+  const cost = scavengeCost(s, i);
+  if (!Number.isFinite(cost) || s.wood < cost) return null;
+  s.wood -= cost;
+  s.searches[i] += 1;
+  const b = BUILDINGS[i];
+  const tableId = b.tables[Math.floor(rand() * b.tables.length)];
+  const rolls = rollLoot(tableId, rand);
+  const found: ScavengeResult['found'] = [];
+  let refund = 0;
+  for (const r of rolls) {
+    const isNew = !s.itemsFound[r.id];
+    s.itemsFound[r.id] = (s.itemsFound[r.id] || 0) + r.n;
+    if (!isNew) refund += itemRefund(r.id) * r.n;
+    found.push({ ...r, isNew, name: itemName(r.id) });
+  }
+  // записка: 12% за обыск, пока есть ненайденные (шанс проверяем ДО фильтра)
+  let note: ScavengeResult['note'] = null;
+  if (s.notesFound.length < NOTES.length && rand() < 0.12) {
+    const foundSet = new Set(s.notesFound);
+    const unfound = NOTES.filter((n) => !foundSet.has(n.id));
+    if (unfound.length > 0) {
+      const pick = unfound[Math.floor(rand() * unfound.length)];
+      s.notesFound.push(pick.id);
+      note = { id: pick.id, title: pick.title };
+    }
+  }
+  if (refund > 0) {
+    s.wood += refund; s.runWood += refund; s.totalWood += refund;
+  }
+  return { building: b.name, found, refund, note };
+}
+
+export function craftUnlocked(s: GameState, id: string): boolean {
+  const c = CRAFTS_INDEX.get(id);
+  return !!c && s.totalWood >= c.unlock;
+}
+
+export function craftCost(s: GameState, id: string): number {
+  const c = CRAFTS_INDEX.get(id);
+  if (!c) return Infinity;
+  const disc = craftDiscount((iid) => s.itemsFound[iid] || 0, c);
+  const prof = profession(s);
+  const profDisc = prof && prof.effect.cookDisc && c.cat === 'cook' ? prof.effect.cookDisc : 1;
+  const cost = c.cost * (1 - disc) * profDisc;
+  return Number.isFinite(cost) && cost > 0 ? cost : Infinity;
+}
+
+/** Освоить рецепт: предмет попадает на склад навсегда. */
+export function doCraft(s: GameState, id: string): boolean {
+  const c = CRAFTS_INDEX.get(id);
+  if (!c || has(s.crafted, id) || !craftUnlocked(s, id)) return false;
+  const cost = craftCost(s, id);
+  if (!Number.isFinite(cost) || s.wood < cost) return false;
+  s.wood -= cost;
+  s.crafted.push(id);
+  for (const o of c.out) s.itemsFound[o.id] = (s.itemsFound[o.id] || 0) + o.n;
+  return true;
+}
+
+export function huntCost(s: GameState, i: number): number {
+  const b = BEASTS[i];
+  if (!b) return Infinity;
+  const prof = profession(s);
+  return b.baseCost * Math.pow(HUNT_GROWTH, s.runHunts[i]) * ((prof && prof.effect.huntDisc) || 1);
+}
+
+export function huntUnlocked(s: GameState, i: number): boolean {
+  const b = BEASTS[i];
+  return !!b && s.totalWood >= b.unlock;
+}
+
+export interface HuntResult {
+  beast: string;
+  loot: Array<{ id: string; n: number; isNew: boolean; name: string }>;
+  trophy: boolean;
+  refund: number;
+}
+
+/** Облава: трофеи из настоящих таблиц добычи. */
+export function doHunt(s: GameState, i: number, rand: () => number = Math.random): HuntResult | null {
+  if (!huntUnlocked(s, i)) return null;
+  const cost = huntCost(s, i);
+  if (!Number.isFinite(cost) || s.wood < cost) return null;
+  s.wood -= cost;
+  s.runHunts[i] += 1;
+  s.hunts[i] += 1;
+  const beast = BEASTS[i];
+  let tableId = beast.table;
+  let trophy = false;
+  if (beast.bonusTable && rand() < TROPHY_CHANCE) {
+    tableId = beast.bonusTable;
+    trophy = true;
+  }
+  let rolls = rollLoot(tableId, rand);
+  // удачная облава: доп. бросок от охотничьего снаряжения
+  const power = craftEffects(s).hunt;
+  if (rolls.length > 0 && rand() < Math.min(0.8, power)) {
+    rolls = rolls.concat(rollLoot(tableId, rand));
+  }
+  const loot: HuntResult['loot'] = [];
+  let refund = 0;
+  for (const r of rolls) {
+    const isNew = !s.itemsFound[r.id];
+    s.itemsFound[r.id] = (s.itemsFound[r.id] || 0) + r.n;
+    if (!isNew) refund += itemRefund(r.id) * r.n;
+    loot.push({ ...r, isNew, name: itemName(r.id) });
+  }
+  if (refund > 0) {
+    s.wood += refund; s.runWood += refund; s.totalWood += refund;
+  }
+  return { beast: beast.name, loot, trophy, refund };
+}
+
+/** Смена профессии (после отправки экспедиции). Стартовый набор — на склад. */
+export function chooseProfession(s: GameState, id: string): boolean {
+  const p = PROFESSIONS.find((x) => x.id === id);
+  if (!p) return false;
+  s.profession = id;
+  for (const it of p.items) s.itemsFound[it.id] = (s.itemsFound[it.id] || 0) + it.n;
+  return true;
+}
+
+// ---------------- v2: эпилоги, радио, газета ----------------
+
+function endingReached(s: GameState, id: string): boolean {
+  switch (id) {
+    case 'ship': return has(s.starUpgrades, 'ship');
+    case 'wintering': return s.playTime >= 360_000;
+    // ранние выходы по счётчикам — проверка каждый тик должна быть дешёвой
+    case 'schemnik':
+      if (Object.keys(s.itemsFound).length < CHURCH_ITEMS.length) return false;
+      return CHURCH_ITEMS.every((iid) => s.itemsFound[iid] > 0);
+    case 'ataman': return BANDIT_I >= 0 && s.hunts[BANDIT_I] >= 50;
+    case 'family': {
+      if (s.crafted.length < COOK_IDS.length) return false;
+      const cs = new Set(s.crafted);
+      return COOK_IDS.every((cid) => cs.has(cid));
+    }
+    case 'wolf_king': return WOLF_I >= 0 && s.hunts[WOLF_I] >= 100;
+    case 'aurora': return s.aurorasSeen >= 100;
+    default: return false;
+  }
+}
+
+export function checkEndings(s: GameState): EndingDef[] {
+  const fresh: EndingDef[] = [];
+  for (const e of ENDINGS) {
+    if (has(s.endings, e.id)) continue;
+    if (endingReached(s, e.id)) {
+      s.endings.push(e.id);
+      fresh.push(e);
+    }
+  }
+  return fresh;
+}
+
+/** Порог депеш для приёма i-й передачи (геометрический). */
+export function radioThreshold(i: number): number {
+  return 4 * Math.pow(1.09, i);
+}
+
+const GAZETTE_MILESTONES = [1e3, 1e6, 1e9, 1e12, 1e15];
+
+export function gazetteMilestone(i: number): number {
+  return GAZETTE_MILESTONES[i] ?? Infinity;
 }
 
 // ---------------- achievements ----------------
@@ -421,7 +770,8 @@ export function checkMilestones(s: GameState): typeof MILESTONES {
 // ---------------- tick ----------------
 
 export function tick(s: GameState, dt: number, rand: () => number = Math.random): TickResult {
-  if (dt <= 0) return { newAchievements: [], auroraStarted: false };
+  const empty: TickResult = { newAchievements: [], auroraStarted: false, newEndings: [], radioHeard: null, gazetteSeen: null };
+  if (dt <= 0) return empty;
   s.playTime += dt;
 
   // Автоклик (изобретения)
@@ -470,20 +820,46 @@ export function tick(s: GameState, dt: number, rand: () => number = Math.random)
     buyFurnace(s, 1);
   }
 
+  // v2: радио — передачи принимаются по мере накопления депеш
+  let radioNews: TickResult['radioHeard'] = null;
+  if (s.radioHeard.length < RADIO.length && s.totalDepeshi >= radioThreshold(s.radioHeard.length)) {
+    const b = RADIO[s.radioHeard.length];
+    if (b) {
+      s.radioHeard.push(b.id);
+      radioNews = b;
+    }
+  }
+
+  // v2: газета — выпуски по вехам добытых дров
+  let gazetteNews: TickResult['gazetteSeen'] = null;
+  if (s.gazetteSeen.length < GAZETTE.length && s.totalWood >= gazetteMilestone(s.gazetteSeen.length)) {
+    const issue = GAZETTE[s.gazetteSeen.length];
+    if (issue) {
+      s.gazetteSeen.push(issue.id);
+      gazetteNews = issue;
+    }
+  }
+
   const newAchievements = checkAchievements(s);
-  return { newAchievements, auroraStarted };
+  const newEndings = checkEndings(s);
+  return { newAchievements, auroraStarted, newEndings, radioHeard: radioNews, gazetteSeen: gazetteNews };
 }
 
 // ---------------- offline ----------------
 
 export function offlineCapHours(s: GameState): number {
-  return has(s.starUpgrades, 'permafrost') ? Infinity : 12;
+  const prof = profession(s);
+  let cap = has(s.starUpgrades, 'permafrost') ? Infinity : 12;
+  if (cap !== Infinity) cap += craftEffects(s).offlineCapMin / 60 + ((prof && prof.effect.offlineCapH) || 0);
+  return cap;
 }
 
 export function offlineEfficiency(s: GameState): number {
-  if (has(s.starUpgrades, 'permafrost')) return 2;
-  if (has(s.inventions, 'thermos')) return 1;
-  return 0.5;
+  const prof = profession(s);
+  let eff = has(s.starUpgrades, 'permafrost') ? 2 : (has(s.inventions, 'thermos') ? 1 : 0.5);
+  eff *= 1 + craftEffects(s).offline; // v2: снаряжение выживания
+  if (prof && prof.effect.offlineEff) eff *= prof.effect.offlineEff;
+  return eff;
 }
 
 export interface OfflineReport { seconds: number; wood: number; coal: number; depeshi: number; }
@@ -544,6 +920,30 @@ export function deserialize(json: string): GameState | null {
     merged.starUpgrades = strList(merged.starUpgrades).filter((id) => STAR_UPGRADES.some((u) => u.id === id));
     merged.achievements = strList(merged.achievements).filter((id) => ACHIEVEMENTS.some((a) => a.id === id));
     merged.milestones = strList(merged.milestones);
+    // v2: массивы новой версии (сейвы v1 получают нули)
+    merged.searches = fixLen(Array.isArray(merged.searches) ? merged.searches : undefined, BUILDINGS.length);
+    merged.runHunts = fixLen(Array.isArray(merged.runHunts) ? merged.runHunts : undefined, BEASTS.length);
+    merged.hunts = fixLen(Array.isArray(merged.hunts) ? merged.hunts : undefined, BEASTS.length);
+    merged.crafted = strList(merged.crafted).filter((id) => CRAFTS.some((c) => c.id === id));
+    const noteIds = new Set(NOTES.map((n) => n.id));
+    merged.notesFound = strList(merged.notesFound).filter((id) => noteIds.has(id));
+    const radioIds = new Set(RADIO.map((r) => r.id));
+    merged.radioHeard = strList(merged.radioHeard).filter((id) => radioIds.has(id));
+    const gazIds = new Set(GAZETTE.map((g) => g.id));
+    merged.gazetteSeen = strList(merged.gazetteSeen).filter((id) => gazIds.has(id));
+    const endIds = new Set(ENDINGS.map((e) => e.id));
+    merged.endings = strList(merged.endings).filter((id) => endIds.has(id));
+    // склад: только известные предметы с положительным счётчиком
+    const itemsObj: Record<string, number> = {};
+    if (data.itemsFound && typeof data.itemsFound === 'object') {
+      for (const [k, v] of Object.entries(data.itemsFound as Record<string, unknown>)) {
+        const n = Number(v);
+        if (ALL_ITEMS[k] && Number.isFinite(n) && n > 0) itemsObj[k] = Math.floor(n);
+      }
+    }
+    merged.itemsFound = itemsObj;
+    merged.profession = PROFESSIONS.some((p) => p.id === merged.profession) ? merged.profession : 'telegraph';
+    merged.lastDream = typeof merged.lastDream === 'string' ? merged.lastDream : null;
     merged.rev = 0;
     return merged;
   } catch {

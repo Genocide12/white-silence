@@ -1,9 +1,10 @@
 // Реакт-обвязка движка: снапшоты, игровой цикл, автосейв, события.
 import { useSyncExternalStore } from 'react';
 import {
-  GameState, TickResult, OfflineReport,
+  GameState, TickResult, OfflineReport, ScavengeResult, HuntResult,
   SAVE_KEY, createInitialState, deserialize, serialize, applyOffline, tick, checkMilestones,
   doClick, buyGenerator, buyUpgrade, buyMine, buyTelegraph, buyFurnace, buyInvention, buyStarUpgrade, doPrestige,
+  doScavenge, doCraft, doHunt, chooseProfession, radioThreshold, gazetteMilestone,
 } from './engine';
 import { ACHIEVEMENTS } from './content';
 import { plural } from './format';
@@ -11,7 +12,7 @@ import { auroraMultiplier } from './engine';
 
 export interface GameEvent {
   id: number;
-  kind: 'achievement' | 'milestone' | 'aurora' | 'info' | 'prestige';
+  kind: 'achievement' | 'milestone' | 'aurora' | 'info' | 'prestige' | 'scavenge' | 'hunt' | 'radio' | 'gazette' | 'ending' | 'craft';
   title: string;
   text: string;
 }
@@ -85,6 +86,17 @@ function handleTickResults(res: TickResult) {
   for (const m of checkMilestones(state)) {
     pushEvent('milestone', `Веха: ${m.title}`, m.text);
   }
+  // v2: летопись и эпилоги
+  if (res.radioHeard) {
+    pushEvent('radio', 'Радио: передача принята', res.radioHeard.text.slice(0, 220) + (res.radioHeard.text.length > 220 ? '…' : ''));
+  }
+  if (res.gazetteSeen) {
+    pushEvent('gazette', `Газета: «${res.gazetteSeen.title}»`, `${res.gazetteSeen.date}. ${res.gazetteSeen.cols[0]?.h || ''}`);
+  }
+  for (const e of res.newEndings) {
+    pushEvent('ending', `ЭПИЛОГ ОТКРЫТ: ${e.title}`, e.epigraph || e.condition);
+    saveGame();
+  }
 }
 
 export function startGame() {
@@ -134,11 +146,55 @@ export function actPrestige(): number {
   const gain = doPrestige(state);
   if (gain > 0) {
     pushEvent('prestige', `Экспедиция №${state.prestiges} отправлена!`,
-      `За пазухой — ${gain} ${plural(gain, 'полярная звезда', 'полярные звезды', 'полярных звёзд')}. Каждая навсегда усиливает производство.`);
+      `За пазухой — ${gain} ${plural(gain, 'полярная звезда', 'полярные звезды', 'полярных звёзд')}. Каждая навсегда усиливает производство.` +
+      (state.lastDream ? ` Во сне привиделось: «${state.lastDream}»` : ''));
     saveGame();
     emit();
   }
   return gain;
+}
+
+// ---------------- v2: посёлок, хозяйство, охота ----------------
+
+export function actScavenge(i: number): ScavengeResult | null {
+  const res = doScavenge(state, i);
+  if (!res) return null;
+  const items = res.found.map((f) => `${f.isNew ? '✦ ' : ''}${f.name} ×${f.n}`).join(', ');
+  pushEvent('scavenge', `Обыск: ${res.building}`,
+    (res.found.length ? items : 'Пусто. Хоть шаром покати.') +
+    (res.note ? ` | Найдена записка: «${res.note.title}»` : '') +
+    (res.refund > 0 ? ` | Барахолка: +${Math.floor(res.refund)} дров` : ''));
+  emit();
+  return res;
+}
+
+export function actCraft(id: string, name: string): boolean {
+  const ok = doCraft(state, id);
+  if (ok) {
+    pushEvent('craft', `Освоено: ${name}`, 'Рецепт из зимовки — теперь твой навсегда.');
+    emit();
+  }
+  return ok;
+}
+
+export function actHunt(i: number): HuntResult | null {
+  const res = doHunt(state, i);
+  if (!res) return null;
+  const loot = res.loot.map((l) => `${l.isNew ? '✦ ' : ''}${l.name} ×${l.n}`).join(', ');
+  pushEvent('hunt', res.trophy ? `ТРОФЕЙ! Облава: ${res.beast}` : `Облава: ${res.beast}`,
+    (res.loot.length ? loot : 'Зверь ушёл. Следы остались.') + (res.refund > 0 ? ` | Скупщик: +${Math.floor(res.refund)} дров` : ''));
+  emit();
+  return res;
+}
+
+export function actChooseProfession(id: string, name: string): boolean {
+  const ok = chooseProfession(state, id);
+  if (ok) {
+    pushEvent('info', `Профессия: ${name}`, 'Стартовый набор — на складе. Зимуй по-новому.');
+    saveGame();
+    emit();
+  }
+  return ok;
 }
 
 export function setAutoBuy(i: number, v: boolean) { state.autoBuy[i] = v; emit(); }
@@ -149,6 +205,18 @@ export function hardReset() {
   try { window.localStorage.removeItem(SAVE_KEY); } catch { /* ок */ }
   state = createInitialState();
   emit();
+}
+
+/** Применить импортированный сейв к живой игре (без перезагрузки —
+ *  раньше beforeunload успевал перезаписать импорт старым состоянием). */
+export function applyImportedSave(json: string): boolean {
+  const loaded = deserialize(json);
+  if (!loaded) return false;
+  state = loaded;
+  saveGame();
+  lastOffline = applyOffline(state);
+  emit();
+  return true;
 }
 
 // ---------------- хуки ----------------
