@@ -79,12 +79,26 @@
 
   /** Автосейв по игровому времени. */
   WS.boot(function initSave() {
+    var lastDemoSave = 0;
     WS.Ev.on('time:hour', function () {
-      if (WS.G && WS.G.running) save('main');
+      if (!WS.G || !WS.G.running) return;
+      // ДЕМО-ПРОХОЖДЕНИЕ: автосейв пишет в ДЕМО-слот и не чаще раза в 5 с
+      // (на скорости ×120 игровой час наступает дважды в секунду — сейв
+      // большого мира так часто не поставить). Сейв игрока не затираем!
+      if (WS.Demo && WS.Demo.active && WS.Demo.active()) {
+        if (Date.now() - lastDemoSave > 5000) {
+          lastDemoSave = Date.now();
+          save('demo');
+        }
+        return;
+      }
+      save('main');
     });
     WS.Ev.on('player:die', function () {
-      // пермадет: сейв уничтожается
-      remove('main');
+      // пермадет: сейв уничтожается (в демо — только демо-слот,
+      // живой сейв игрока неприкосновенен)
+      if (WS.Demo && WS.Demo.active && WS.Demo.active()) remove('demo');
+      else remove('main');
     });
   }, 'save:init');
 

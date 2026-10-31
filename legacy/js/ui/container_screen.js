@@ -310,7 +310,8 @@
     var cell = el('div', cls);
     cell.setAttribute('data-c', String(index));
 
-    cell.appendChild(TT.catIconNode(def ? def.cat : 'misc', 'slot-ico'));
+    cell.appendChild((WS.Icons && item && item.id) ? WS.Icons.iconNode(item.id, 'slot-ico')
+        : TT.catIconNode(def ? def.cat : 'misc', 'slot-ico'));
     if (item.count && item.count > 1) {
       cell.appendChild(el('span', 'slot-count', '×' + item.count));
     }
@@ -357,7 +358,11 @@
 
     var cell = el('div', cls);
     cell.setAttribute('data-p', String(info.i));
-    cell.appendChild(TT.catIconNode(def ? def.cat : 'misc', 'slot-ico'));
+    // ФИКС: здесь параметр называется info (не item) — опечатка роняла
+    // render(), а с ним и тик loot:search (loop.js выкидывает падающие
+    // тики) — после первого обыска ломались ВСЕ дальнейшие обыски.
+    cell.appendChild((WS.Icons && info && info.id) ? WS.Icons.iconNode(info.id, 'slot-ico')
+        : TT.catIconNode(def ? def.cat : 'misc', 'slot-ico'));
     if (info.count && info.count > 1) {
       cell.appendChild(el('span', 'slot-count', '×' + info.count));
     }
@@ -530,6 +535,20 @@
     build();
     if (!root) return;
     if (!o.inv) o.inv = [];         // страховка (лут мог не наполниться)
+    // ДЕДОВСКИЕ ПОДАРКИ: бонусы изгнанников (_crazyExtra от crazy.js)
+    // вливаются в содержимое. Раньше это делала обёртка Ui.openContainer
+    // из crazy.js — но inventory_screen.js грузится позже и ПЕРЕЗАПИСЫВАЕТ
+    // точку входа своей uiOpenContainer, так что вливание стало мёртвым
+    // кодом (дед с fat×42 и 0 тряпок — живой пример Д51). Здесь — самое
+    // надёжное место: ContScreen.open не перепривязывается.
+    if (o._crazyExtra && o._crazyExtra.length && !o._crazyGiven) {
+      o._crazyGiven = 1;
+      o.inv = o.inv.concat(o._crazyExtra);
+      o._crazyExtra = [];
+      try {
+        if (WS.Ui && WS.Ui.toast) WS.Ui.toast('🎁 Изгнанник оставил подарок!', 'good');
+      } catch (eT) { /* пусто */ }
+    }
     cur = o;
     open = true;
     selC = -1;
@@ -655,6 +674,18 @@
 
   WS.boot(function initContScreen() {
     bindEvents();
+    // Повторное [E] закрывает окно контейнера (а не «переоткрывает»):
+    // нажатие съедаем, чтобы опросный путь (doInteract) не открыл окно
+    // тут же снова в этом же кадре.
+    window.addEventListener('keydown', function (ev) {
+      if (ev.repeat) return;
+      if (ev.code !== 'KeyE') return;
+      if (!open) return;
+      var tag = (ev.target && ev.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (WS.Input && WS.Input.consumeCode) WS.Input.consumeCode('KeyE');
+      close();
+    }, false);
     WS.log('contScreen: окно контейнера готово (WS.Ui.openContainer привяжет invScreen)');
   }, 'contscreen:init');
 

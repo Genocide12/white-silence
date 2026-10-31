@@ -1,63 +1,59 @@
-// diag_stuck.mjs — поймать бездействие бота на Д15-Д17 (голодная смерть
-// при молчащем журнале). Темп ×30 (диагностика, не запись прохождения).
+// Отладка: почему бот «зависает на search» — дамп состояния автопилота.
 import { createRequire } from 'module';
 const require = createRequire('/home/z/.npm-global/lib/node_modules/');
 const { chromium } = require('playwright');
+const BASE = process.argv[2] || 'http://localhost:3000';
+const PROFILE = '/tmp/ws-diag-profile3';
+const WAIT_MS = parseInt(process.argv[3] || '90000', 10);
 
-const BASE = process.argv[2] || 'http://localhost:3140';
 const run = async () => {
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
-  const errors = [];
-  page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
+  const browser = await chromium.launchPersistentContext(PROFILE, {
+    viewport: { width: 1400, height: 800 }, args: ['--disable-dev-shm-usage']
+  });
+  const page = browser.pages()[0] || await browser.newPage();
+  page.on('pageerror', e => console.log('PAGEERROR:', e.message));
+  page.on('console', m => {
+    const t = m.text();
+    if (m.type() === 'error') console.log('CONSOLE-ERR:', t.slice(0, 200));
+  });
+  page.on('dialog', d => d.accept().catch(() => {}));
   await page.goto(BASE, { waitUntil: 'load', timeout: 45000 });
-  await page.waitForTimeout(3500);
-
-  // старт демо как пользователь + темп ×30
+  await page.waitForTimeout(3000);
   const btn = page.locator('#ws-menu button', { hasText: 'Демо-прохождение' }).first();
   await btn.click();
-  await page.waitForTimeout(2000);
-  await page.evaluate(() => WS.Demo.pace(30));
+  await page.waitForTimeout(8000);
 
   const t0 = Date.now();
-  let lastSig = '';
-  let sameCnt = 0;
-  while (Date.now() - t0 < 300000) {
-    await page.waitForTimeout(4000);
+  let i = 0;
+  while (Date.now() - t0 < WAIT_MS) {
+    await page.waitForTimeout(10000);
     const st = await page.evaluate(() => {
-      const d = WS.Demo._state();
-      const p = WS.G && WS.G.player;
-      const w = WS.World;
+      const D = WS.Demo._state();
+      const p = WS.G.player;
+      const modalEls = Array.from(document.querySelectorAll('.ws-modal:not(.hidden)'))
+        .map(e => e.id || e.className.slice(0, 40));
+      const visibleScr = Array.from(document.querySelectorAll('.scr:not(.hidden)'))
+        .map(e => e.className.slice(0, 40));
       return {
-        day: WS.Time ? WS.Time.day() : 0,
-        hour: Math.round(WS.Time.hourF() * 10) / 10,
-        hp: p ? Math.round(p.hp) : 0,
-        hun: p ? Math.round(p.needs.hunger) : -1,
-        thi: p ? Math.round(p.needs.thirst) : -1,
-        fat: p ? Math.round(p.needs.fatigue) : -1,
-        temp: p ? Math.round((p.temp || 0) * 10) / 10 : 0,
-        sleep: p ? !!p.sleeping : false,
-        faint: p ? (p._faintT || 0) > 0 : false,
-        dead: !!(WS.G && WS.G.dead),
-        task: d.task ? (d.task.type + (d.task.label ? ':' + d.task.label : '')) : '—',
-        planLen: d.plan ? d.plan.length : 0,
-        speed: d.curSpeed || 0,
-        x: p ? Math.round(p.x) : 0, y: p ? Math.round(p.y) : 0,
-        inside: w && w.isInside && p ? !!w.isInside(p.x, p.y) : false,
-        food: (() => { let n = 0; if (p) for (const it of p.inv) { const def = WS.Data.items[it.id]; if (def && (def.cal || 0) > 0) n += it.count || 1; } return n; })(),
-        last: d.journal.length ? d.journal[d.journal.length - 1].txt.slice(0, 50) : ''
+        day: WS.Time.day(), fmt: WS.Time.fmt(),
+        task: D.task ? (D.task.type + ' ' + (D.task.label || '') + ' t=' + (D.task.t || 0).toFixed(1) +
+          ' o=' + (D.task.o ? (D.task.o.name || D.task.o.sprName) + (D.task.o.looted ? ' [looted]' : ' [full]') : '-')) : null,
+        planLen: D.plan.length,
+        planTypes: D.plan.slice(0, 6).map(t => t.type + (t.o ? ':' + (t.o.name || '?') : '')),
+        pathLen: D.path.length,
+        px: +p.x.toFixed(1), py: +p.y.toFixed(1),
+        contOpen: WS.ContScreen.isOpen(),
+        searching: !!(WS.Loot && WS.Loot.isSearching && WS.Loot.isSearching()),
+        uiModal: WS.Ui.modal(),
+        modalEls, visibleScr,
+        inv: WS.Inv.snapshot().slots.map(s => s.id + 'x' + s.count).slice(0, 25),
+        weight: WS.Inv.snapshot().weight.toFixed(1) + '/' + WS.Inv.snapshot().maxWeight,
+        journal: D.journal.slice(-3).map(j => j.t + ' ' + j.txt)
       };
     });
-    const sig = `${st.day}|${st.hour}|${st.task}|${st.x},${st.y}|${st.sleep}`;
-    if (sig === lastSig) sameCnt++; else { sameCnt = 0; lastSig = sig; }
-    console.log(`д${st.day} ${st.hour}ч hp=${st.hp} еда=${st.hun}/${st.thi}/${st.fat} т=${st.temp}° ` +
-      `спит=${st.sleep ? 1 : 0} обм=${st.faint ? 1 : 0} едаΣ=${st.food} скор=${st.speed} ` +
-      `задача=${st.task} план=${st.planLen} поз=${st.x},${st.y}${st.inside ? ' (дом)' : ''} повт=${sameCnt}`);
-    if (st.dead) { console.log('✝ УМЕР: ' + st.last); const jl = await page.evaluate(() => WS.Demo._state().journal.slice(-12).map(j => j.t + ' ' + j.txt.slice(0,70))); jl.forEach(l => console.log('   ' + l)); break; }
-    if (st.day >= 18) { console.log('→ Д18, дальше не нужно'); break; }
+    console.log('=== sample ' + (++i) + ' ===');
+    console.log(JSON.stringify(st, null, 1));
   }
-  console.log('ошибок: ' + errors.length);
-  errors.slice(0, 5).forEach(e => console.log('  ' + e));
   await browser.close();
 };
-run().catch(e => { console.error('FAIL', e); process.exit(2); });
+run().catch(e => { console.error(e); process.exit(1); });

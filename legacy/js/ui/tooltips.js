@@ -227,16 +227,27 @@
     var count = (typeof o.count === 'number' && o.count > 1) ? o.count : 0;
     var h = '';
 
-    // имя и количество
-    h += '<div class="tt-name">' + esc(name);
-    if (count) h += ' <span class="tt-count">×' + count + '</span>';
-    h += '</div>';
+    // шапка: уникальная иконка предмета слева + имя и категория справа
+    var iu = (def && WS.Icons && WS.Icons.iconUrl(o.id, ICON_SIZE)) || '';
+    if (iu) {
+      h += '<div class="tt-head"><img class="tt-ico-big" src="' + iu + '" alt="">' +
+           '<div class="tt-head-txt"><div class="tt-name">' + esc(name);
+      if (count) h += ' <span class="tt-count">×' + count + '</span>';
+      h += '</div>';
+      h += '<div class="tt-cat"><img src="' + iconUrl('icon_' + (def.cat || 'misc')) +
+           '" alt=""> ' + esc(catRu(def.cat)) + '</div></div></div>';
+    } else {
+      // имя и количество
+      h += '<div class="tt-name">' + esc(name);
+      if (count) h += ' <span class="tt-count">×' + count + '</span>';
+      h += '</div>';
+      if (def) {
+        h += '<div class="tt-cat"><img src="' + iconUrl('icon_' + (def.cat || 'misc')) +
+             '" alt=""> ' + esc(catRu(def.cat)) + '</div>';
+      }
+    }
 
     if (def) {
-      // категория с мини-иконкой
-      h += '<div class="tt-cat"><img src="' + iconUrl('icon_' + (def.cat || 'misc')) +
-           '" alt=""> ' + esc(catRu(def.cat)) + '</div>';
-
       // статы
       var lines = statLines(def);
       if (lines.length) {

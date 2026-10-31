@@ -312,6 +312,11 @@
       p.sick = null;
     }
     if (p.sick) {
+      // старый формат needs ('food_poisoning' без fired) — конвертируем
+      if (p.sick.id === 'food_poisoning' && DISEASES.food_poison) p.sick.id = 'food_poison';
+      if (!DISEASES[p.sick.id]) p.sick = null;
+    }
+    if (p.sick) {
       if (!p.sick.fired || typeof p.sick.fired !== 'object') p.sick.fired = {};
       if (typeof p.sick.compT !== 'number') p.sick.compT = 0;
       if (!p.sick.tea) p.sick.tea = false;
@@ -796,13 +801,12 @@
   function tickSick(p, gh) {
     var sk = p.sick;
     if (!sk) return;
-    // ЗАЩИТА: структуру могли создать другие системы/старые сейвы —
-    // нормализуем, чтобы тик не падал и не выключал здоровье навсегда
+    // страховка формата: needs/сейв могли оставить {id,t} без fired
+    // (раньше это роняло тик и ВЫКЛЮЧАЛО всю систему здоровья)
+    if (sk.id === 'food_poisoning') sk.id = 'food_poison';
     if (!sk.fired || typeof sk.fired !== 'object') sk.fired = {};
     if (typeof sk.compT !== 'number') sk.compT = 0;
-    if (typeof sk.t !== 'number') sk.t = 0;
-    if (sk.tea === undefined) sk.tea = false;
-    if (sk.id === 'food_poisoning') sk.id = 'food_poison';   // алиас needs.js
+    if (typeof sk.t !== 'number' || sk.t < 0) sk.t = 0;
     var D = DISEASES[sk.id];
     if (!D) { p.sick = null; return; }
     var n = p.needs;
@@ -1303,9 +1307,6 @@
   var Health = {
 
     DISEASES: DISEASES,
-
-    /** Заразить болезнью (каноническая структура p.sick). */
-    infectDisease: infectDisease,
 
     /** HUD-сводка (по ТЗ): {hp, bleed, fracture, infection, pain, sick, drunk}. */
     status: function () {

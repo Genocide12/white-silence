@@ -414,7 +414,12 @@
 
   function onKey(d) {
     if (!isOpen) return;
-    if (d && (d.code === 'KeyK' || d.code === 'Escape')) close();
+    if (d && d.code === 'KeyK') {
+      if (WS.Input && WS.Input.consumeCode) WS.Input.consumeCode('KeyK');
+      close();
+    } else if (d && d.code === 'Escape') {
+      close();
+    }
   }
 
   /** Рост навыка, пока окно открыто: подсветить карточку. */

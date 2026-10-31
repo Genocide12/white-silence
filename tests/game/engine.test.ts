@@ -133,11 +133,14 @@ describe('цены и покупки', () => {
   });
   test('шахта и телеграф покупаются за дрова', () => {
     const s = S();
+    s.profession = 'carpenter'; // нейтральная к эфиру профессия — базовые курсы
     s.wood = 1e7;
     expect(buyMine(s, 0, 1)).toBe(true);
     expect(coalPerSec(s)).toBeCloseTo(0.1, 8);
     expect(buyTelegraph(s, 0, 1)).toBe(true);
     expect(depeshiPerSec(s)).toBeCloseTo(0.05, 8);
+    s.profession = 'telegraph'; // родная профессия: депеши +50%
+    expect(depeshiPerSec(s)).toBeCloseTo(0.075, 8);
     expect(maxBuyMine(s, 0)).toBeGreaterThan(0);
     expect(maxBuyTelegraph(s, 0)).toBeGreaterThan(0);
   });
@@ -220,11 +223,16 @@ describe('тик', () => {
   });
   test('уголь и депеши капают', () => {
     const s = S();
+    s.profession = 'carpenter'; // без бонуса эфира — чистый базовый темп
     s.mines[0] = 1;
     s.telegraphs[0] = 1;
     tick(s, 10, seq);
     expect(s.coal).toBeCloseTo(1, 6);
     expect(s.depeshi).toBeCloseTo(0.5, 6);
+    s.profession = 'telegraph'; // депеши +50% — капает быстрее
+    s.depeshi = 0;
+    tick(s, 10, seq);
+    expect(s.depeshi).toBeCloseTo(0.75, 6);
   });
   test('сияние включается по расписанию', () => {
     const s = S();

@@ -33,8 +33,6 @@
         { id: 'valenki', n: 1 },
         { id: 'book_survive', n: 1 },
         { id: 'matches', n: 8 },
-        { id: 'cloth_rag', n: 2 },
-        { id: 'firewood_bundle', n: 2 },
         { id: 'water_flask', n: 1 },
         { id: 'rusk', n: 4 }
       ],
@@ -45,20 +43,13 @@
       name: 'Охотник',
       desc: 'Таёжный промысловик. Ружьё, патроны и охотничий нож — а главное, ' +
             'умение читать следы и стрелять. Мороз для него — работа.',
-      // ВЫЖИВАНИЕ КОЧЕВНИКА: спички/трут/дрова — иначе промысловик с ружьём
-      // замерзал Д1, не имея чем развести огонь (диагноз роя агентов)
       items: [
         { id: 'coat_fur', n: 1 },
         { id: 'ushanka', n: 1 },
         { id: 'valenki', n: 1 },
         { id: 'rifle_mosin', n: 1 },
         { id: 'rifle_round', n: 12 },
-        { id: 'hunting_knife', n: 1 },
-        { id: 'matches', n: 6 },
-        { id: 'cloth_rag', n: 2 },
-        { id: 'firewood_bundle', n: 2 },
-        { id: 'rusk', n: 2 },
-        { id: 'water_flask', n: 1 }
+        { id: 'hunting_knife', n: 1 }
       ],
       skills: { track: 2, firearm: 2 }
     },
@@ -73,12 +64,7 @@
         { id: 'valenki', n: 1 },
         { id: 'axe', n: 1 },
         { id: 'nails', n: 24 },
-        { id: 'plank', n: 6 },
-        { id: 'matches', n: 6 },
-        { id: 'cloth_rag', n: 2 },
-        { id: 'firewood_bundle', n: 2 },
-        { id: 'rusk', n: 2 },
-        { id: 'water_flask', n: 1 }
+        { id: 'plank', n: 6 }
       ],
       skills: { carpentry: 2 }
     },
@@ -95,10 +81,7 @@
         { id: 'kasha', n: 1 },
         { id: 'tea_brick', n: 2 },
         { id: 'salt_bag', n: 1 },
-        { id: 'matches', n: 4 },
-        { id: 'cloth_rag', n: 2 },
-        { id: 'firewood_bundle', n: 2 },
-        { id: 'water_flask', n: 1 }
+        { id: 'matches', n: 4 }
       ],
       skills: { cook: 2 }
     },
@@ -115,12 +98,7 @@
         { id: 'bandage_clean', n: 2 },
         { id: 'iodine_tincture', n: 2 },
         { id: 'aspirin', n: 6 },
-        { id: 'morphine', n: 1 },
-        { id: 'matches', n: 4 },
-        { id: 'cloth_rag', n: 2 },
-        { id: 'firewood_bundle', n: 2 },
-        { id: 'rusk', n: 2 },
-        { id: 'water_flask', n: 1 }
+        { id: 'morphine', n: 1 }
       ],
       skills: { medic: 2 }
     },
@@ -129,14 +107,9 @@
       name: 'Беглый каторжник',
       desc: 'Ни вещей, ни имени — только крепкие кулаки и привычка убегать. ' +
             'Зато вынослив как лось и бьёт так, что волк запомнит.',
-      // «Ни вещей, ни имени» — но спички и трут каторжник умыкнул этапа:
-      // без огня Д1 не переживает ни одна профессия (инкремент №3 роя)
       items: [
         { id: 'pidzhak_stary', n: 1 },
-        { id: 'lapti', n: 1 },
-        { id: 'matches', n: 3 },
-        { id: 'cloth_rag', n: 1 },
-        { id: 'firewood_bundle', n: 2 }
+        { id: 'lapti', n: 1 }
       ],
       skills: { melee: 2, run: 2, sneak: 1 }
     }
@@ -426,7 +399,7 @@
 
     var btnHow = el('button', 'ws-btn', actions);
     setText(btnHow, 'Как играть');
-    btnHow.addEventListener('click', function () { openModal('how'); });   // повторный клик — закрыть (toggle)
+    btnHow.addEventListener('click', function () { openModal('how'); });
 
     var btnAbout = el('button', 'ws-btn', actions);
     setText(btnAbout, 'Об игре');
@@ -435,7 +408,7 @@
     // --- подвал ------------------------------------------------------------
     var foot = el('div', 'menu-foot', wrap);
     var ver = 'v' + (WS.VERSION || '1.0.0') + ' · сборка ' + (WS.BUILD || '1917');
-    setText(foot, ver + ' · игра: DirtyG/ · изометрический сурвайвл по мотивам Севера');
+    setText(foot, ver + ' · автор игры: DirtyG · безумный дед против мультяшек');
 
     // --- модальные окна (внутри меню) ---------------------------------------
     buildModals(root);
@@ -608,8 +581,6 @@
 
   function openModal(kind) {
     if (!built) return;
-    // ПОВТОРНОЕ НАЖАТИЕ ТОЙ ЖЕ КНОПКИ — ЗАКРЫТЬ (toggle, запрос пользователя)
-    if (modalOpen === kind) { closeModal(); return; }
     snd('click');
     modalOpen = kind;
     els.modalBody.textContent = '';
@@ -751,10 +722,10 @@
     var meta = el('div', 'menu-about-meta', parent);
     var rows = [
       ['Версия', 'v' + (WS.VERSION || '1.0.0') + ', сборка ' + (WS.BUILD || '1917')],
-      ['Жанр', 'изометрический сурвайвл-рогалик, пермадет'],
+      ['Жанр', 'безумный дед-сурвайвл-комедия, изгнания мультяшек'],
       ['Мир', '220×220 тайлов: посёлок, лес, река, станция'],
-      ['Время', '1 ноября — 30 декабря 1917, 60 дней до парохода'],
-      ['Пайплайн', 'DirtyG: идея → волны → плейтесты'],
+      ['Время', '1 ноября — 30 декабря, 60 дней до тарелки'],
+      ['Автор', 'DirtyG'],
       ['Движок', 'свой: canvas-рендер, DOM-интерфейс, без внешних библиотек']
     ];
     for (var i = 0; i < rows.length; i++) {

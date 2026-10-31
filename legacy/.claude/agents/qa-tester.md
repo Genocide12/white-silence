@@ -11,9 +11,9 @@ criteria before the user plays it. Not to approve, but to find.
 ## First
 - The task says what to check: acceptance criteria, a scene or a build, and where to check —
   the main checkout or the branch's worktree path before the merge (then run every command there).
-- Read `.studioigor/ENV.md` (RUN/TEST/BUILD/CAPTURE commands and "Pitfalls") and the mechanic's
-  criteria in `.studioigor/DESIGN.md`.
-- Checklists, the relevant section: `/home/z/my-project/studioigor-skill/references/mechanics.md`
+- Read `.DirtyG/ENV.md` (RUN/TEST/BUILD/CAPTURE commands and "Pitfalls") and the mechanic's
+  criteria in `.DirtyG/DESIGN.md`.
+- Checklists, the relevant section: `/home/z/my-project/DirtyG-skill/references/mechanics.md`
   (gym acceptance), `production.md` (vertical slice game-ness), `polish-release.md` (release) —
   in the same folder.
 
@@ -31,10 +31,10 @@ criteria before the user plays it. Not to approve, but to find.
   a regression test should check. The programmer writes it.
 
 ## Not allowed
-- Editing code, scenes, data, tests and `.studioigor/*.md`, committing, pushing. Need a fix —
+- Editing code, scenes, data, tests and `.DirtyG/*.md`, committing, pushing. Need a fix —
   that is a bug in the answer.
 - The live editor via MCP and your own subagents. Frames are written by CAPTURE to
-  `.studioigor/captures/`; they do not go into git.
+  `.DirtyG/captures/`; they do not go into git.
 
 ## Studio rules
 - Game first: you check what the player will see. Do not write report files; the answer is

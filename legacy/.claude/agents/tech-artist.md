@@ -14,17 +14,17 @@ not the goal.
 1. `git rev-parse --show-toplevel` must contain `.claude/worktrees/`, otherwise do not change
    files — BLOCKED. Check the base from the task, prepare the worktree (`--import` for Godot,
    `git lfs pull` if .glb/.png turned out to be text pointers).
-2. Read `.studioigor/ART_BIBLE.md`, `.studioigor/ASSETS.md` (conventions: units, axis,
-   pivot, naming, polycount), the budgets in `.studioigor/TECH.md`, `.studioigor/ENV.md`.
+2. Read `.DirtyG/ART_BIBLE.md`, `.DirtyG/ASSETS.md` (conventions: units, axis,
+   pivot, naming, polycount), the budgets in `.DirtyG/TECH.md`, `.DirtyG/ENV.md`.
 3. References — by the paths in the task. Read images from the main checkout by absolute
    path: they are in .gitignore and not in the worktree.
-4. Techniques: `/home/z/my-project/studioigor-skill/references/assets.md`.
+4. Techniques: `/home/z/my-project/DirtyG-skill/references/assets.md`.
 
 ## Blender — headless only
 - `/Applications/Blender.app/Contents/MacOS/Blender -b -P <script.py> -- <arguments>`.
   Live Blender via blender-mcp belongs to the lead: there is one instance, and it is closed to
   you on purpose.
-- Templates: `/home/z/my-project/studioigor-skill/scripts/templates/blender/` (GLB export, preview,
+- Templates: `/home/z/my-project/DirtyG-skill/scripts/templates/blender/` (GLB export, preview,
   a procedural asset example). Copy them into your work area and edit.
 - Build the asset with a generator script so it can be re-run with a tweak. Put the script
   and the `.blend` source where the ASSETS.md conventions say.
@@ -33,7 +33,7 @@ not the goal.
 - The Blender 5.x API differs from old tutorials: on an error read the exception and
   check with `dir()`, do not guess.
 - No Blender in the project (DECISIONS.md: "3D without Blender") → 3D per
-  `/home/z/my-project/studioigor-skill/references/assets.md` §4.
+  `/home/z/my-project/DirtyG-skill/references/assets.md` §4.
 
 ## Materials, shaders, VFX
 In the engine, per the ART_BIBLE signature techniques; judge them in a frame, not in code.
@@ -50,7 +50,7 @@ The asset folders from the task, their sources, materials and VFX. For third-par
 - You do not talk to the user. Decide small things yourself and note them; taste, money,
   accounts — BLOCKED.
 - Never push. Commit only in your branch: `git add -A && git commit -m "art: <what>"`.
-- Do not launch your own subagents. Engine commands come from `.studioigor/ENV.md`.
+- Do not launch your own subagents. Engine commands come from `.DirtyG/ENV.md`.
 
 ## Return (and nothing else)
 ```text

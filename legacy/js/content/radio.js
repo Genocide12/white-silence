@@ -170,7 +170,24 @@
   }
 
   function canHear() {
-    return invCount('radio_crystal') > 0 || inStation();
+    return invCount('radio_crystal') > 0 || inStation() || !!receiverNear();
+  }
+
+  /** Ближайший приёмник в мире (объект radio:true) в радиусе 7 тайлов
+   *  от игрока — у него эфир и звучит, и показывается текстом. */
+  function receiverNear() {
+    var p = P();
+    var w = WS.World;
+    if (!p || !w || !w.objects) return null;
+    var best = null, bd = 7;
+    for (var i = 0; i < w.objects.length; i++) {
+      var o = w.objects[i];
+      if (!o || !o.radio) continue;
+      var d = WS.M ? WS.M.dist(p.x, p.y, o.x, o.y)
+                    : Math.sqrt((p.x - o.x) * (p.x - o.x) + (p.y - o.y) * (p.y - o.y));
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
   }
 
   // ====================================================================
@@ -431,7 +448,7 @@
     text: '…— — —   · · ·   — — —   · · ·   — — —… [морзянка] …три человека… ' +
          'печка… второй день… слышим кого-то в ночи, но это не мы, ' +
          'мы молчим… — — —   · · ·   — — —… [точки становятся реже, ' +
-         'как сердце, — и всё]' });
+         'как heartbeat, — и всё]' });
 
   BR({ id: 'r42', day_min: 35, day_max: 37, hour: 15, kind: 'frag', prio: 5,
     text: '…склад на… горит со вторника… вторник длинный… среду не ' +
@@ -488,7 +505,7 @@
 
   BR({ id: 'r54', day_min: 56, day_max: 59, hour: 14, kind: 'hope', prio: 9,
     text: '…«Святитель Николай»… стоянка сорок минут… [голос деловой, ' +
-         'как колокол] …готовьте манифесты, клади и живых… ' +
+         'как колокол] …готовьте manifest… манифесты, клади и живых… ' +
          'повторяю для тех, кто зимовал: живых тоже берём… ' +
          '…сорок минут, люди, сорок минут — и вся ваша зима станет ' +
          'воспоминанием… [голос спокоен: он не знает, о чём говорит, ' +
@@ -742,6 +759,18 @@
     toast('Радио: ' + text, kindToToast(bc.kind));
     chron(text, bc.kind === 'hope' ? 'find' : (bc.kind === 'news' ? '' : 'anom'));
     showBand(text, bc.freq);
+    // ОЗВУЧКА НЕЙРОГОЛОСОМ + ТЕКСТ РЯДОМ С ИСТОЧНИКОМ:
+    // источник — приёмник в мире (у него и пузырь), иначе сам игрок
+    // (кристалл в кармане). Голос — дикторский, не дедовский.
+    try {
+      if (WS.Thoughts && WS.Thoughts.radioSay) {
+        var recv = receiverNear();
+        var srcName = recv ? 'Радио · ' + bc.freq : 'Кристалл в кармане';
+        var sx = recv ? recv.x : (P() ? P().x : 0);
+        var sy = recv ? recv.y : (P() ? P().y : 0);
+        WS.Thoughts.radioSay(text, srcName, sx, sy - 1.2);
+      }
+    } catch (e3) { /* эфир без голоса — всё ещё эфир */ }
     try { WS.Ev.emit('radio:heard', { id: bc.id, kind: bc.kind, day: day() }); }
     catch (e) { WS.err('radio: emit heard', e && e.message); }
   }
@@ -1146,6 +1175,7 @@
 
     /** Слышно ли игроку эфир прямо сейчас. */
     canHear: canHear,
+    receiverNear: receiverNear,
 
     /** Живая лента: показать/спрятать (отладка и соседи). */
     showBand: showBand,

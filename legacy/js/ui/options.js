@@ -13,6 +13,9 @@
     volume: 0.7,
     music: 0.5,
     muted: false,
+    voiceDed: true,       // голос деда (озвучка мыслей, Web Speech)
+    voiceRadio: true,     // голос радио-диктора
+    voiceVol: 1.0,        // громкость голоса (0..1)
     lang: null,            // null = авто
     difficulty: 'survivor',
     tutorial: true,
@@ -21,9 +24,7 @@
     footprints: true,
     autosave: true,
     showFps: false,
-    hints: true,
-    voice: true,           // ОЗВУЧКА ГОЛОСОМ (js/core/voice.js)
-    voiceDemo: true        // озвучивать и реплики демо-автопилота
+    hints: true
   };
 
   function load() {
@@ -67,6 +68,14 @@
       case 'muted':
         if (WS.Snd) WS.Snd.setMuted(!!v);
         break;
+      case 'voiceDed':
+      case 'voiceRadio':
+        // тумблеры озвучки: thoughts.js читает их в момент речи
+        // (WS.Options.get) — мгновенно применять нечего
+        break;
+      case 'voiceVol':
+        // громкость голоса тоже применяется при следующей реплике
+        break;
       case 'music':
         if (WS.Music && WS.Music.setVolume) WS.Music.setVolume(v);
         break;
@@ -78,12 +87,6 @@
         break;
       case 'tutorial':
         if (WS.Tutorial && WS.Tutorial.setEnabled) WS.Tutorial.setEnabled(!!v);
-        break;
-      case 'voice':
-        if (WS.Voice && WS.Voice.setEnabled) WS.Voice.setEnabled(!!v);
-        break;
-      case 'voiceDemo':
-        // читает voice.js при озвучке журнала демо
         break;
       case 'weatherFx':
       case 'blood':
@@ -123,6 +126,11 @@
     el.appendChild(row('Громкость музыки', 'music', 'slider', 0, 1, 0.05));
     el.appendChild(row('Без звука', 'muted', 'check'));
 
+    // --- голос (озвучка мыслей деда и радио-диктора) ---
+    el.appendChild(row('Голос деда (озвучка мыслей)', 'voiceDed', 'check'));
+    el.appendChild(row('Голос радио-диктора', 'voiceRadio', 'check'));
+    el.appendChild(row('Громкость голоса', 'voiceVol', 'slider', 0, 1, 0.05));
+
     el.appendChild(hr());
 
     // --- язык ---
@@ -142,8 +150,6 @@
 
     // --- тумблеры ---
     el.appendChild(row('Обучение', 'tutorial', 'check'));
-    el.appendChild(row('Озвучка событий (голос)', 'voice', 'check'));
-    el.appendChild(row('Озвучка реплик демо-бота', 'voiceDemo', 'check'));
     el.appendChild(row('Частицы погоды', 'weatherFx', 'check'));
     el.appendChild(row('Кровь', 'blood', 'check'));
     el.appendChild(row('Следы на снегу', 'footprints', 'check'));

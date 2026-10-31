@@ -1251,6 +1251,22 @@
     defFishSprites();
     defFishItems();
 
+    // имена рыбьих предметов (тест-сьют S2: показывался сырой id)
+    (function fishNames() {
+      try {
+        WS.Data = WS.Data || {};
+        WS.Data.locales = WS.Data.locales || {};
+        var ru = WS.Data.locales.ru = WS.Data.locales.ru || {};
+        var en = WS.Data.locales.en = WS.Data.locales.en || {};
+        var RU = { pike_raw: 'Щука-сырец', burbot_raw: 'Налим-сырец', fish_trap: 'Верша', fish_net: 'Рыбацкая сеть' };
+        var EN = { pike_raw: 'Raw Pike', burbot_raw: 'Raw Burbot', fish_trap: 'Fish Trap', fish_net: 'Fishing Net' };
+        for (var k in RU) {
+          if (!ru['item.' + k + '.name']) ru['item.' + k + '.name'] = RU[k];
+          if (!en['item.' + k + '.name']) en['item.' + k + '.name'] = EN[k];
+        }
+      } catch (e) { /* пусто */ }
+    })();
+
     // страховка порядка загрузки относительно data/recipes.js
     WS.afterFirstFrame(function () {
       try { defFishItems(); } catch (e) { WS.err('fishing.items:', e && e.message); }

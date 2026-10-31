@@ -1026,6 +1026,35 @@
   line-height: 1.35;
 }
 
+/* Шапка с крупной уникальной иконкой предмета (WS.Icons) */
+.ws-tooltip .tt-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.ws-tooltip .tt-head .tt-ico-big {
+  width: 44px; height: 44px;
+  image-rendering: pixelated;
+  flex: 0 0 auto;
+  background: rgba(24, 32, 46, 0.75);
+  border: 1px solid rgba(90, 110, 140, 0.5);
+  border-radius: 6px;
+  padding: 3px;
+  box-sizing: content-box;
+}
+
+.ws-tooltip .tt-head .tt-head-txt {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.ws-tooltip .tt-head .tt-head-txt .tt-cat {
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
 .ws-tooltip .tt-count {
   color: var(--ink-dim);
   font-weight: normal;

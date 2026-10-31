@@ -91,7 +91,6 @@
     def(it, { id: 'wadding', cat: 'material', w: 0.02, stack: 40, tags: ['tinder'] });
     def(it, { id: 'sledge', cat: 'tool', w: 8.0, stack: 1, carry: 40, tags: ['sledge'] });
     def(it, { id: 'skis', cat: 'tool', w: 4.0, stack: 1, tags: ['skis'] });
-    def(it, { id: ' compass_brass', cat: 'misc', w: 0.1, stack: 1, tags: [] });
     def(it, { id: 'compass_brass', cat: 'misc', w: 0.1, stack: 1, tags: [] });
     def(it, { id: 'map_old', cat: 'book', w: 0.1, stack: 1, tags: ['readable', 'quest'] });
     def(it, { id: 'axe_small', cat: 'tool', w: 0.9, stack: 1, dmg: 12, range: 1.0, atkSpd: 1.3, knock: 4, crit: 6, tags: ['chopping', 'weapon'] });

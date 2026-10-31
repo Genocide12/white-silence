@@ -262,7 +262,31 @@
   // ---------------------------------------------------------------- тик
 
   /** Отапливается ли здание (дым + тёплые окна). Детерминировано от позиции. */
+  var stovedIds = {};    // b.id -> 1: в здании есть печь (без печи дыма не бывает)
+
+  /** Пересобрать карту «здание → есть печь» (после генерации/загрузки). */
+  function rescanStoves() {
+    stovedIds = {};
+    var W = WS.World;
+    if (!W || !W.objects || !W.buildings) return;
+    for (var i = 0; i < W.objects.length; i++) {
+      var o = W.objects[i];
+      if (!o || !o.heat) continue;
+      for (var k = 0; k < W.buildings.length; k++) {
+        var b = W.buildings[k];
+        if (o.x >= b.x && o.x < b.x + b.w && o.y >= b.y && o.y < b.y + b.h) {
+          stovedIds[b.id] = 1;
+          break;
+        }
+      }
+    }
+  }
+
+  /** «Живой» дом: печь есть И труба дымит (45%). БЕЗ ПЕЧИ дыма не бывает —
+   *  раньше «отапливаемым» мог стать амбар без печи (хэш координат), а
+   *  изба с печью — холодной: нереализм и источник смерти от холода. */
   function heated(b) {
+    if (!b || !stovedIds[b.id]) return false;
     return WS.RNG.hash2(b.x, b.y, 4242) < 0.45;
   }
 
@@ -270,6 +294,7 @@
 
   /** Добавить тёплый свет к окнам отапливаемых зданий (после генерации). */
   function addWindowLights() {
+    rescanStoves();               // сначала карта печей — от неё зависит heated()
     removeWindowLights();
     var W = WS.World;
     if (!W || !W.buildings) return;

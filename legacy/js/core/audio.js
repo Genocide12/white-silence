@@ -143,13 +143,6 @@
         var s = Math.sin(t * 2 * Math.PI * f) * 0.5 + (Math.random() * 2 - 1) * 0.25;
         return s * Math.pow(Math.sin(Math.PI * Math.min(1, u * 1.2)), 1.5);
       });
-      case 'giggle': return makeBuffer(0.5, function (t, u) {
-        // хихиканье мультяшки: три коротких восходящих «хи-хи-хи»
-        var chirp = Math.floor(u * 3) / 3;               // треть буфера на слог
-        var f = 620 + 260 * chirp + 40 * Math.sin(t * 60);
-        var env = Math.pow(Math.sin(Math.PI * ((u * 3) % 1)), 0.7);
-        return Math.sin(t * 2 * Math.PI * f) * 0.28 * env;
-      });
       case 'bear_roar': return makeBuffer(1.1, function (t, u) {
         var f = 90 + 60 * Math.sin(t * 2 * Math.PI * 2.2) - 40 * u;
         var s = Math.sin(t * 2 * Math.PI * f) * 0.6 + (Math.random() * 2 - 1) * 0.35;

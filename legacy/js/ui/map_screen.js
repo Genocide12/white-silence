@@ -1226,10 +1226,18 @@
     else open();
   }
 
-  /** Горячая клавиша работает всегда (raw key:down), даже в «модали». */
+  /** Горячая клавиша работает всегда (raw key:down), даже в «модали».
+   *  ВАЖНО: нажатие «съедается» (consumeCode) — иначе опросный путь
+   *  uiTick увидит ту же клавишу в этом кадре и откроет карту тут же
+   *  повторно (жалоба игрока: «повторное нажатие должно закрывать»). */
   function onKey(d) {
     if (!isOpen) return;
-    if (d && (d.code === 'KeyM' || d.code === 'Escape')) close();
+    if (d && d.code === 'KeyM') {
+      if (WS.Input && WS.Input.consumeCode) WS.Input.consumeCode('KeyM');
+      close();
+    } else if (d && d.code === 'Escape') {
+      close();
+    }
   }
 
   // ====================================================================

@@ -69,7 +69,7 @@
       desc: 'Плетёный короб за спину' }),
 
     // ================================================================ КОСТЁР И СВЕТ
-    R({ id: 'torch_make', out: [{ id: 'torch', n: 2 }], cat: 'survival',
+    R({ id: 'torch_make', name: 'Пара факелов', out: [{ id: 'torch', n: 2 }], cat: 'survival',
       req: [{ id: 'plank', n: 1 }, { id: 'fat', n: 1 }, { id: 'cloth_rag', n: 2 }],
       tools: [], station: null, time: 30, skill: { id: 'survive', lv: 0 },
       desc: 'Два факела: свет и страх волка' }),
@@ -203,26 +203,76 @@
     I({ id: 'bottle_empty', cat: 'material', w: 0.3, stack: 5, tags: [] });
   }
 
+  // Локализация предметов recipes_extra (тест-сьют S2 нашёл 22 предмета
+  // без имён — в тултипах показывался сырой id: «club_nail», «sled_hand»…)
+  var NAMES_RU = {
+    compass_brass: 'Латунный компас', knuckles_lead: 'Свинчатка', club_nail: 'Гвоздобой',
+    spear_fire: 'Горящее копьё', bow_war: 'Боевой лук', arrow_fire: 'Зажигательная стрела',
+    bedroll: 'Спальный тюфяк', bedroll_poor: 'Худой тюфяк', snowshoes: 'Снегоступы',
+    sled_hand: 'Ручные сани', backpack_frame: 'Каркасный рюкзак', lamp_tin: 'Жестяной фонарь',
+    bait_meat: 'Мясная приманка', barricade_plank: 'Заборная доска', window_plank: 'Зашивная доска',
+    floor_patch: 'Заплата на пол', stretcher: 'Носилки', crate_storage: 'Рундук',
+    poultice_chaga: 'Распар берёзовой губки', splint_field: 'Полевая шина',
+    tin_can: 'Жестянка', chain_short: 'Обрывок цепи', ash_potash: 'Зольный поташ',
+    cloth_dirty: 'Грязная ветошь', tobacco_dry: 'Сушёный табак', bottle_empty: 'Пустая бутылка',
+    // ингредиенты промысла, жившие без имён (тултипы показывали сырой id)
+    chaga_chunk: 'Кусок чаги', dry_grass: 'Сухая трава', mouse_nest: 'Мышиное гнездо',
+    birch_bark: 'Береста', willow_twigs: 'Вербы прутья', pine_branch: 'Еловая лапка',
+    icicle_chunk: 'Сосулька', angelica_root: 'Корень дягиля', bad_mushroom: 'Поганка',
+    snow_water: 'Снеговая вода', meat_spoiled: 'Тухлое мясо', sinew: 'Сухожилие',
+    radio_crystal: 'Радиокристалл', wr_stonewort: 'Зверобой (пучок)',
+    wr_decoction_angelica: 'Отвар дягиля', wr_decoction_chaga: 'Отвар чаги',
+    wr_decoction_stonewort: 'Отвар зверобоя', fat: 'Сало (топлёное)'
+  };
+  var NAMES_EN = {
+    compass_brass: 'Brass Compass', knuckles_lead: 'Lead Knuckles', club_nail: 'Nail Club',
+    spear_fire: 'Fire Spear', bow_war: 'War Bow', arrow_fire: 'Fire Arrow',
+    bedroll: 'Bedroll', bedroll_poor: 'Meagre Bedroll', snowshoes: 'Snowshoes',
+    sled_hand: 'Hand Sled', backpack_frame: 'Framed Backpack', lamp_tin: 'Tin Lantern',
+    bait_meat: 'Meat Bait', barricade_plank: 'Barricade Plank', window_plank: 'Window Plank',
+    floor_patch: 'Floor Patch', stretcher: 'Stretcher', crate_storage: 'Storage Crate',
+    poultice_chaga: 'Steamed Chaga Poultice', splint_field: 'Field Splint',
+    tin_can: 'Tin Can', chain_short: 'Short Chain', ash_potash: 'Potash Ash',
+    cloth_dirty: 'Dirty Rags', tobacco_dry: 'Dried Tobacco', bottle_empty: 'Empty Bottle',
+    chaga_chunk: 'Chaga Chunk', dry_grass: 'Dry Grass', mouse_nest: 'Mouse Nest',
+    birch_bark: 'Birch Bark', willow_twigs: 'Willow Twigs', pine_branch: 'Pine Branch',
+    icicle_chunk: 'Icicle', angelica_root: 'Angelica Root', bad_mushroom: 'Toadstool',
+    snow_water: 'Snow Melt', meat_spoiled: 'Spoiled Meat', sinew: 'Sinew',
+    radio_crystal: 'Radio Crystal', wr_stonewort: 'St John\u2019s Wort Bunch',
+    wr_decoction_angelica: 'Angelica Decoction', wr_decoction_chaga: 'Chaga Decoction',
+    wr_decoction_stonewort: 'Wort Decoction', fat: 'Rendered Fat'
+  };
+
   WS.boot(function () {
     ensureItems();
     WS.Data = WS.Data || {};
     if (!WS.Data.recipes) WS.Data.recipes = [];
+    // recipesById — рабочий индекс систем Craft/Cook (recipe() ищет только
+    // здесь). Раньше эти 37 рецептов были видны в меню, но не выполнялись
+    // («нет такого рецепта») — тест-сьют S3 это поймал.
+    WS.Data.recipesById = WS.Data.recipesById || {};
     for (var i = 0; i < RECIPES.length; i++) {
       // не дублировать
       var exists = false;
       for (var k = 0; k < WS.Data.recipes.length; k++) {
         if (WS.Data.recipes[k].id === RECIPES[i].id) { exists = true; break; }
       }
-      if (!exists) WS.Data.recipes.push(RECIPES[i]);
-    }
-    // ПЕРЕСОБРАТЬ ИНДЕКС: recipes.js строит recipesById ДО нас — 34 рецепта
-    // оставались вне индекса, и WS.Craft.craft() отвечал «нет такого рецепта»
-    // (аудит крафта: knuckles_lead, torch_make, splint_field… были мертвы).
-    WS.Data.recipesById = WS.Data.recipesById || {};
-    for (var i2 = 0; i2 < WS.Data.recipes.length; i2++) {
-      if (WS.Data.recipes[i2] && WS.Data.recipes[i2].id) {
-        WS.Data.recipesById[WS.Data.recipes[i2].id] = WS.Data.recipes[i2];
+      if (!exists) {
+        WS.Data.recipes.push(RECIPES[i]);
+        // recipesById заполняем ТОЛЬКО для новых: при дубле id каноничен
+        // recipes.js (иначе меню показывает один рецепт, а крафт исполняет
+        // другой с иными ингредиентами — тест-сьют S3 это поймал на
+        // stretcher/charcoal_burn/barricade_plank)
+        WS.Data.recipesById[RECIPES[i].id] = RECIPES[i];
       }
+    }
+    // имена предметов (RU/EN) — после сбора Data.locales
+    WS.Data.locales = WS.Data.locales || {};
+    WS.Data.locales.ru = WS.Data.locales.ru || {};
+    WS.Data.locales.en = WS.Data.locales.en || {};
+    for (var nk in NAMES_RU) {
+      if (!WS.Data.locales.ru['item.' + nk + '.name']) WS.Data.locales.ru['item.' + nk + '.name'] = NAMES_RU[nk];
+      if (!WS.Data.locales.en['item.' + nk + '.name']) WS.Data.locales.en['item.' + nk + '.name'] = NAMES_EN[nk] || NAMES_RU[nk];
     }
   }, 'recipes:extra');
 })();

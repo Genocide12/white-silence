@@ -767,7 +767,14 @@
 
   function onKey(d) {
     if (!isOpen) return;
-    if (d && (d.code === 'KeyJ' || d.code === 'Escape')) close();
+    if (d && d.code === 'KeyJ') {
+      // съедаем нажатие: опросный путь не должен открыть журнал тут же
+      // повторно (повторное нажатие закрывает, а не «переоткрывает»)
+      if (WS.Input && WS.Input.consumeCode) WS.Input.consumeCode('KeyJ');
+      close();
+    } else if (d && d.code === 'Escape') {
+      close();
+    }
   }
 
   function uiTick(dt) {

@@ -1,0 +1,10 @@
+captures/
+*.log
+node_modules/
+.studioigor/captures/
+
+# local secrets
+.env
+
+# локальные артефакты аудита (скриншоты/пробы)
+download/

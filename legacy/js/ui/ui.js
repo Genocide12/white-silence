@@ -98,17 +98,6 @@
   }
 
   /** Русская плюрализация: plural(2, 'день', 'дня', 'дней'). */
-  /** Слово «день» в нужной форме — через словари (EN-режим больше не
-   *  показывает «until the steamship: 59 дней»). */
-  function dayWord(n) {
-    n = Math.abs(Math.round(n)) % 100;
-    if (n > 10 && n < 20) return T('ui.day.many', 'дней');
-    var d = n % 10;
-    if (d === 1) return T('ui.day.one', 'день');
-    if (d >= 2 && d <= 4) return T('ui.day.few', 'дня');
-    return T('ui.day.many', 'дней');
-  }
-
   function plural(n, one, few, many) {
     n = Math.abs(Math.round(n)) % 100;
     if (n > 10 && n < 20) return many;
@@ -599,7 +588,7 @@
         if (running && WS.Time && WS.Time.daysLeft) {
           var dl = WS.Time.daysLeft();
           dom.ship.textContent = T('ui.ship.left', 'до парохода') + ' ' +
-            dl + ' ' + dayWord(dl);
+            dl + ' ' + plural(dl, 'день', 'дня', 'дней');
           dom.ship.classList.remove('hidden');
         } else {
           dom.ship.classList.add('hidden');

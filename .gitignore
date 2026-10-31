@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for more about about ignoring files.
 
 # dependencies
 node_modules
@@ -15,6 +15,7 @@ node_modules
 
 # next.js
 /.next/
+/.next-ghpages/
 /out/
 
 # production
@@ -28,37 +29,13 @@ node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-local-*
-.claude
-.z-ai-config
+# логи и локальные артефакты аудита (скриншоты/пробы/ captures)
 *.log
-dev.log
-dev.out.log
-test
-prompt
+captures/
+.studioigor/captures/
+download/
+tool-results/
 
-server.log
-# Skills directory
-/skills/
-
-# песочница и артефакты сборки
-/.backups/
-/.zscripts/
-/.next-ghpages/
-/tool-results/
-/download/
-/upload/
-/db/
-prompt-*
+# local secrets
+.env

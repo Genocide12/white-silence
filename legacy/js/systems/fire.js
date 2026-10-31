@@ -21,10 +21,7 @@
     firewood_bundle: 40,           // вязанка хвороста
     plank: 30,                     // доска
     charcoal_bag: 50,             // мешок угля
-    fat: 25,                       // жир (горит чадя)
-    pine_branch: 10,              // еловая лапка: слабое, но топливо
-    birch_bark: 8,                // береста: вспыхивает жарко
-    dry_grass: 6                  // сухая трава: на растопку
+    fat: 25                       // жир (горит чадя)
   };
 
   // --- костёр ---
@@ -359,8 +356,7 @@
   //  огниво (flint не расходуется). На месте погасшего — перезапал.
   // ====================================================================
 
-  var TINDER = ['cloth_rag', 'newspaper_stack', 'candle_stump', 'wadding',
-               'birch_bark', 'dry_grass'];
+  var TINDER = ['cloth_rag', 'newspaper_stack', 'candle_stump', 'wadding'];
 
   /** Есть ли предмет одной из категорий; возвращает найденный id. */
   function pickAny(ids) {

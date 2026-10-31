@@ -15,6 +15,11 @@
   var overCanvas = true;
   var enabled = true;  // внешний запрет (кутсцены и т.п.)
 
+  // Виртуальный джойстик (для демо-автопилота): точные аналоговые оси
+  // вместо 8 квантованных направлений WASD. Ставит демо-бот каждый кадр;
+  // реальная клавиатура имеет приоритет, когда виртуаль выключен.
+  var virtual = { on: false, ax: 0, ay: 0 };
+
   var bindings = {
     up: ['KeyW', 'ArrowUp'],
     down: ['KeyS', 'ArrowDown'],
@@ -60,13 +65,52 @@
     return !!pressed[code];
   }
 
+  /** Съесть одноразовое нажатие: событие key:down уже обработало его
+   *  (например, закрыло экран) — опросный путь hit()/hitCode() в этом
+   *  кадре его НЕ увидит и не откроет экран тут же повторно.
+   *  Так «повторное нажатие закрывает меню» работает честно. */
+  function consumeCode(code) {
+    delete pressed[code];
+  }
+
   function keyIsDown(code) { return !!keys[code]; }
 
+  /** Виртуальный джойстик: задать аналоговые экранные оси -1..1. */
+  function setVirtual(ax, ay) {
+    virtual.on = true;
+    virtual.ax = Math.max(-1, Math.min(1, ax));
+    virtual.ay = Math.max(-1, Math.min(1, ay));
+  }
+
+  /** Выключить виртуальный джойстик (управление возвращается клавиатуре). */
+  function clearVirtual() {
+    virtual.on = false;
+    virtual.ax = 0;
+    virtual.ay = 0;
+  }
+
+  /** Текущее состояние джойстика: null или {on, ax, ay}. */
+  function virtualAxes() {
+    return virtual.on ? { on: true, ax: virtual.ax, ay: virtual.ay } : null;
+  }
+
   function updateMouseWorld() {
-    // перевод экранных координат в мировые с учётом камеры
+    // перевод экранных координат в мировые с учётом камеры.
+    // ВАЖНО: mouse.x/y — CSS-пиксели (mousemove), а screenToWorld ждёт
+    // ВНУТРЕННИЕ пиксели канваса (cv.width = innerWidth × dpr — Gfx.resize).
+    // На HiDPI-экранах (dpr 2) без пересчёта мир «под курсором» уезжал
+    // вдвое в сторону — промахи по цели и неверные подсказки.
     var cam = WS.Cam;
     if (!cam) return;
-    var w = cam.screenToWorld(mouse.x, mouse.y);
+    var k = 1;
+    try {
+      var cv = document.getElementById('game');
+      if (cv) {
+        var r = cv.getBoundingClientRect();
+        if (r && r.width > 1) k = cv.width / r.width;
+      }
+    } catch (e) { k = 1; }
+    var w = cam.screenToWorld(mouse.x * k, mouse.y * k);
     mouse.wx = w.x; mouse.wy = w.y;
     mouse.tx = Math.floor(w.x); mouse.ty = Math.floor(w.y);
   }
@@ -151,7 +195,11 @@
     down: down,
     hit: hit,
     hitCode: hitCode,
+    consumeCode: consumeCode,
     keyIsDown: keyIsDown,
+    setVirtual: setVirtual,
+    clearVirtual: clearVirtual,
+    virtualAxes: virtualAxes,
     mouse: mouse,
     overCanvas: function () { return overCanvas; },
     setEnabled: function (v) { enabled = !!v; },

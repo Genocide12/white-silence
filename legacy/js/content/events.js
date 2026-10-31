@@ -81,7 +81,7 @@
             dog.tamed = true; dog.ally = true;
             toast('Пёс принял вас. Теперь вы не один.', 'good');
             WS.Snd.play('levelup');
-            chron('Пёс стал компаньоном');
+            chron('Пёс стал companion');
           } else {
             toast('Пёс съел мясо. Кормить ещё ' + (3 - fedCount) + ' раз.', 'info');
           }
