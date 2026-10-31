@@ -9,3 +9,4 @@ node_modules/
 # локальные артефакты аудита (скриншоты/пробы)
 download/
 scripts/__pycache__/
+tool-results/
