@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[97367,["/white-silence/_next/static/chunks/2f236954d6a65e12.js"],"ViewportBoundary"]
+3:I[97367,["/white-silence/_next/static/chunks/2f236954d6a65e12.js"],"MetadataBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"4uRfWdRO7sqUgv02uimb7","rsc":["$","$1","h",{"children":[null,["$","$L2",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}],["$","meta","2",{"name":"theme-color","content":"#060b1a"}]]}],["$","div",null,{"hidden":true,"children":["$","$L3",null,{"children":["$","$4",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Белая Тишина: Топка — полярная инкременталка"}],["$","meta","1",{"name":"description","content":"1917 год, полярная ночь. Руби дрова, разжигай топку, разворачивай индустрию тепла — от щепки до 1e100. Автор: DirtyG."}],["$","meta","2",{"name":"author","content":"DirtyG"}],["$","meta","3",{"name":"keywords","content":"инкременталка,idle,кликер,полярная ночь,1917"}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"loading":null,"isPartial":false}
