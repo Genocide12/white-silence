@@ -394,8 +394,11 @@
   }
 
   /**
-   * Смерть сущности: статистика, событие 'ent:kill', труп (WS.Loot.makeCorpse
-   * от B-агента; если модуля нет — сущность просто исчезает), удаление из мира.
+   * Смерть сущности: статистика, событие 'ent:kill', удаление из мира.
+   * Труп больше НЕ создаём напрямую: его делает слушатель 'ent:kill' в
+   * js/systems/looting.js через экспорт WS.Loot.makeCorpse (обёртка
+   * дед-режима превращает его в подарок). Раньше прямой вызов + слушатель
+   * оставляли на тайле ДВА объекта (подарок и обычный труп).
    */
   function kill(e, by) {
     if (!e || e.dead) return;
@@ -413,10 +416,8 @@
     }
     try { WS.Ev.emit('ent:kill', { ent: e, by: by }); }
     catch (err) { WS.err('ent:kill emit', err); }
-    // труп с лутом — модуль B-агента (js/systems/loot.js)
-    try {
-      if (WS.Loot && WS.Loot.makeCorpse) WS.Loot.makeCorpse(e.x, e.y, e.kind);
-    } catch (err2) { WS.err('makeCorpse(' + e.kind + ')', err2); }
+    // труп с лутом создаёт слушатель 'ent:kill' в js/systems/looting.js
+    // (через экспорт WS.Loot.makeCorpse — ровно один объект на тайле)
     // эффекты
     if (WS.Fx && WS.Fx.burst) WS.Fx.burst('blood', e.x, e.y, 8);
     snd('death', e.x, e.y, 0.5);

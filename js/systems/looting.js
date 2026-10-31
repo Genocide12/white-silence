@@ -241,12 +241,17 @@
   WS.boot(function initLoot() {
     defCorpseSprites();
     WS.tick(42, function lootTick(dt) { updateSearch(dt); }, 'loot:search');
-    // трупы при смерти сущностей
+    // трупы при смерти сущностей.
+    // ВАЖНО: зовём именно ЭКСПОРТ WS.Loot.makeCorpse, а не локальную
+    // makeCorpse — режим «Безумный Дед» (js/systems/crazy.js) подменяет
+    // экспорт обёрткой «труп → подарок». Труп создаётся здесь РОВНО один
+    // раз: прямой дубль-вызов из ai.js kill() убран (раньше на тайле
+    // оставались сразу и подарок, и обычный труп).
     WS.Ev.on('ent:kill', function (d) {
       var e = d && d.ent;
       if (!e || e.noCorpse) return;
       if (e.kind === 'player') return;
-      makeCorpse(e.x, e.y, e.kind);
+      if (WS.Loot && WS.Loot.makeCorpse) WS.Loot.makeCorpse(e.x, e.y, e.kind);
     });
   }, 'loot:init');
 

@@ -119,6 +119,10 @@
     },
     boots_swift: {
       cat: 'tool', w: 0.9, stack: 1, tags: ['boots'],
+      // slots обязателен: WS.Inv.equip('feet') проверяет def.slots
+      // (inventory.js), а бонус скорости читается с equip.feet — без
+      // поля сапоги были ненадеваемыми, +15% скорости — мёртвым кодом
+      slots: ['feet'],
       ru: 'Сапоги-Скороходы', rud: 'Носить на ногах: +15% скорости деда.'
     },
     joint_ded: {
@@ -389,7 +393,7 @@
       // не собраны (жир/масло → тряпьё → доски).
       try {
         var pInv = P();
-        var torchN = 0, fatN = 0, oilN = 0, ragN = 0, plankN = 0;
+        var torchN = 0, fatN = 0, oilN = 0, ragN = 0, plankN = 0, plasterN = 0;
         if (pInv && pInv.inv) {
           for (var ii = 0; ii < pInv.inv.length; ii++) {
             var it2 = pInv.inv[ii];
@@ -399,19 +403,37 @@
             else if (it2.id === 'lamp_oil') oilN += it2.count || 1;
             else if (it2.id === 'cloth_rag') ragN += it2.count || 1;
             else if (it2.id === 'plank') plankN += it2.count || 1;
+            else if (it2.id === 'plaster_cast') plasterN += it2.count || 1;
           }
         }
-        if (torchN < 3) {
-          if (fatN + oilN < 3) {
-            if (Math.random() < 0.5) {
-              corpseObj._crazyExtra.push({ id: 'fat', count: 1 });
-              if (Math.random() < 0.4) corpseObj._crazyExtra.push({ id: 'lamp_oil', count: 1 });
-            }
-          } else if (ragN < 2) {
-            // тряпьё — последнее звено: гарантируем (ранее 40% подарков
-            // приходили пустыми, дед стоял с fat×27 и 0 тряпок)
+        // МЕДИЦИНСКИЙ ПРИОРИТЕТ: дед с нелеченым переломом ползёт ×0.45 —
+        // это главная ловушка ранней игры (плейтест роя: зонд к Д9 имел
+        // 1 изгнание и 0 материалов именно из-за сломанной ноги). Пока
+        // нога не зафиксирована — подарок несёт шину (доска+тряпка),
+        // изгнанник «жалеет хромого деда».
+        var needSplint = false;
+        try {
+          needSplint = !!(pInv && pInv.fracture && !pInv.fracTreat &&
+            plasterN < 1 && (plankN < 1 || ragN < 1));
+        } catch (eS) { /* пусто */ }
+        if (needSplint) {
+          if (plankN < 1) corpseObj._crazyExtra.push({ id: 'plank', count: 1 });
+          if (ragN < 1) corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 1 });
+        } else if (torchN < 3) {
+          // ДЕФИЦИТНАЯ ЧАСТЬ: на 3 факела нужно 3 горючего + 3 тряпки +
+          // 3 доски (двойной рецепт экономит, но капы считаем по трём
+          // одиночным — верняк). Раньше цепочка была серийной
+          // (жир→жир→жир→тряпки→доска) и на 3 факела уходило 8-9
+          // подарков; теперь несём то, чего не хватает сильнее всего.
+          var missFuel = Math.max(0, 3 - (fatN + oilN));
+          var missRag = Math.max(0, 3 - ragN);
+          var missPlank = Math.max(0, 3 - plankN);
+          if (missFuel > 0 && missFuel >= missRag && missFuel >= missPlank) {
+            corpseObj._crazyExtra.push({ id: 'fat', count: 1 });
+            if (Math.random() < 0.4) corpseObj._crazyExtra.push({ id: 'lamp_oil', count: 1 });
+          } else if (missRag > 0 && missRag >= missPlank) {
             corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 2 });
-          } else if (plankN < 1) {
+          } else if (missPlank > 0) {
             corpseObj._crazyExtra.push({ id: 'plank', count: 1 });
           }
         }
@@ -981,7 +1003,7 @@
         WS.Data.items[id] = {
           id: id, cat: d.cat, w: d.w, stack: d.stack,
           dmg: d.dmg, range: d.range, atkSpd: d.atkSpd, knock: d.knock, crit: d.crit,
-          heal: d.heal, tags: d.tags || []
+          heal: d.heal, tags: d.tags || [], slots: d.slots || null
         };
       }
     }
@@ -1136,6 +1158,17 @@
     finalMin: FINAL_MIN,
     drainMul: drainMul,
     voice: Voice,
+    /** Прямой тумблер озвучки (из API-шпаргалки): синхронно ставит
+     *  WS.Thoughts.setVoiceOn и state().voiceOn, возвращает новое состояние. */
+    setVoiceOn: function (on) {
+      var v = !!on;
+      try {
+        if (WS.Thoughts && WS.Thoughts.setVoiceOn) WS.Thoughts.setVoiceOn(v);
+      } catch (e) { /* безголосый дед — тоже дед */ }
+      var stV = ST();
+      if (stV) stV.voiceOn = v;
+      return v;
+    },
     healMul: healMul,
     dropChance: dropChance,
     respawnFrac: respawnFrac,

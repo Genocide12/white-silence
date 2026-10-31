@@ -51,7 +51,9 @@
     I({ id: 'soap_lump', cat: 'misc', w: 0.3, stack: 4, sanity: 2, tags: [] });
     I({ id: 'washboard', cat: 'tool', w: 1.4, stack: 1, tags: [] });
     I({ id: 'iron_flat', cat: 'tool', w: 3.0, stack: 1, warm: 5, tags: [] });
-    I({ id: 'hot_water_bottle', cat: 'med', w: 0.7, stack: 1, warm: 10, tags: ['heal'] });
+    // грелка — не лекарство: useMed её честно отвергает (нет мед-эффектов),
+    // это бытовая мелочь, греющая бок (warm работает только в постели)
+    I({ id: 'hot_water_bottle', cat: 'misc', w: 0.7, stack: 1, warm: 10, tags: [] });
 
     // ============================== БУМАГИ ==============================
     I({ id: 'passport', cat: 'misc', w: 0.05, stack: 1, tags: ['document'] });

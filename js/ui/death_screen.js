@@ -331,8 +331,14 @@
     var scr = dom.root;
     var isDeath = (kind !== 'victory');
 
-    // гамма: смерть — кровь, победа — холодное золото
-    scr.className = 'ws-screen ws-finale ' + (isDeath ? 'death' : 'victory');
+    // гамма: смерть — кровь, победа — холодное золото.
+    // Классы переключаем через classList (НЕ присваиванием className!):
+    // присваивание срывало и .hidden, и .ws-modal — экран становился виден
+    // ДО вызова Ui.open('finale'), тот выходил по isOpen() без push в стек
+    // и без .ws-modal, и финал переставал быть модальным. .hidden снимает
+    // сам Ui.open ниже — по образцу экранов реестра (inventory/options)
+    scr.classList.add(isDeath ? 'death' : 'victory');
+    scr.classList.remove(isDeath ? 'victory' : 'death');
 
     // строка-надзаголовок
     var kicker = scr.querySelector('.fin-kicker');
@@ -372,17 +378,26 @@
         : T('ui.victory.restart', 'Новая зимовка');
     }
 
-    // зарегистрировать и открыть через ядро UI:
-    // класс .ws-modal => Loop остановит симуляцию, ESC не закроет (noEsc)
+    // зарегистрировать и открыть через ядро UI (образец — inventory/
+    // options): Ui.open снимет .hidden, добавит .ws-modal и положит экран
+    // в стек. Класс .ws-modal => Loop остановит симуляцию (Ui.modal()
+    // = true), ESC не закроет (noEsc), а closeAll() сможет закрыть
+    // (рестарт/новая партия из main.js)
     var Ui = WS.Ui;
     if (Ui && Ui.register && !Ui.isOpen('finale')) {
       Ui.register('finale', {
         root: scr,
         isOpen: function () { return !scr.classList.contains('hidden'); },
+        close: function () { dom.lastKind = null; },   // сброс вида финала
         noEsc: true
       });
     }
-    if (Ui && Ui.open) Ui.open('finale');
+    if (Ui && Ui.open) {
+      try { Ui.open('finale'); } catch (eO) { WS.err('finale: Ui.open упал:', eO && eO.message); }
+    }
+    // страховка (ядра UI нет / open отказал): показать хотя бы классами,
+    // чтобы финал не потерялся
+    if (scr.classList.contains('hidden')) scr.classList.remove('hidden');
 
     // прячем подсказку и паузу: финал важнее
     if (Ui && Ui.hint) Ui.hint('');

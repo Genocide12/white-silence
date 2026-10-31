@@ -57,6 +57,12 @@
     def(it, { id: 'candle_stump', cat: 'light', w: 0.08, stack: 6, light: 28, fuelH: 3, tags: ['light'] });
     def(it, { id: 'inkwell', cat: 'misc', w: 0.15, stack: 2, tags: [] });
     def(it, { id: 'fir_needles', cat: 'material', w: 0.1, stack: 10, tags: ['tea_mat'] });
+    // зверобой сушёный (в мире его нет — только у Матрёны): каноническое
+    // объявление ЗДЕСЬ, ранней регистрацией (как flask_empty в items_seed).
+    // wanderers.js добавляет свой вариант «если нет» — прежде он приходил
+    // с cat 'med' без единого мед-эффекта (useMed отвергает). Это трава
+    // для чая, а не лекарство.
+    def(it, { id: 'wr_stonewort', cat: 'misc', w: 0.08, stack: 8, sanity: 4, tags: ['tea_mat'] });
 
     // ===== Одежда =====
     def(it, { id: 'wool_scarf', cat: 'cloth', w: 0.2, stack: 1, slots: ['head'], warm: 12, wind: 25, wet: 50, def: 1, tags: [] });

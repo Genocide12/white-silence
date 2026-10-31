@@ -80,7 +80,7 @@
         M.stars = Math.max(0, d.stars || 0);
         M.spentTotal = Math.max(0, d.spentTotal || 0);
         M.perks = d.perks || {};
-        M.runs = (d.runs && d.runs.slice) ? d.runs.slice(-12) : [];
+        M.runs = (d.runs && d.runs.slice) ? d.runs.slice(-24) : [];   // как в sendExpedition
         M.wins = d.wins || 0;
         M.bestDay = d.bestDay || 0;
         return;
@@ -174,11 +174,13 @@
     var D = WS.Data = WS.Data || {};
     D.items = D.items || {};
     D.items.potion_heal = {
+      id: 'potion_heal',
       cat: 'med', w: 0.3, stack: 5, tags: ['med'],
       heal: 40,
       ru: 'Живая Вода', rud: 'Зелье из звёздной пыли и грибов. Лечит 40 ХП, бодрит дух, будит совесть.'
     };
     D.items.potion_zoom = {
+      id: 'potion_zoom',
       cat: 'med', w: 0.3, stack: 5, tags: ['med'],
       zoom: 60,
       ru: 'Ёрш-Драйв', rud: 'Зелье скорости: минуту дед летает, как молодой. Потом — как пожилой, но быстро.'
@@ -195,7 +197,7 @@
     };
     if (!has('potion_heal')) {
       var rHeal = {
-        id: 'potion_heal', cat: 'cook', station: null, time: 8,
+        id: 'potion_heal', name: 'Живая Вода', cat: 'cook', station: null, time: 8,
         req: [{ id: 'stardust', n: 1 }, { id: 'mushroom_fun', n: 2 }],
         tools: [], out: [{ id: 'potion_heal', n: 1 }],
         ru: 'Живая Вода'
@@ -205,7 +207,7 @@
     }
     if (!has('potion_zoom')) {
       var rZoom = {
-        id: 'potion_zoom', cat: 'cook', station: null, time: 8,
+        id: 'potion_zoom', name: 'Ёрш-Драйв', cat: 'cook', station: null, time: 8,
         req: [{ id: 'stardust', n: 1 }, { id: 'candy_ded', n: 2 }],
         tools: [], out: [{ id: 'potion_zoom', n: 1 }],
         ru: 'Ёрш-Драйв'
@@ -224,6 +226,9 @@
       WS.Data.locales.ru['item.potion_zoom.desc'] = 'Зелье скорости: минуту дед летает, как молодой. Потом — как пожилой, но быстро.';
       WS.Data.locales.ru['recipe.potion_heal'] = 'Живая Вода';
       WS.Data.locales.ru['recipe.potion_zoom'] = 'Ёрш-Драйв';
+      // канонические ключи рецептов — с суффиксом .name, как у всех рецептов
+      WS.Data.locales.ru['recipe.potion_heal.name'] = 'Живая Вода';
+      WS.Data.locales.ru['recipe.potion_zoom.name'] = 'Ёрш-Драйв';
     }
     if (!WS.Data.locales.en['item.potion_heal.name']) {
       WS.Data.locales.en['item.potion_heal.name'] = 'Living Water';
@@ -232,6 +237,8 @@
       WS.Data.locales.en['item.potion_zoom.desc'] = 'Speed potion: for a minute the old man flies like a young one. Then — like an elderly one, but fast.';
       WS.Data.locales.en['recipe.potion_heal'] = 'Living Water';
       WS.Data.locales.en['recipe.potion_zoom'] = 'Hedgehog-Drive';
+      WS.Data.locales.en['recipe.potion_heal.name'] = 'Living Water';
+      WS.Data.locales.en['recipe.potion_zoom.name'] = 'Hedgehog-Drive';
     }
   }
 

@@ -480,13 +480,30 @@
   function stationReport() {
     var st = stationsNear();
     var out = [];
+    var hasFire = false;
     for (var i = 0; i < st.objects.length; i++) {
       var s = st.objects[i];
+      if (s.station === 'fire') hasFire = true;
       out.push({
         station: s.station,
         name: STATION_NAME[s.station] || s.station,
         dist: s.dist,
         x: s.o.x, y: s.o.y
+      });
+    }
+    // Неявный огонь от горящей печи: stationsNear подставляет out.fire =
+    // out.stove (варить можно и у печи), а панель UI (craft_screen.js)
+    // читает именно этот отчёт — без записи у печи не упоминалась варка «на огне».
+    if (!hasFire && st.stove && st.fire === st.stove) {
+      var stoveDist = null;
+      for (var k = 0; k < out.length; k++) {
+        if (out[k].station === 'stove') stoveDist = out[k].dist;
+      }
+      out.push({
+        station: 'fire',
+        name: 'огонь печи',
+        dist: (stoveDist != null) ? stoveDist : 0,
+        x: st.stove.x, y: st.stove.y
       });
     }
     return out;

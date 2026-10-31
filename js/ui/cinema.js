@@ -39,6 +39,29 @@
   var dom = { root: null };
 
   // ====================================================================
+  //  УТИЛИТЫ БЕЗОПАСНОГО РЕНДЕРА (имена/тексты записей — пользовательские
+  //  данные: всё, что идёт в innerHTML, экранируем и типизируем)
+  // ====================================================================
+
+  /** Экранирование HTML: & < > " ' — защита от инъекций через имя записи. */
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /** Число из данных записи (мусорные строки -> 0, чтобы не лезли в HTML). */
+  function num(v, def) {
+    var n = Number(v);
+    return isFinite(n) ? n : (def || 0);
+  }
+
+  /** День для подписи: число или «?», любой мусор не попадает в разметку. */
+  function dayTxt(v) {
+    return (v && isFinite(Number(v))) ? String(v) : '?';
+  }
+
+  // ====================================================================
   //  МИР-ПРИЗРАК: восстановить мир по зерну без запуска симуляции
   // ====================================================================
 
@@ -237,15 +260,21 @@
         bub.classList.add('hidden');
       }
     }
-    // лента действий
+    // лента действий (тексты плёнки — пользовательские данные: экранируем)
     var feed = dom.root.querySelector('.cn-feed');
     if (feed) {
       var html = '';
       for (var i = C.feed.length - 1, n = 0; i >= 0 && n < 7; i--, n++) {
         var f = C.feed[i];
-        html += '<div class="cn-feed-row ' + (f.cls || '') + '">' + f.txt + '</div>';
+        html += '<div class="cn-feed-row ' + esc(f.cls || '') + '">' + esc(f.txt) + '</div>';
       }
       feed.innerHTML = html;
+    }
+    // подсветка активной кнопки в ряду скоростей ×1..×2400
+    var spBtns = dom.root.querySelectorAll('.cn-speed-btn');
+    for (var sb = 0; sb < spBtns.length; sb++) {
+      if (parseInt(spBtns[sb].getAttribute('data-speed'), 10) === C.speedIx) spBtns[sb].classList.add('active');
+      else spBtns[sb].classList.remove('active');
     }
     // ползунок
     var scrub = dom.root.querySelector('.cn-scrub');
@@ -260,18 +289,21 @@
 
   function recRow(meta, src, id, file) {
     var icon = meta.result === 'victory' ? '🏆' : (meta.result === 'death' ? '💀' : '⏹');
-    var dur = Math.round((meta.realSec || 0) / 60);
-    return '<div class="cn-rec" data-src="' + src + '" data-id="' + id + '" data-file="' + (file || '') + '">' +
-      '<div class="cn-rec-name">' + icon + ' ' + (meta.name || 'Дед') +
+    var dur = Math.round(num(meta.realSec, 0) / 60);
+    // имя и файл — пользовательские данные: экранируем от HTML/JS-инъекций
+    return '<div class="cn-rec" data-src="' + esc(src) + '" data-id="' + esc(id) + '" data-file="' + esc(file || '') + '">' +
+      '<div class="cn-rec-name">' + icon + ' ' + esc(meta.name || 'Дед') +
       (meta.strategy === 'rush' ? ' <span class="cn-tag">СПИДРАН</span>' : '') + '</div>' +
       '<div class="cn-rec-sub">' + (meta.result === 'victory' ? 'победа' : (meta.result === 'death' ? 'уснул' : 'обрыв')) +
-      ' · день ' + (meta.day || '?') + ' · ' + (dur ? dur + ' мин реального времени' : '—') +
-      ' · изгнано: ' + (meta.banished || 0) + '</div>' +
+      ' · день ' + dayTxt(meta.day) + ' · ' + (dur ? dur + ' мин реального времени' : '—') +
+      ' · изгнано: ' + num(meta.banished, 0) + '</div>' +
       '</div>';
   }
 
   function renderList() {
-    var box = dom.root.querySelector('.cn-list');
+    // рендерим ТОЛЬКО контейнер строк .cn-rows: шапка .cn-head с кнопкой
+    // закрытия ✕ и подпись .cn-list-sub остаются живыми после любого рендера
+    var box = dom.root.querySelector('.cn-rows');
     if (!box) return;
     var html = '';
     // bundled (из репозитория)
@@ -336,6 +368,12 @@
     var r = document.createElement('div');
     r.id = 'ws-cinema';
     r.className = 'ws-panel ws-screen ws-cinema hidden';
+    // ряд кнопок всех скоростей ×1..×2400: клик — прямая установка
+    var speedsHtml = '';
+    for (var s = 0; s < SPEEDS.length; s++) {
+      speedsHtml += '<button class="ws-btn cn-btn cn-speed-btn" data-speed="' + s +
+        '" title="Скорость ×' + SPEEDS[s] + '">×' + SPEEDS[s] + '</button>';
+    }
     r.innerHTML =
       '<div class="cn-list">' +
       '  <div class="cn-head">🎬 КИНОЗАЛ ДЕДА <button class="ws-btn cn-close">✕</button></div>' +
@@ -357,6 +395,7 @@
       '    <button class="ws-btn cn-btn cn-close">✕ выйти</button>' +
       '  </div>' +
       '  <input type="range" class="cn-scrub" min="0" max="1000" value="0">' +
+      '  <div class="cn-speeds">' + speedsHtml + '</div>' +
       '  <div class="cn-bubble hidden"></div>' +
       '  <div class="cn-feed"></div>' +
       '  <div class="cn-end hidden">' +
@@ -369,9 +408,12 @@
     (document.getElementById('ui-root') || document.body).appendChild(r);
     dom.root = r;
 
-    r.querySelector('.cn-list .cn-close').addEventListener('click', hide);
-    var closes = r.querySelectorAll('.cn-close');
-    for (var i = 0; i < closes.length; i++) closes[i].addEventListener('click', hide);
+    // ✕ в шапке списка и «✕ выйти» в топбаре — закрывают весь кинозал;
+    // «к списку записей» на экране финала — возврат к списку (не выход)
+    var closers = r.querySelectorAll('.cn-list .cn-close, .cn-topbar .cn-close');
+    for (var c = 0; c < closers.length; c++) closers[c].addEventListener('click', hide);
+    var backBtn = r.querySelector('.cn-end .cn-close');
+    if (backBtn) backBtn.addEventListener('click', backToList);
     var btns = r.querySelectorAll('.cn-btn');
     for (var b = 0; b < btns.length; b++) {
       (function (el) {
@@ -380,7 +422,12 @@
           if (act === 'slower') setSpeedIx(C.speedIx - 1);
           else if (act === 'faster') setSpeedIx(C.speedIx + 1);
           else if (act === 'pause') { C.playing = !C.playing; }
-          else if (act === 'restart') { prep(C.rec); C.playing = true; }
+          else if (act === 'restart') restartTape();
+          else {
+            // кнопка конкретной скорости из ряда ×1..×2400
+            var sp = el.getAttribute('data-speed');
+            if (sp !== null && sp !== '') setSpeedIx(parseInt(sp, 10));
+          }
         });
       })(btns[b]);
     }
@@ -398,6 +445,22 @@
       else if (e.code === 'ArrowLeft') setSpeedIx(C.speedIx - 1);
       else if (e.code === 'Escape') hide();
     }, false);
+
+    // регистрируем в реестре Ui как модальный экран (как справка F1):
+    // Ui.open/close управляют классами (.ws-modal) и стеком экранов,
+    // состоянием владеем сами — open-колбэка нет, close — внутренний
+    try {
+      if (WS.Ui && WS.Ui.register) {
+        WS.Ui.register('cinema', {
+          root: dom.root,
+          open: null,
+          close: closeFromUi,
+          isOpen: function () { return C.open; }
+        });
+      }
+    } catch (eR) {
+      WS.err('cinema: регистрация экрана не удалась:', eR && eR.message);
+    }
   }
 
   function setSpeedIx(ix) {
@@ -430,6 +493,7 @@
   var prevMenuState = null;
 
   function show() {
+    if (C.open) return;                      // уже открыт — не переоткрываем
     build();
     // что было в игре до кинозала — запомним и погасим
     C.prevG = WS.G || null;
@@ -440,35 +504,74 @@
       }
     } catch (e) { /* пусто */ }
     C.restored = false;
-    dom.root.classList.remove('hidden');
+    // Экран зарегистрирован в Ui ещё в build(). Открываемся ЧЕРЕЗ реестр:
+    // Ui.open снимет .hidden, повесит .ws-modal и положит «cinema» в стек
+    // — симуляция и ввод живой партии гаснут (Ui.modal() === true).
+    // ВАЖНО: на момент вызова C.open ещё false и root ещё скрыт, иначе
+    // Ui.open выйдет по isOpen() ДО push в стек и без .ws-modal.
+    var viaUi = false;
+    if (WS.Ui && WS.Ui.open) {
+      try { viaUi = WS.Ui.open('cinema'); } catch (e3) { viaUi = false; }
+    }
+    if (!viaUi) {
+      // страховка без реестра: показываем руками, модальность — классом
+      dom.root.classList.remove('hidden');
+      dom.root.classList.add('ws-modal');
+    }
+    C.open = true;
     dom.root.querySelector('.cn-player').classList.add('hidden');
     dom.root.querySelector('.cn-list').classList.remove('hidden');
     renderList();
-    C.open = true;
     try { WS.Snd.play('click'); } catch (e2) { /* пусто */ }
-    // регистрируем как модал — ввод игры гаснет
-    try {
-      if (WS.Ui && WS.Ui.register && !WS.Ui.isOpen('cinema')) {
-        WS.Ui.register('cinema', {
-          root: dom.root,
-          isOpen: function () { return C.open; }
-        });
-      }
-      if (WS.Ui && WS.Ui.open) WS.Ui.open('cinema');
-    } catch (e3) { /* пусто */ }
   }
 
   function hide() {
     if (!C.open) return;
+    // просим реестр: Ui.close снимет .ws-modal и вынет из стека, а нашу
+    // внутреннюю closeFromUi дёрнет сам как close-колбэк экрана
+    if (WS.Ui && WS.Ui.close) {
+      try { WS.Ui.close('cinema'); return; } catch (e) { /* ниже — вручную */ }
+    }
+    closeFromUi();
+  }
+
+  /** Внутренняя закрывалка для реестра Ui: гасит состояние кинозала и
+   *  возвращает то, что было на экране до него. Классы .ws-modal/.hidden
+   *  и стек снимает сам Ui.close (closeAll тоже проходит через неё). */
+  function closeFromUi() {
+    if (!C.open) return;
     C.open = false;
     C.playing = false;
     C.rec = null;
-    dom.root.classList.add('hidden');
-    try {
-      if (WS.Ui && WS.Ui.close) WS.Ui.close('cinema');
-    } catch (e) { /* пусто */ }
+    if (dom.root) dom.root.classList.add('hidden');
     // вернуть меню/пустой мир
     restoreAfter();
+  }
+
+  /** «⟲ ещё раз» / ⟲ в топбаре: рестарт плёнки с начала.
+   *  Экран финала (.cn-end) прячем — реплей не должен идти под оверлеем. */
+  function restartTape() {
+    if (!C.rec) return;
+    var endEl = dom.root.querySelector('.cn-end');
+    if (endEl) endEl.classList.add('hidden');
+    prep(C.rec);
+    C.playing = true;
+  }
+
+  /** «к списку записей» с экрана финала: показать список обратно,
+   *  НЕ закрывая кинозал. */
+  function backToList() {
+    if (!C.open) return;
+    C.playing = false;
+    C.rec = null;
+    var player = dom.root.querySelector('.cn-player');
+    if (player) player.classList.add('hidden');
+    var end = dom.root.querySelector('.cn-end');
+    if (end) end.classList.add('hidden');
+    var list = dom.root.querySelector('.cn-list');
+    if (list) list.classList.remove('hidden');
+    renderList();
+    try { WS.Snd.play('click'); } catch (e) { /* пусто */ }
   }
 
   /** Восстановить то, что было на экране до кинозала. */

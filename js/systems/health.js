@@ -90,6 +90,10 @@
     tea_brick:      { tea: true, sanity: 8 }
   };
 
+  // «Ёрш-Драйв» (зелье скорости из экспедиций): множитель ходьбы/бега на
+  // время действия (def.zoom — секунды буста; p._zoomT тает в тике update)
+  var ZOOM_MOVE_MUL = 1.5;
+
   /** Урон по типам (по ТЗ): bleed — прибавка кровотечения, pain — доля
    *  урона в боль (0.34 ≈ amount/3 по умолчанию), infect — шанс заразить
    *  рану, infectAmt — сколько инфекции добавить, frac — базовый шанс
@@ -900,6 +904,8 @@
       if (def.painkill !== undefined && eff.painkill === undefined) eff.painkill = def.painkill;
       if (def.drunk !== undefined && eff.drunk === undefined) eff.drunk = def.drunk;
       if (def.sanity !== undefined && eff.sanity === undefined) eff.sanity = def.sanity;
+      // зелье скорости (экспедиции): def.zoom — секунды буста
+      if (def.zoom !== undefined && eff.zoom === undefined) eff.zoom = def.zoom;
     }
     return eff;
   }
@@ -990,6 +996,16 @@
       if (eff.heal) healHp(p, eff.heal);
       msg('Чага укрепляет силы', 'good');
       snd('eat', 0.6);
+      return true;
+    }
+
+    // --- зелье скорости («Ёрш-Драйв» из экспедиций) ---
+    if (eff.zoom) {
+      if (!invTake(id)) return false;
+      p._zoomT = (p._zoomT || 0) + eff.zoom;      // секунд полёта
+      try { WS.Ev.emit('player:heal', { kind: 'potion_zoom', sec: eff.zoom }); } catch (e) { /* пусто */ }
+      msg('Ёрш-Драйв! Ноги сами несут', 'good');
+      snd('drink', 0.7);
       return true;
     }
 
@@ -1124,11 +1140,24 @@
   /** Применить штрафы скорости (каждый тик). */
   function applySpeed(p) {
     var mul = moveMul(p);
+    // «Ёрш-Драйв»: бафф скорости поверх штрафов (перелом и боль гасят его,
+    // но не полностью). База не затирается — по завершении вернём её.
+    var zoom = (p._zoomT || 0) > 0 ? ZOOM_MOVE_MUL : 1;
+    mul = mul * zoom;
     if (mul >= 1) {
-      // штрафа нет: если мы раньше занижали — вернуть базу
+      // штрафа нет: если мы раньше меняли — вернуть базу
       if (p._hSpdApplied) {
         p.speed = p._hSpdBase;
         p._hSpdApplied = false;
+      }
+      if (mul > 1) {
+        // чистый бафф: поднять скорость, базу помним и НЕ затираем
+        if (typeof p._hSpdBase !== 'number' || p._hSpdBase <= 0) {
+          p._hSpdBase = (typeof p.speed === 'number' && p.speed > 0) ? p.speed : 2.2;
+        }
+        p.speed = p._hSpdBase * mul;
+        p._hSpdApplied = true;                 // бафф спадёт — вернём базу
+        return;
       }
       // запоминаем «свободную» скорость (её могли сменить лыжи и т.п.)
       if (typeof p.speed === 'number' && p.speed > 0.5) p._hSpdBase = p.speed;
@@ -1204,6 +1233,9 @@
 
     // 6) чага: таймер стойкости
     if (p._chagaT > 0) p._chagaT = Math.max(0, p._chagaT - gh);
+
+    // 6.5) «Ёрш-Драйв»: зелье скорости тает реальными секундами
+    if (p._zoomT > 0) p._zoomT = Math.max(0, p._zoomT - rs);
 
     // 7) болезнь
     tickSick(p, gh);

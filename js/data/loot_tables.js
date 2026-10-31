@@ -15,28 +15,27 @@
 
   // ============================================================= КУХНЯ
   loot.kitchen_pech = T([2, 4], [
-    C('firewood_bundle', 30, 1, 3), C('coal_lump', 0, 0), NOTHING(0),
+    C('firewood_bundle', 30, 1, 3),
     C('bread', 8, 1, 1), C('kasha', 6, 1, 1), C('potato', 14, 2, 6), C('onion', 10, 1, 4),
     C('cabbage', 8, 1, 2), C('turnip', 8, 2, 5), C('salt_bag', 6, 1, 1),
     C('cast_iron', 4, 1, 1), C('ladle', 5, 1, 1), C('candle_stump', 6, 1, 3),
-    C('ash_bucket', 0, 0), NOTHING(25)
+    NOTHING(25)
   ]);
   loot.kitchen_table = T([2, 4], [
     C('bread', 10, 1, 2), C('rusk', 14, 2, 6), C('salt_fish', 6, 1, 2),
     C('pickles', 7, 1, 2), C('sauerkraut', 6, 1, 2), C('honey_jar', 3, 1, 1),
-    C('spoon_wood', 12, 1, 3), C('bowl_wood', 10, 1, 2), C('mug_tin', 8, 1, 2),
+    C('spoon_wood', 12, 1, 3), C('bowl_wood', 10, 1, 2),
     C('knife', 5, 1, 1), C('newspaper_stack', 5, 1, 1), NOTHING(20)
   ]);
   loot.kitchen_cupboard = T([3, 5], [
     C('rusk', 16, 2, 8), C('dried_fish', 10, 1, 4), C('galley_biscuits', 8, 2, 5),
     C('semolina', 7, 1, 1), C('oat_flakes', 8, 1, 2), C('sugar_loaf', 6, 1, 1),
     C('tea_brick', 6, 1, 2), C('salt_bag', 8, 1, 1), C('jar_empty', 12, 1, 4),
-    C('bottle_empty', 10, 1, 3), C('cup_clay', 10, 1, 3), C('plate_tin', 8, 1, 3),
+    C('bottle_empty', 10, 1, 3),
     C('candle_stump', 7, 1, 2), NOTHING(12)
   ]);
   loot.kitchen_shelf = T([2, 4], [
-    C('spice_nutmeg', 0, 0), C('pepper_peas', 0, 0),
-    C('jar_empty', 14, 1, 4), C('bottle_empty', 12, 1, 3), C('cup_clay', 12, 1, 2),
+    C('jar_empty', 14, 1, 4), C('bottle_empty', 12, 1, 3),
     C('dried_mushrooms', 8, 1, 3), C('birch_chaga', 6, 1, 2), C('fir_needles', 4, 1, 2),
     NOTHING(22)
   ]);
@@ -81,7 +80,7 @@
   // ============================================================= АМБАР / СКЛАД
   loot.barn_hay = T([2, 3], [
     C('sickle', 5, 1, 1), C('scythe', 4, 1, 1), C('pitchfork', 5, 1, 1),
-    C('rope_coil', 10, 1, 1), C('burlap_sack', 12, 1, 2), C('horse_harness', 3, 1, 1),
+    C('rope_coil', 10, 1, 1), C('burlap_sack', 12, 1, 2),
     C('hay_bale', 20, 1, 3), C('salt_bag', 4, 1, 1), NOTHING(12)
   ]);
   loot.barn_tools = T([2, 4], [
@@ -92,13 +91,12 @@
   ]);
   loot.warehouse_crate = T([2, 4], [
     C('plank', 20, 2, 6), C('nails', 16, 6, 30), C('scrap_metal', 12, 2, 8),
-    C('rope_coil', 8, 1, 2), C('tar_bucket', 5, 1, 1), C('brick_stack', 0, 0),
+    C('rope_coil', 8, 1, 2), C('tar_bucket', 5, 1, 1),
     C('window_glass', 4, 1, 2), C('hinge_iron', 6, 2, 6), NOTHING(12)
   ]);
   loot.warehouse_barrel = T([1, 3], [
     C('salt_bag', 12, 1, 1), C('cabbage', 10, 2, 5), C('pickles', 10, 1, 3),
-    C('sauerkraut', 10, 1, 3), C('cranberries_jar', 6, 1, 2), C('brine_barrel', 0, 0),
-    C('herring_barrel', 8, 1, 1), NOTHING(14)
+    C('sauerkraut', 10, 1, 3), C('cranberries_jar', 6, 1, 2), NOTHING(14)
   ]);
   loot.warehouse_sack = T([2, 3], [
     C('semolina', 12, 1, 2), C('oat_flakes', 12, 1, 2), C('flour_bag', 14, 1, 1),
@@ -110,7 +108,7 @@
   loot.store_counter = T([2, 3], [
     C('coin_purse', 8, 1, 1), C('watch_silver', 2, 1, 1), C('tobacco_pouch', 10, 1, 2),
     C('matches', 14, 1, 3), C('candle_stump', 12, 1, 4), C('lamp_oil', 8, 1, 2),
-    C('scales_brass', 3, 1, 1), C('account_book', 4, 1, 1), NOTHING(14)
+    NOTHING(14)
   ]);
   loot.store_shelf_food = T([3, 5], [
     C('bread', 10, 1, 2), C('rusk', 14, 2, 6), C('galley_biscuits', 10, 2, 5),
@@ -137,11 +135,11 @@
 
   // ============================================================= ЦЕРКОВЬ
   loot.church_altar = T([1, 2], [
-    C('cross_silver', 6, 1, 1), C('candle_stump', 20, 2, 5), C('incense', 8, 1, 2),
-    C('bible_old', 10, 1, 1), C('coin_purse', 4, 1, 1), NOTHING(20)
+    C('cross_silver', 6, 1, 1), C('candle_stump', 20, 2, 5),
+    C('coin_purse', 4, 1, 1), NOTHING(28)
   ]);
   loot.church_candle = T([2, 3], [
-    C('candle_stump', 30, 2, 6), C('matches', 10, 1, 2), C('incense', 8, 1, 2), NOTHING(12)
+    C('candle_stump', 30, 2, 6), C('matches', 10, 1, 2), NOTHING(20)
   ]);
 
   // ============================================================= ВРАЧ
@@ -158,25 +156,24 @@
 
   // ============================================================= ШКОЛА
   loot.school_desk = T([1, 2], [
-    C('inkwell', 8, 1, 1), C('pencil_stump', 10, 1, 3), C('newspaper_stack', 10, 1, 1),
-    C('letter_old', 6, 1, 1), C('rusk', 8, 1, 2), NOTHING(24)
+    C('inkwell', 8, 1, 1), C('newspaper_stack', 10, 1, 1),
+    C('letter_old', 6, 1, 1), C('rusk', 8, 1, 2), NOTHING(34)
   ]);
   loot.school_shelf = T([2, 3], [
     C('book_carpentry', 4, 1, 1), C('book_cook', 4, 1, 1), C('book_tailor', 3, 1, 1),
-    C('newspaper_stack', 16, 1, 3), C('inkwell', 8, 1, 2), C('chalk_box', 8, 1, 1),
-    C('globe_dusty', 2, 1, 1), NOTHING(14)
+    C('newspaper_stack', 16, 1, 3), C('inkwell', 8, 1, 2), NOTHING(24)
   ]);
 
   // ============================================================= ТРАКТИР
   loot.tavern_bar = T([2, 4], [
-    C('vodka', 16, 1, 3), C('kvass_flask', 12, 1, 2), C('mug_tin', 14, 1, 3),
+    C('vodka', 16, 1, 3), C('kvass_flask', 12, 1, 2),
     C('bottle_empty', 12, 1, 3), C('tobacco_pouch', 8, 1, 1), C('coin_purse', 5, 1, 1),
-    C('harmonica', 3, 1, 1), NOTHING(12)
+    C('harmonica', 3, 1, 1), NOTHING(26)
   ]);
   loot.tavern_table = T([1, 3], [
     C('bread', 10, 1, 2), C('salt_fish', 8, 1, 1), C('pickles', 8, 1, 2),
-    C('vodka', 10, 1, 2), C('mug_tin', 10, 1, 2), C('deck_cards', 4, 1, 1),
-    C('tobacco_pouch', 6, 1, 1), NOTHING(18)
+    C('vodka', 10, 1, 2), C('deck_cards', 4, 1, 1),
+    C('tobacco_pouch', 6, 1, 1), NOTHING(28)
   ]);
   loot.tavern_cellar = T([3, 5], [
     C('vodka', 14, 2, 5), C('kvass_flask', 10, 1, 3), C('cabbage', 12, 2, 6),
@@ -206,15 +203,15 @@
     C('salt_bag', 6, 1, 1), NOTHING(10)
   ]);
   loot.stable_rack = T([2, 3], [
-    C('horse_harness', 8, 1, 1), C('rope_coil', 10, 1, 2), C('hay_bale', 16, 1, 3),
-    C('horseshoe', 8, 1, 2), C('lantern', 4, 1, 1), C('kerosene', 6, 1, 1), NOTHING(14)
+    C('rope_coil', 10, 1, 2), C('hay_bale', 16, 1, 3),
+    C('horseshoe', 8, 1, 2), C('lantern', 4, 1, 1), C('kerosene', 6, 1, 1), NOTHING(22)
   ]);
 
   // ============================================================= ОКОЛОТОК / ВЫШКА
   loot.jail_locker = T([2, 3], [
     C('pistol_nagant', 3, 1, 1), C('rifle_round', 8, 3, 10), C('shell', 4, 2, 6),
-    C('handcuffs', 4, 1, 1), C('lantern', 6, 1, 1), C('vodka', 8, 1, 2),
-    C('rusk', 8, 2, 4), C('nails', 8, 6, 16), NOTHING(14)
+    C('lantern', 6, 1, 1), C('vodka', 8, 1, 2),
+    C('rusk', 8, 2, 4), C('nails', 8, 6, 16), NOTHING(18)
   ]);
   loot.guardtower_locker = T([2, 4], [
     C('rifle_mosin', 4, 1, 1), C('shotgun', 3, 1, 1), C('rifle_round', 12, 4, 12),
@@ -225,13 +222,13 @@
   // ============================================================= ВОКЗАЛ / ДАЧА / ПРИСТАНЬ
   loot.telegraph_desk = T([2, 4], [
     C('letter_old', 16, 1, 3), C('newspaper_stack', 14, 1, 3), C('inkwell', 12, 1, 2),
-    C('pencil_stump', 12, 1, 3), C('watch_silver', 3, 1, 1), C('map_old', 4, 1, 1),
-    C('telegraph_form', 10, 2, 5), C('matches', 8, 1, 2), NOTHING(12)
+    C('watch_silver', 3, 1, 1), C('map_old', 4, 1, 1),
+    C('matches', 8, 1, 2), NOTHING(22)
   ]);
   loot.dacha_chest = T([2, 4], [
-    C('wool_coat', 8, 1, 1), C('wool_scarf', 10, 1, 2), C('silver_spoon', 6, 1, 3),
+    C('wool_coat', 8, 1, 1), C('wool_scarf', 10, 1, 2),
     C('watch_silver', 3, 1, 1), C('photo_family', 6, 1, 1), C('harmonica', 3, 1, 1),
-    C('tea_brick', 8, 1, 2), C('sugar_loaf', 8, 1, 1), C('vodka', 8, 1, 2), NOTHING(14)
+    C('tea_brick', 8, 1, 2), C('sugar_loaf', 8, 1, 1), C('vodka', 8, 1, 2), NOTHING(20)
   ]);
   loot.boat_supply = T([2, 4], [
     C('rope_coil', 14, 1, 2), C('hook_line', 12, 1, 3), C('fishing_rod', 6, 1, 1),
@@ -253,8 +250,8 @@
   ]);
   loot.ruined_debris = T([2, 4], [
     C('scrap_metal', 18, 2, 8), C('nails', 14, 6, 20), C('charcoal_bag', 10, 1, 2),
-    C('brick_broken', 16, 2, 6), C('plank', 12, 2, 5), C('bottle_empty', 10, 1, 3),
-    C('cloth_rag', 12, 1, 4), C('rusk', 4, 1, 2), C('bone_old', 6, 1, 2), NOTHING(14)
+    C('plank', 12, 2, 5), C('bottle_empty', 10, 1, 3),
+    C('cloth_rag', 12, 1, 4), C('rusk', 4, 1, 2), C('bone_old', 6, 1, 2), NOTHING(30)
   ]);
   loot.ranger_cache = T([3, 5], [
     C('rifle_mosin', 6, 1, 1), C('rifle_round', 16, 6, 20), C('hunting_knife', 10, 1, 1),

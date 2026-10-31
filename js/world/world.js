@@ -56,6 +56,13 @@
     if (!inB(x, y)) return;
     World.tiles[idx(x, y)] = t;
     World.ver++;
+    // ДИФФ СЕЙВА: serialize() читает World.tileDiff — правки тайлов
+    // и вне build.js (например, выгоревший пол из systems/fire.js)
+    // обязаны попадать в сейв. Пишем только в «живом» мире (флаг
+    // _live поднимают game:start/game:load, сбрасывает reset):
+    // генерация гоняет setTile десятки тысяч раз и не должна
+    // раздувать дифф (build.js по-прежнему ведёт свои записи сам).
+    if (World._live && World.tileDiff) World.tileDiff[x + ',' + y] = t;
     if (World.onTileChanged) World.onTileChanged(x, y, t);
   };
 
@@ -328,6 +335,10 @@
 
   World.deserialize = function (diff) {
     if (!diff) return;
+    // поднять сохранённый дифф ДО применения: без этого следующий
+    // serialize() потерял бы загруженные правки (после генерации
+    // World.tileDiff пуст, а setTile в момент загрузки ещё «не живой»)
+    World.tileDiff = diff.tileDiff || {};
     for (var k in diff.tileDiff || {}) {
       var p = k.split(',');
       World.setTile(+p[0], +p[1], diff.tileDiff[k]);
@@ -349,6 +360,7 @@
     World.spatial = {};
     World.ver = 1;
     World.tileDiff = {};
+    World._live = false;        // идёт генерация: setTile не пишет дифф
     World.doorState = {};
     World.built = [];
     World._nextId = 1;
@@ -360,6 +372,14 @@
   World.newId = function (prefix) { return (prefix || 'id') + (World._nextId++); };
 
   WS.def('World', World);
+
+  // «Живой» мир: партия начата/загружена — с этого момента правки тайлов
+  // пишутся в дифф сейва (см. setTile). reset() флаг сбрасывает, чтобы
+  // тысячи setTile генератора не раздули World.tileDiff.
+  WS.boot(function initWorldDiff() {
+    WS.Ev.on('game:start', function () { World._live = true; });
+    WS.Ev.on('game:load', function () { World._live = true; });
+  }, 'world:diff');
 
   // Рендер-тик 69 — непосредственно перед gfx:render (70): пространственный
   // хэш свежий к моменту отрисовки. Телепорты (двери, интерьеры) и долгая

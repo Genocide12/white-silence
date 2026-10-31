@@ -100,14 +100,16 @@ def extract_bank():
     for i, s in enumerate(block_strings(cz, 'var CARTOON_TAUNTS')):
         out.append(dict(id='cartoon_%d' % (i + 1), text=s, ch='cartoon'))
 
-    # 3) ФИКСИРОВАННЫЕ РЕПЛИКИ crazy.js (Voice.say с точным текстом)
+    # 3) ФИКСИРОВАННЫЕ РЕПЛИКИ crazy.js (Voice.say с точным текстом).
+    #    ФИКС FV: cz_timeup/cz_joint/cz_respawn убраны — их тексты УЖЕ
+    #    озвучены в мат-банке (mat_timeup_1/mat_cz_joint_1/mat_respawn_1),
+    #    дубликат текста ломал byText (второй mp3 никогда не звучал).
+    #    Добавлена реплика победы onVictory (cz_victory).
     fixed = [
         ('cz_start',    'Так. Где мой вантуз? Пошли спасать мир.'),
-        ('cz_timeup',   'Всё, дед. Время вышло. Спать.'),
         ('cz_d50',      'Время поджимает, дед. Пятьдесят дней прошло.'),
         ('cz_lowhp',    'Ох, чую, лапти свои скоро увижу. Косяк где?'),
-        ('cz_joint',    'Вот это дурь! Полный порядок.'),
-        ('cz_respawn',  'Чё это было? А, привиделось. Продолжаем!'),
+        ('cz_victory',  'Летающая тарелка! Я знал! Дед, ты красавчик!'),
     ]
     for pid, s in fixed:
         if ("'" + s + "'") in cz:

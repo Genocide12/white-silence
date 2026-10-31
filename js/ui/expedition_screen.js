@@ -157,10 +157,15 @@
   }
 
   WS.boot(function initExpedScreen() {
-    // горячая клавиша X — только в живой партии и не в модалках
+    // горячая клавиша X: открыть/ЗАКРЫТЬ избу. Проверка «уже открыта?»
+    // идёт ПЕРВОЙ — открытая изба сама себе ставит класс .ws-modal
+    // (Ui.modal()=true), и при проверке модалки ДО toggle() клавиша
+    // только открывала, но не закрывала, хотя кнопка подписана
+    // «Закрыть [X]». Открытие — по-прежнему только вне чужих модалок
     window.addEventListener('keydown', function (e) {
       if (e.code !== 'KeyX') return;
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      if (isOpen()) { hide(); return; }
       try {
         if (WS.Ui && WS.Ui.modal && WS.Ui.modal()) return;
       } catch (er) { /* пусто */ }

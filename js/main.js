@@ -16,6 +16,17 @@
     started: false,
 
     newGame: function (prof, traits, seed) {
+      // сброс глобальных стоп-флагов: экран финала (death_screen) ставит
+      // WS.dead=true при смерти, и без сброса следующая партия (например,
+      // агент роя после смерти предыдущего) заморожена — Loop не тикает
+      WS.dead = false;
+      WS.paused = false;
+      // новая партия = чистый интерфейс: закрыть экраны реестра (финал,
+      // окно концовки-подтверждения и прочие), иначе забытый модальный
+      // экран держит симуляцию на паузе (Ui.modal() = true)
+      if (WS.Ui && WS.Ui.closeAll) {
+        try { WS.Ui.closeAll(); } catch (eC) { WS.err('newGame: closeAll упал:', eC && eC.message); }
+      }
       World_reset();
       var G = WS.State.newGame(seed, prof, traits);
       WS.G = G;

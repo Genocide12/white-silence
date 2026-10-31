@@ -144,8 +144,9 @@
   function determineEnding(cause) {
     // смерть под сиянием?
     if (cause === 'aurora') return ENDINGS.aurora;
-    // ПОБЕДА ДО СРОКА: тарелка прилетела по Грибному Зову раньше 60-го дня
-    if (flags().plate_called && flags().signal_fire_lit && WS.Time.day() < 55) {
+    // ПОБЕДА ДО СРОКА: тарелка прилетела по Грибному Зову раньше 55-го дня.
+    // ВНИМАНИЕ: флаг огня ставит story.js lightBeacon() под именем 'signal_lit'
+    if (flags().plate_called && flags().signal_lit && WS.Time.day() < 55) {
       return ENDINGS.ship_early;
     }
     // победа с семейством?
@@ -156,12 +157,15 @@
     if (flags().all_bandits_dead && WS.Time.day() >= 50) return ENDINGS.ataman;
     // волчий царь
     if (stat('wolvesKilled') >= 100) return ENDINGS.wolf_king;
-    // пароход: сигнальный огонь
-    if (flags().signal_fire_lit) return ENDINGS.ship;
+    // пароход: сигнальный огонь зажжён (флаг 'signal_lit' из story.js)
+    if (flags().signal_lit) return ENDINGS.ship;
     // зимовка: дожил до конца без огня
     if (WS.Time.day() >= WS.Time.DAYS_TO_SHIP) return ENDINGS.wintering;
-    // обычная смерть
-    return null;
+    // безопасный дефолт: determineEnding не имеет права вернуть null —
+    // иначе экран финала останется без концовки. Непокрытые случаи
+    // (аномальная победа без огня и т.п.) считаем зимовкой: дед жив,
+    // тарелку пересидит до следующей реки
+    return ENDINGS.wintering;
   }
 
   // ================================================================ ПОКАЗ
@@ -191,16 +195,13 @@
         show(ENDINGS.aurora, 'aurora');
       }
     });
-    // отметка: сигнальный огонь (финальный квест) — слушаем розжиг на пристани
-    WS.Ev.on('fire:lit', function (d) {
-      if (!d || !d.x) return;
-      // пристань: рядом с мостками/рыбацкими избушками (юг карты)
-      if (d.y > 150) {
-        flags().signal_fire_lit = true;
-        if (WS.Ui && WS.Ui.toast) WS.Ui.toast('Сигнальный огонь на пристани виден с реки!', 'good');
-        chron('Зажжён сигнальный огонь пристани');
-      }
-    });
+    // ПРИМЕЧАНИЕ: флаг сигнального огня ('signal_lit') ставит ТОЛЬКО
+    // story.js — lightBeacon() у мостков, со списанием 3 факелов и
+    // проверкой пристани. Прежний слушатель 'fire:lit' писал флаг с
+    // опечаткой имени ('signal_fire_lit'), ничего не читалось, и потому
+    // не работал; дублировать логику story.js по эвенту костра нельзя —
+    // любой костёр южнее y>150 отмечал бы огонь и давал победу без
+    // факелов. Слушатель убран: story.js — единственный автор флага.
   }, 'endings:init');
 
   WS.def('Endings', {

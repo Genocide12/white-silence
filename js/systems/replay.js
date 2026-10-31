@@ -103,18 +103,23 @@
   //  ЭКСПОРТ / ИМПОРТ
   // ====================================================================
 
+  /** Выгрузка записи: СНАПШОТ (фиксация на момент вызова).
+   *  ev копируется — экспорт, сделанный до конца записи, больше не растёт
+   *  вместе с живой R.ev; meta копируется — extra мержится в копию и не
+   *  протекает в последующие экспорты. */
   function exportRec(extra) {
-    var out = {
-      v: 1,
-      meta: R.meta || {},
-      ev: R.ev
-    };
+    var src = R.meta || {};
+    var meta = {};
+    var k;
+    for (k in src) if (src.hasOwnProperty(k)) meta[k] = src[k];
     if (extra) {
-      for (var k in extra) {
-        if (extra.hasOwnProperty(k)) out.meta[k] = extra[k];
-      }
+      for (k in extra) if (extra.hasOwnProperty(k)) meta[k] = extra[k];
     }
-    return out;
+    return {
+      v: 1,
+      meta: meta,
+      ev: R.ev.slice()
+    };
   }
 
   // ====================================================================
@@ -133,18 +138,45 @@
     try { localStorage.setItem(IDX_KEY, JSON.stringify(a)); } catch (e) { /* пусто */ }
   }
 
+  // счётчик уникальности: защиты от коллизий внутри одной миллисекунды
+  var idSeq = 0;
+
+  /** Уникальный id записи: время + счётчик + случайный суффикс, с
+   *  проверкой по индексу (записи, сохранённые подряд за одну
+   *  миллисекунду, больше не получают одинаковый id и не затирают
+   *  друг друга). */
+  function newRecId() {
+    var taken = true, id = '', guard = 99;
+    while (taken && guard-- > 0) {
+      id = 'r' + Date.now().toString(36) + '-' + (idSeq++) +
+        ((Math.random() * 46656) | 0).toString(36);
+      taken = false;
+      var a = idx();
+      for (var i = 0; i < a.length; i++) {
+        if (a[i].id === id) { taken = true; break; }
+      }
+    }
+    return id;
+  }
+
+  /** Строка индекса для записи. strategy обязателен — по нему кинозал
+   *  вешает тег «СПИДРАН» (cinema.js recRow читает meta.strategy). */
+  function idxEntry(id, rec, name) {
+    var meta = (rec && rec.meta) || {};
+    return {
+      id: id, at: Date.now(), name: name || meta.name || 'Запись',
+      result: meta.result || '', day: meta.day || 0, seed: meta.seed || 0,
+      strategy: meta.strategy || '', realSec: meta.realSec || 0
+    };
+  }
+
   /** Сохранить текущую/готовую запись локально. Возвращает id. */
   function saveLocal(rec, name) {
-    var id = 'r' + Date.now().toString(36);
-    var meta = (rec && rec.meta) || {};
+    var id = newRecId();
     try {
       localStorage.setItem(DATA_KEY + id, JSON.stringify(rec));
       var a = idx();
-      a.unshift({
-        id: id, at: Date.now(), name: name || meta.name || 'Запись',
-        result: meta.result || '', day: meta.day || 0, seed: meta.seed || 0,
-        realSec: meta.realSec || 0
-      });
+      a.unshift(idxEntry(id, rec, name));
       while (a.length > MAX_LOCAL) {
         try { localStorage.removeItem(DATA_KEY + a[a.length - 1].id); } catch (e2) { /* пусто */ }
         a.pop();
@@ -160,9 +192,7 @@
           a2.pop();
           try {
             localStorage.setItem(DATA_KEY + id, JSON.stringify(rec));
-            a2.unshift({ id: id, at: Date.now(), name: name || meta.name || 'Запись',
-              result: meta.result || '', day: meta.day || 0, seed: meta.seed || 0,
-              realSec: meta.realSec || 0 });
+            a2.unshift(idxEntry(id, rec, name));
             saveIdx(a2);
             return id;
           } catch (e3) { /* ещё раз */ }

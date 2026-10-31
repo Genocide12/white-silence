@@ -111,29 +111,28 @@
       }).then(function (ab) {
         var ac = ctx();
         if (!ac) throw new Error('нет аудиоконтекста');
-        var pr = ac.decodeAudioData(ab, function (buf) {
+        // ФИКС FV-2: в Chromium decodeAudioData вызывает И legacy-колбэк,
+        // И резолвит промис — раньше фраза считалась в stat().decoded дважды.
+        // Флаг done: первая же удачная расшифровка засчитывается один раз,
+        // повторные срабатывания (колбэк ИЛИ промис) молча игнорируются.
+        var done = false;
+        function okOnce(buf) {
+          if (done) return;                 // уже посчитано — не двойним
+          done = true;
           S.bufs[id] = buf;
           S.statN.decoded++;
           delete S.loading[id];
           if (cb) cb(buf);
-        }, function () {
+        }
+        function errOnce() {
+          if (done) return;
+          done = true;
           delete S.loading[id];
           S.failed[id] = true;
           if (cb) cb(null);
-        });
-        // современный промис-вариант
-        if (pr && pr.then) {
-          pr.then(function (buf) {
-            S.bufs[id] = buf;
-            S.statN.decoded++;
-            delete S.loading[id];
-            if (cb) cb(buf);
-          }).catch(function () {
-            delete S.loading[id];
-            S.failed[id] = true;
-            if (cb) cb(null);
-          });
         }
+        var pr = ac.decodeAudioData(ab, okOnce, errOnce);   // legacy-колбэк
+        if (pr && pr.then) pr.then(okOnce).catch(errOnce);  // современный промис-вариант
       }).catch(function () {
         delete S.loading[id];
         S.failed[id] = true;
@@ -146,15 +145,28 @@
     }
   }
 
+  // приоритетный список префетча: интро партии — рассказчик и первая реплика
+  // деда. ФИКС FV-1: раньше ловились только /^banish|^hello|^radio_hello/,
+  // narrator_intro и cz_start не попадали в префетч и МОЛЧАЛИ при холодном
+  // старте партии (звучали лишь со второго раза, после прогрева из playId).
+  var PRI_INTRO = ['narrator_intro', 'cz_start'];
+
   function prefetchCommon() {
     if (!S.manifest) return;
     var ids = Object.keys(S.manifest.phrases);
-    // сначала реплики изгнания и приветствие — они звучат чаще всего
+    // сначала интро (обязаны звучать с первого же старта)...
     var pri = [];
+    for (var p = 0; p < PRI_INTRO.length; p++) {
+      if (S.manifest.phrases[PRI_INTRO[p]]) pri.push(PRI_INTRO[p]);
+    }
+    // ...затем реплики изгнания и приветствия — они звучат чаще всего
     for (var i = 0; i < ids.length; i++) {
       if (/^banish|^hello|^radio_hello/.test(ids[i])) pri.push(ids[i]);
     }
-    for (var k = 0; k < ids.length && pri.length < PREFETCH; k++) pri.push(ids[k]);
+    // добиваем лимит остальными фразами манифеста (без дублей)
+    for (var k = 0; k < ids.length && pri.length < PREFETCH; k++) {
+      if (pri.indexOf(ids[k]) < 0) pri.push(ids[k]);
+    }
     for (var j = 0; j < Math.min(PREFETCH, pri.length); j++) fetchBuf(pri[j]);
   }
 
@@ -171,12 +183,15 @@
     opt = opt || {};
     if (!S.manifest || !S.manifest.phrases[id]) return false;
     var phrase = S.manifest.phrases[id];
-    // гейты настроек: дед / радио+новости — отдельные тумблеры
+    // гейты настроек: все НЕ-радио каналы (дед, мультяшки, тарелка,
+    // рассказчик) слушают тумблер «Голос деда». ФИКС FV-3: раньше гейтились
+    // только ded и radio/news — при voiceDed=false мультяшки продолжали
+    // орать. Радио и новости остались на своём отдельном тумблере.
     var ch = phrase.ch || 'ded';
-    if (ch === 'ded') {
-      if (!optBool('voiceDed', true)) return false;
-    } else if (ch === 'radio' || ch === 'news') {
+    if (ch === 'radio' || ch === 'news') {
       if (!optBool('voiceRadio', true)) return false;
+    } else if (!optBool('voiceDed', true)) {
+      return false;
     }
     var vol = optVol();
     if (vol <= 0.001) return false;
