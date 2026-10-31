@@ -60,6 +60,7 @@
     'ui.pause.hint': 'Space — resume · Esc — windows',
     'ui.speed.hint': 'Space — pause and time speed',
     'ui.ship.left': 'until the steamship:',
+    'ui.day.one': 'day', 'ui.day.few': 'days', 'ui.day.many': 'days',
     'ui.year': 'of 1917',
 
     // названия экранов (горячие клавиши D2/D3)

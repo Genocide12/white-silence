@@ -1,0 +1,1378 @@
+     1→/**
+     2→ * hunting.js — ОХОТА И РАЗДЕЛКА «Белого Безмолвия»: следы зверей на снегу
+     3→ * (свежесть 30 игровых минут, видимость и читка по навыку track), разделка
+     4→ * туш ножом (мясо старше суток портится), приманка на хищников, берестяной
+     5→ * манок на оленя, кровавый след раненого зверя (волки сбегаются на 'blood'),
+     6→ * падальщики растаскивают брошенные туши. Связи: ai/animals.js (существа;
+     7→ * их декоративные отпечатки заменяются нашими), systems/looting.js
+     8→ * (трупы-контейнеры: Loot.search/takeAll/makeCorpse), systems/skills.js
+     9→ * (XP track/forage), world/world.js (объекты, события, entsNear).
+    10→ */
+    11→(function () {
+    12→  'use strict';
+    13→
+    14→  // ====================================================================
+    15→  //  КОНСТАНТЫ
+    16→  // ====================================================================
+    17→
+    18→  var TICK_AI = 51;             // после ИИ (50): следы по факту движения
+    19→  var TICK_WORLD = 22;          // мир (после снега/огня): приманки, падальщики
+    20→  var INTERACT_R = 1.5;         // радиус досягаемости (как actions.js)
+    21→
+    22→  // ---- следы -------------------------------------------------------
+    23→  var TRACK_STEP = 2.0;          // тайла пути между отпечатками (по ТЗ)
+    24→  var TRACK_FRESH_MIN = 30;      // игровых минут жизни следа (по ТЗ)
+    25→  var TRACK_FRESH_SOON = 15;    // до этого возраста «свежий» (виден с ур. 1)
+    26→  var TRACK_CAP = 140;           // максимум живых отпечатков
+    27→  var LV_SEE_FRESH = 1;         // ур.1: видны свежие следы
+    28→  var LV_SEE_ALL = 3;            // ур.3: видны все следы
+    29→  var LV_SEE_DIR = 5;            // ур.5: стрелка направления
+    30→  var LV_TOAST = 7;              // ур.7: подсказка «След ведёт на север»
+    31→  var LV_KIND = 2;               // ур.2: узнают, чей след
+    32→
+    33→  // ---- разделка ------------------------------------------------------
+    34→  var SPOIL_DAYS = 1;            // сутки после смерти — мясо портится
+    35→  var BUTCHER_DUR = [0, 1.6, 3.2, 4.2, 6.0]; // сек по «размеру» туши 1..4
+    36→  var XP_BUTCHER_FORAGE = 2;     // + размер туши
+    37→  var XP_BUTCHER_TRACK = 1;      // + размер/2
+    38→
+    39→  // ---- кровь ---------------------------------------------------------
+    40→  var BLEED_TRIGGER_HP = 0.55;   // ниже 55% hp зверь оставляет кровь
+    41→  var BLEED_MIN = 18;            // игровых минут кровит раненый зверь
+    42→  var BLEED_STEP = 1.5;          // тайла пути между каплями
+    43→  var BLEED_CAP = 40;            // максимум меток крови
+    44→  var BLOOD_SMELL_R = 10;        // радиус события 'blood'
+    45→
+    46→  // ---- приманка ------------------------------------------------------
+    47→  var BAIT_LIFE_MIN = 120;       // игровых минут лежит (потом замело)
+    48→  var BAIT_PULSE_SEC = 8;        // раз в сколько секунд «пахнет»
+    49→  var BAIT_EAT_R = 1.0;          // хищник в радиусе — съел приманку
+    50→  var BAITS = { meat_raw: 1, meat_spoiled: 1 }; // что годится в приманку
+    51→
+    52→  // ---- манок ---------------------------------------------------------
+    53→  var CALL_RANGE = 20;           // тайлов: олени слышат манок
+    54→  var CALL_DUR = 10;              // сек идут на зов
+    55→  var CALL_KEEP_DIST = 9.5;      // подходят не ближе (дневное чутьё 8)
+    56→  var CALL_CD = 45;               // сек перезарядка манка
+    57→  var CALL_FAIL = 0.25;          // шанс, что олени не отозвались
+    58→
+    59→  // ---- падальщики ----------------------------------------------------
+    60→  var SCAV_DELAY_MIN = 25;       // минут до того, как звери найдут тушу
+    61→  var SCAV_CHANCE = 0.30;        // шанс за игровую минуту при хищнике рядом
+    62→  var SCAV_R = 6;                // радиус поиска хищника
+    63→
+    64→  // ---- чьи следы снимаем ----------------------------------------------
+    65→  var TRACK_KINDS = { deer: 1, hare: 1, wolf: 1, bear: 1, bandit: 1 };
+    66→  var TRACK_SPR = {
+    67→    deer: 'foot_deer', hare: 'foot_hare', wolf: 'foot_wolf',
+    68→    bear: 'foot_bear', bandit: 'footprint'   // сапоги человека
+    69→  };
+    70→  var KIND_GEN = {
+    71→    deer: 'оленя', hare: 'зайца', wolf: 'волка',
+    72→    bear: 'медведя', bandit: 'человека', crow: 'вороны', fish: 'рыбы'
+    73→  };
+    74→  var KIND_NOM = {
+    75→    deer: 'олень', hare: 'заяц', wolf: 'волк',
+    76→    bear: 'медведь', bandit: 'человек', crow: 'ворона', fish: 'рыба'
+    77→  };
+    78→  var KIND_SIZE = {
+    79→    hare: 1, crow: 1, fish: 1, deer: 2, wolf: 3, bear: 4, bandit: 1
+    80→  };
+    81→  var DIR_NAME = ['север', 'северо-восток', 'восток', 'юго-восток',
+    82→                  'юг', 'юго-запад', 'запад', 'северо-запад'];
+    83→  var DIRV = [[0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1]];
+    84→
+    85→  // ====================================================================
+    86→  //  СОСТОЯНИЕ МОДУЛЯ
+    87→  // ====================================================================
+    88→
+    89→  var trks = [];        // следы: {o, x, y, kind, dir, tmin}
+    90→  var splats = [];      // кровь: {o, tmin}
+    91→  var baits = [];       // приманки: {o, item, tmin, pulse}
+    92→  var corpses = [];     // трупы: {o, kind, deathMin}
+    93→  var action = null;    // текущая длительная работа: {type, o, t, dur, mk}
+    94→  var call = null;      // активный зов манка: {t, deer, cd}
+    95→  var lastToastAt = {}; // защита от спама тостов
+    96→  var lastInteractMs = 0; // анти-дубль E + ПКМ
+    97→
+    98→  // ====================================================================
+    99→  //  МЕЛКИЕ ПОМОЩНИКИ
+   100→  // ====================================================================
+   101→
+   102→  function G() { return WS.G; }
+   103→  function P() { return (WS.G && WS.G.player) || null; }
+   104→
+   105→  function running() {
+   106→    var g = WS.G;
+   107→    return !!(g && g.running && !g.dead && g.player && g.player.hp > 0);
+   108→  }
+   109→
+   110→  /** Ввод свободен: нет модального экрана, ввод не отключён. */
+   111→  function uiFree() {
+   112→    try {
+   113→      if (WS.Ui && WS.Ui.modal && WS.Ui.modal()) return false;
+   114→      if (WS.Input && WS.Input.isEnabled && !WS.Input.isEnabled()) return false;
+   115→    } catch (e) { return false; }
+   116→    return true;
+   117→  }
+   118→
+   119→  function t9(key, fallback) {
+   120→    try {
+   121→      if (WS.I18N && WS.I18N.t) return WS.I18N.t(key, fallback);
+   122→    } catch (e) { /* пусто */ }
+   123→    return fallback;
+   124→  }
+   125→
+   126→  function toast(text, kind) {
+   127→    try {
+   128→      if (WS.Ui && WS.Ui.toast) { WS.Ui.toast(text, kind || 'info'); return; }
+   129→    } catch (e) { /* пусто */ }
+   130→    try { WS.Ev.emit('ui:toast', { text: text, kind: kind || 'info' }); } catch (e2) { /* пусто */ }
+   131→  }
+   132→
+   133→  /** Тост не чаще, чем раз в gateMs — защита от спама. */
+   134→  function toastOnce(key, text, kind, gateMs) {
+   135→    var now = Date.now();
+   136→    if (lastToastAt[key] && now - lastToastAt[key] < (gateMs || 4000)) return;
+   137→    lastToastAt[key] = now;
+   138→    toast(text, kind);
+   139→  }
+   140→
+   141→  function sndAt(name, x, y, vol) {
+   142→    try {
+   143→      if (WS.Snd && WS.Snd.play) WS.Snd.play(name, { x: x, y: y, vol: vol });
+   144→    } catch (e) { /* пусто */ }
+   145→  }
+   146→
+   147→  function fxText(str, x, y, o) {
+   148→    try { if (WS.Fx && WS.Fx.text) WS.Fx.text(str, x, y, o); } catch (e) { /* пусто */ }
+   149→  }
+   150→
+   151→  function fxBurst(type, x, y, n, o) {
+   152→    try { if (WS.Fx && WS.Fx.burst) WS.Fx.burst(type, x, y, n || 4, o); } catch (e) { /* пусто */ }
+   153→  }
+   154→
+   155→  function itemName(id) { return t9('item.' + id + '.name', id); }
+   156→
+   157→  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+   158→
+   159→  function trackLv() {
+   160→    try {
+   161→      if (WS.Skills && WS.Skills.lvid) return WS.Skills.lvid('track');
+   162→    } catch (e) { /* пусто */ }
+   163→    var p = P();
+   164→    return (p && p.skills && p.skills.track) ? (p.skills.track.lv || 0) : 0;
+   165→  }
+   166→
+   167→  function addXp(id, n, reason) {
+   168→    try {
+   169→      if (WS.Skills && WS.Skills.addXp) WS.Skills.addXp(id, n, reason);
+   170→    } catch (e) { /* пусто */ }
+   171→  }
+   172→
+   173→  /** Есть ли предмет в инвентаре или в руках. */
+   174→  function hasItem(id) {
+   175→    var p = P();
+   176→    if (!p) return 0;
+   177→    var n = 0;
+   178→    try { if (WS.Inv && WS.Inv.count) n = WS.Inv.count(id); } catch (e) { /* пусто */ }
+   179→    if (n > 0) return n;
+   180→    var eq = p.equip;
+   181→    if (eq && eq.hand1 && eq.hand1.id === id) n++;
+   182→    if (eq && eq.hand2 && eq.hand2.id === id) n++;
+   183→    return n;
+   184→  }
+   185→
+   186→  function consumeItem(id, n) {
+   187→    try {
+   188→      if (WS.Inv && WS.Inv.consume) return WS.Inv.consume(id, n || 1);
+   189→    } catch (e) { /* пусто */ }
+   190→    return 0;
+   191→  }
+   192→
+   193→  function giveItem(id, n, opts) {
+   194→    try {
+   195→      if (WS.Inv && WS.Inv.give) return WS.Inv.give(id, n, opts);
+   196→    } catch (e) { /* пусто */ }
+   197→    return 0;
+   198→  }
+   199→
+   200→  /** Нож (тег cutting/skinning) в инвентаре или руке. */
+   201→  function hasKnife() {
+   202→    var p = P();
+   203→    if (!p) return null;
+   204→    var ids = [];
+   205→    try {
+   206→      if (p.inv) {
+   207→        for (var i = 0; i < p.inv.length; i++) {
+   208→          var it = p.inv[i];
+   209→          if (it && it.id && ids.indexOf(it.id) < 0) ids.push(it.id);
+   210→        }
+   211→      }
+   212→    } catch (e) { /* пусто */ }
+   213→    var eq = p.equip;
+   214→    if (eq) {
+   215→      if (eq.hand1) ids.push(eq.hand1.id);
+   216→      if (eq.hand2) ids.push(eq.hand2.id);
+   217→    }
+   218→    for (var k = 0; k < ids.length; k++) {
+   219→      var def = (WS.Data && WS.Data.items) ? WS.Data.items[ids[k]] : null;
+   220→      if (def && def.tags) {
+   221→        if (def.tags.indexOf('cutting') >= 0 || def.tags.indexOf('skinning') >= 0) return ids[k];
+   222→      }
+   223→    }
+   224→    return null;
+   225→  }
+   226→
+   227→  /** Мировая позиция -> экранная (как в gfx.drawSorted). */
+   228→  function toScreenPos(wx, wy) {
+   229→    var cam = WS.Cam;
+   230→    if (!cam) return { x: 0, y: 0 };
+   231→    var s = WS.M.toScreen(wx - cam.cx - (cam._shakeX || 0), wy - cam.cy - (cam._shakeY || 0));
+   232→    var c = cam.canvasCenter();
+   233→    return { x: c.x + s.x * cam.zoom, y: c.y + s.y * cam.zoom };
+   234→  }
+   235→
+   236→  /** Экранный угол направления dir (для стрелок/поворота следов). */
+   237→  var footAng = null;
+   238→  function angForDir(dir) {
+   239→    if (!footAng) {
+   240→      footAng = [];
+   241→      for (var d = 0; d < 8; d++) {
+   242→        var s = WS.M.toScreen(DIRV[d][0], DIRV[d][1]);
+   243→        footAng.push(Math.atan2(s.y, s.x) + Math.PI / 2);
+   244→      }
+   245→    }
+   246→    return footAng[(dir || 0) & 7];
+   247→  }
+   248→
+   249→  /** Полоска прогресса над точкой (рисуется в мировых координатах). */
+   250→  function drawBar(ctx, x, y, zoom, label, pct, col) {
+   251→    try {
+   252→      var w = 36 * zoom, h = 5 * zoom;
+   253→      pct = clamp(pct, 0, 1);
+   254→      ctx.fillStyle = 'rgba(8,12,22,0.78)';
+   255→      ctx.fillRect(x - w / 2 - zoom, y - zoom, w + 2 * zoom, h + 2 * zoom);
+   256→      ctx.fillStyle = col || '#d8a45c';
+   257→      ctx.fillRect(x - w / 2, y, w * pct, h);
+   258→      if (label) {
+   259→        ctx.font = 'bold ' + Math.max(8, Math.round(9 * zoom)) + 'px sans-serif';
+   260→        ctx.textAlign = 'center';
+   261→        ctx.fillStyle = '#e8e2d0';
+   262→        ctx.fillText(label, x, y - 3 * zoom);
+   263→        ctx.textAlign = 'left';
+   264→      }
+   265→    } catch (e) { /* рисование — косметика */ }
+   266→  }
+   267→
+   268→  /** Невидимый объект-маркер с полоской прогресса (label/pct — функции). */
+   269→  function makeMarker(x, y, labelFn, pctFn, colFn) {
+   270→    var o = WS.World.addObject({
+   271→      x: x, y: y, sprName: null, solid: false, shadow: false,
+   272→      name: '', hunt: 'marker'
+   273→    });
+   274→    o.render = function (ctx, sx, sy, zoom) {
+   275→      drawBar(ctx, sx, sy - 30 * zoom, zoom, labelFn(), pctFn(), colFn ? colFn() : '#d8a45c');
+   276→    };
+   277→    return o;
+   278→  }
+   279→
+   280→  function dropMarker(mk) {
+   281→    try {
+   282→      if (mk && !mk.removed) WS.World.removeObject(mk);
+   283→    } catch (e) { /* пусто */ }
+   284→  }
+   285→
+   286→  // ====================================================================
+   287→  //  СПРАЙТЫ (следы зверей, приманка, кровь, кости)
+   288→  // ====================================================================
+   289→
+   290→  function defHuntSprites() {
+   291→    var S = WS.Spr;
+   292→
+   293→    // ---- след оленя: две раздвоенные копыта рядом, 18x10 ----
+   294→    S.def('foot_deer', { w: 18, h: 10, draw: function (c, W, H, frame, dir) {
+   295→      var ang = angForDir(dir);
+   296→      c.save();
+   297→      c.translate(W / 2, H / 2);
+   298→      c.rotate(ang);
+   299→      // «носком вверх»: два копыта одно за другим (шаг)
+   300→      S.ell(c, 0, -2.5, 2.6, 1.5, '#7d8ea3');
+   301→      S.ell(c, 0, 2.5, 2.6, 1.5, '#8b9bad');
+   302→      // раздвоенность кончика
+   303→      S.px(c, -1, -4.5, 1, 2, '#6d7e93');
+   304→      S.px(c, 1, -4.5, 1, 2, '#6d7e93');
+   305→      c.restore();
+   306→    }});
+   307→
+   308→    // ---- след зайца: крупные задние + мелкие передние, 14x12 ----
+   309→    S.def('foot_hare', { w: 14, h: 12, draw: function (c, W, H, frame, dir) {
+   310→      var ang = angForDir(dir);
+   311→      c.save();
+   312→      c.translate(W / 2, H / 2);
+   313→      c.rotate(ang);
+   314→      // задние лапы — вытянутые «запятые»
+   315→      S.ell(c, -2.5, -1, 2.4, 1.7, '#8b9bad');
+   316→      S.ell(c, 2.5, -1, 2.4, 1.7, '#7d8ea3');
+   317→      // передние — маленькие точки впереди
+   318→      S.ell(c, -1.4, 3.4, 1.1, 0.9, '#98a8ba');
+   319→      S.ell(c, 1.4, 3.4, 1.1, 0.9, '#98a8ba');
+   320→      c.restore();
+   321→    }});
+   322→
+   323→    // ---- след волка: ладошка + 4 пальца с когтями, 16x14 ----
+   324→    S.def('foot_wolf', { w: 16, h: 14, draw: function (c, W, H, frame, dir) {
+   325→      var ang = angForDir(dir);
+   326→      c.save();
+   327→      c.translate(W / 2, H / 2);
+   328→      c.rotate(ang);
+   329→      // подушечка
+   330→      S.ell(c, 0, 2, 3.4, 2.6, '#7d8ea3');
+   331→      S.ell(c, 0, 2.6, 2.2, 1.6, '#8b9bad');
+   332→      // пальцы
+   333→      S.ell(c, -2.8, -2.2, 1.2, 1.5, '#8b9bad');
+   334→      S.ell(c, -0.9, -3.1, 1.2, 1.5, '#8b9bad');
+   335→      S.ell(c, 0.9, -3.1, 1.2, 1.5, '#8b9bad');
+   336→      S.ell(c, 2.8, -2.2, 1.2, 1.5, '#8b9bad');
+   337→      // когти
+   338→      S.px(c, -3.4, -4.6, 1, 2, '#6d7e93');
+   339→      S.px(c, -1.2, -5.4, 1, 2, '#6d7e93');
+   340→      S.px(c, 1.0, -5.4, 1, 2, '#6d7e93');
+   341→      S.px(c, 3.2, -4.6, 1, 2, '#6d7e93');
+   342→      c.restore();
+   343→    }});
+   344→
+   345→    // ---- след медведя: широкая пясть + 5 пальцев, 20x16 ----
+   346→    S.def('foot_bear', { w: 20, h: 16, draw: function (c, W, H, frame, dir) {
+   347→      var ang = angForDir(dir);
+   348→      c.save();
+   349→      c.translate(W / 2, H / 2);
+   350→      c.rotate(ang);
+   351→      // пясть
+   352→      S.ell(c, 0, 3, 4.4, 3.2, '#71829a');
+   353→      S.ell(c, 0, 3.8, 2.8, 1.9, '#7d8ea3');
+   354→      // пять пальцев
+   355→      S.ell(c, -4.6, -2.0, 1.4, 1.7, '#8b9bad');
+   356→      S.ell(c, -2.4, -3.4, 1.4, 1.7, '#8b9bad');
+   357→      S.ell(c, 0, -4.0, 1.4, 1.7, '#8b9bad');
+   358→      S.ell(c, 2.4, -3.4, 1.4, 1.7, '#8b9bad');
+   359→      S.ell(c, 4.6, -2.0, 1.4, 1.7, '#8b9bad');
+   360→      // когти
+   361→      S.px(c, -5.2, -4.4, 1, 2, '#5f7188');
+   362→      S.px(c, -2.8, -5.8, 1, 2, '#5f7188');
+   363→      S.px(c, -0.5, -6.2, 1, 2, '#5f7188');
+   364→      S.px(c, 1.8, -5.8, 1, 2, '#5f7188');
+   365→      S.px(c, 4.2, -4.4, 1, 2, '#5f7188');
+   366→      c.restore();
+   367→    }});
+   368→
+   369→    // ---- приманка: кусок мяса на снегу, 20x12 ----
+   370→    S.def('bait_meat', { w: 20, h: 12, draw: function (c) {
+   371→      // подтёк крови
+   372→      S.ell(c, 10, 9, 8, 2.4, 'rgba(122,32,32,0.45)');
+   373→      // сам кусок
+   374→      S.ell(c, 10, 6, 6, 3.2, '#8f3a34');
+   375→      S.ell(c, 8, 5, 3.4, 1.8, '#a84a40');
+   376→      // жила и жир
+   377→      S.px(c, 6, 4, 6, 1, '#c26a5c');
+   378→      S.px(c, 13, 7, 3, 1, '#d8cfc0');
+   379→      // снежная кромка
+   380→      S.ell(c, 10, 10, 8.4, 2, 'rgba(226,232,240,0.5)');
+   381→    }});
+   382→
+   383→    // ---- капля/мазок крови, 14x10 ----
+   384→    S.def('blood_splat', { w: 14, h: 10, draw: function (c) {
+   385→      S.ell(c, 7, 5, 3.2, 2.2, 'rgba(122,32,32,0.55)');
+   386→      S.ell(c, 4, 4, 1.4, 1.1, 'rgba(143,42,38,0.5)');
+   387→      S.ell(c, 10.4, 6.4, 1.2, 0.9, 'rgba(143,42,38,0.45)');
+   388→      S.px(c, 8, 2, 1, 1, 'rgba(122,32,32,0.4)');
+   389→    }});
+   390→
+   391→    // ---- обглоданные кости (осталось после разделки/падальщиков), 44x20 ----
+   392→    S.def('carcass_remains', { w: 44, h: 20, draw: function (c) {
+   393→      // рёбра
+   394→      S.px(c, 12, 6, 18, 1, '#cfd4da');
+   395→      S.px(c, 14, 9, 14, 1, '#c3c9d1');
+   396→      S.px(c, 16, 12, 10, 1, '#b8bfc8');
+   397→      // позвонки
+   398→      S.ell(c, 10, 5, 2, 1.6, '#dde2e8');
+   399→      S.ell(c, 15, 5, 2, 1.6, '#dde2e8');
+   400→      S.ell(c, 20, 5, 2, 1.6, '#dde2e8');
+   401→      S.ell(c, 25, 5, 2, 1.6, '#dde2e8');
+   402→      // череп
+   403→      S.ell(c, 33, 7, 3.4, 2.6, '#dde2e8');
+   404→      S.px(c, 34, 8, 3, 1, '#98a0ab');   // глазница
+   405→      S.px(c, 36, 9, 2, 1, '#98a0ab');
+   406→      // лопатка
+   407→      S.ell(c, 6, 10, 3.2, 2.2, '#c8ced6');
+   408→      // старая кровь под костями
+   409→      S.ell(c, 22, 16, 15, 3, 'rgba(96,28,28,0.30)');
+   410→      S.ell(c, 30, 15, 6, 2, 'rgba(122,32,32,0.25)');
+   411→    }});
+   412→  }
+   413→
+   414→  // ====================================================================
+   415→  //  ПРЕДМЕТЫ И РЕЦЕПТЫ (паттерн recipes.js: addIfMissing)
+   416→  // ====================================================================
+   417→
+   418→  function defHuntItems() {
+   419→    WS.Data = WS.Data || {};
+   420→    WS.Data.items = WS.Data.items || {};
+   421→    var items = WS.Data.items;
+   422→
+   423→    function addIfMissing(o) {
+   424→      if (!o || !o.id || items[o.id]) return;
+   425→      items[o.id] = o;
+   426→    }
+   427→
+   428→    // тухлое мясо: старые туши (sick на сыром, на волка — всё ещё приманка)
+   429→    addIfMissing({
+   430→      id: 'meat_spoiled', cat: 'food', w: 0.45, stack: 6,
+   431→      cal: 220, thir: -14, per: 0, sick: 55, sanity: -2,
+   432→      tags: ['edible', 'wolf_bait']
+   433→    });
+   434→
+   435→    // берестяной манок (крафт — ниже)
+   436→    addIfMissing({
+   437→      id: 'deer_call', cat: 'tool', w: 0.25, stack: 1,
+   438→      tags: ['hunting']
+   439→    });
+   440→
+   441→    // рецепты
+   442→    WS.Data.recipes = WS.Data.recipes || [];
+   443→    WS.Data.recipesById = WS.Data.recipesById || {};
+   444→    var known = {};
+   445→    var i;
+   446→    for (i = 0; i < WS.Data.recipes.length; i++) known[WS.Data.recipes[i].id] = 1;
+   447→
+   448→    function addRecipe(r) {
+   449→      if (!r || !r.id || known[r.id]) return;
+   450→      known[r.id] = 1;
+   451→      WS.Data.recipes.push(r);
+   452→      WS.Data.recipesById[r.id] = r;
+   453→    }
+   454→
+   455→    // манок из бересты (бересту собирает модуль собирательства)
+   456→    addRecipe({
+   457→      id: 'deer_call', name: 'Манок на оленя', cat: 'survival',
+   458→      station: null, time: 4,
+   459→      req: [{ id: 'birch_bark', n: 2 }],
+   460→      tools: ['knife'],
+   461→      out: [{ id: 'deer_call', n: 1 }],
+   462→      skill: { id: 'track', lv: 0 }
+   463→    });
+   464→  }
+   465→
+   466→  // ====================================================================
+   467→  //  СЛЕДЫ: ДВИГАТЕЛЬ
+   468→  // ====================================================================
+   469→
+   470→  /** Отпечаток: объект с кастомной отрисовкой (альфа свежести + стрелка). */
+   471→  function placeTrack(e, x, y, dx, dy) {
+   472→    var kind = e.kind;
+   473→    var spr = TRACK_SPR[kind];
+   474→    if (!spr) return;
+   475→    var dir = WS.M.dir8(dx, dy);
+   476→    var rec = {
+   477→      x: x, y: y, kind: kind, dir: dir,
+   478→      tmin: WS.Time.totalMin()
+   479→    };
+   480→    var o = WS.World.addObject({
+   481→      x: x, y: y, sprName: null, solid: false, shadow: false,
+   482→      name: 'След', hunt: 'track',
+   483→      kind: kind, dir: dir, tmin: rec.tmin, fspr: spr, _rec: rec
+   484→    });
+   485→    o.render = trackRender;
+   486→    rec.o = o;
+   487→    trks.push(rec);
+   488→    if (trks.length > TRACK_CAP) {
+   489→      var old = trks.shift();
+   490→      removeTrack(old);
+   491→    }
+   492→    // чутьё следопыта: ур.7 — подсказка игроку о свежем следе рядом
+   493→    try {
+   494→      var p = P();
+   495→      if (p && trackLv() >= LV_TOAST &&
+   496→          WS.M.dist(p.x, p.y, x, y) < 10 && kind !== 'bandit') {
+   497→        toastOnce('trackhint' + kind,
+   498→          t9('hunt.track_leads', 'След ведёт на ' + DIR_NAME[dir] + '…'), 'info', 9000);
+   499→      }
+   500→    } catch (err) { /* пусто */ }
+   501→  }
+   502→
+   503→  function trackRender(ctx, sx, sy, zoom) {
+   504→    try {
+   505→      var o = this;
+   506→      var img = WS.Spr.get(o.fspr, 0, o.dir);
+   507→      if (!img) return;
+   508→      var ageMin = WS.Time.totalMin() - o.tmin;
+   509→      var fr = clamp(1 - ageMin / TRACK_FRESH_MIN, 0, 1); // 1 — свежий
+   510→      ctx.globalAlpha = 0.35 + 0.55 * fr;
+   511→      ctx.drawImage(img,
+   512→        sx - img.width * zoom / 2,
+   513→        sy - img.height * zoom / 2,
+   514→        img.width * zoom, img.height * zoom);
+   515→      ctx.globalAlpha = 1;
+   516→      // ур.5: стрелка направления движения
+   517→      if (trackLv() >= LV_SEE_DIR) {
+   518→        ctx.save();
+   519→        ctx.translate(sx, sy);
+   520→        ctx.rotate(angForDir(o.dir));
+   521→        ctx.strokeStyle = 'rgba(120,180,220,0.85)';
+   522→        ctx.lineWidth = Math.max(1, 1.4 * zoom);
+   523→        ctx.beginPath();
+   524→        ctx.moveTo(0, 6 * zoom);
+   525→        ctx.lineTo(0, -6 * zoom);
+   526→        ctx.moveTo(-2.6 * zoom, -3.2 * zoom);
+   527→        ctx.lineTo(0, -6 * zoom);
+   528→        ctx.lineTo(2.6 * zoom, -3.2 * zoom);
+   529→        ctx.stroke();
+   530→        ctx.restore();
+   531→      }
+   532→    } catch (e) { /* след — косметика */ }
+   533→  }
+   534→
+   535→  function removeTrack(rec) {
+   536→    if (!rec) return;
+   537→    var i = trks.indexOf(rec);
+   538→    if (i >= 0) trks.splice(i, 1);
+   539→    try {
+   540→      if (rec.o && !rec.o.removed) WS.World.removeObject(rec.o);
+   541→    } catch (e) { /* пусто */ }
+   542→  }
+   543→
+   544→  /** Виден ли след игроку с данным навыком. */
+   545→  function canSeeTrack(lv, ageMin) {
+   546→    if (lv >= LV_SEE_ALL) return true;
+   547→    if (lv >= LV_SEE_FRESH) return ageMin <= TRACK_FRESH_SOON;
+   548→    return false;
+   549→  }
+   550→
+   551→  /** Тик следов: замер пути существ + старение + видимость. */
+   552→  function tracksTick(dt) {
+   553→    if (!running()) return;
+   554→    var w = WS.World;
+   555→    var list = w.ents;
+   556→    var lv = trackLv();
+   557→    var i, e;
+   558→
+   559→    // --- отпечатки: каждые TRACK_STEP тайлов пути ---
+   560→    for (i = 0; i < list.length; i++) {
+   561→      e = list[i];
+   562→      if (!e || e.dead || !TRACK_KINDS[e.kind]) continue;
+   563→      if (e.x === undefined || e.y === undefined) continue;
+   564→      if (e._hx === undefined) {
+   565→        e._hx = e.x; e._hy = e.y; e._path = 0;
+   566→        continue;
+   567→      }
+   568→      var dx = e.x - e._hx, dy = e.y - e._hy;
+   569→      var d = Math.sqrt(dx * dx + dy * dy);
+   570→      if (d < 0.03) continue;
+   571→      e._path = (e._path || 0) + d;
+   572→      if (e._path >= TRACK_STEP) {
+   573→        e._path = 0;
+   574→        placeTrack(e, e._hx + dx * 0.5, e._hy + dy * 0.5, dx, dy);
+   575→      }
+   576→      e._hx = e.x; e._hy = e.y;
+   577→    }
+   578→
+   579→    // --- старение и видимость ---
+   580→    var now = WS.Time.totalMin();
+   581→    for (i = trks.length - 1; i >= 0; i--) {
+   582→      var rec = trks[i];
+   583→      if (!rec.o || rec.o.removed) { trks.splice(i, 1); continue; }
+   584→      var age = now - rec.tmin;
+   585→      if (age >= TRACK_FRESH_MIN) { removeTrack(rec); continue; }
+   586→      rec.o.hidden = !canSeeTrack(lv, age);
+   587→    }
+   588→
+   589→    // --- кровавый след раненых зверей ---
+   590→    bloodTick(dt);
+   591→
+   592→    // --- активный зов манка ---
+   593→    callTick(dt);
+   594→
+   595→    // --- длительная работа (разделка) ---
+   596→    actionTick(dt);
+   597→  }
+   598→
+   599→  /** Информация о следе на тайле (для E-осмотра и чужих модулей). */
+   600→  function trackInfo(x, y) {
+   601→    var best = null, bd = 0.9;
+   602→    var now = WS.Time.totalMin();
+   603→    for (var i = 0; i < trks.length; i++) {
+   604→      var rec = trks[i];
+   605→      if (!rec.o || rec.o.removed) continue;
+   606→      var d = WS.M.dist(rec.x, rec.y, x, y);
+   607→      if (d < bd) { bd = d; best = rec; }
+   608→    }
+   609→    if (!best) return null;
+   610→    var age = now - best.tmin;
+   611→    var fresh = age <= 10 ? 'Свежий' : (age <= TRACK_FRESH_SOON ? 'Недавний' : 'Старый');
+   612→    return {
+   613→      kind: best.kind,
+   614→      dir: best.dir,
+   615→      dirName: DIR_NAME[best.dir],
+   616→      ageMin: age,
+   617→      fresh: fresh,
+   618→      o: best.o
+   619→    };
+   620→  }
+   621→
+   622→  /** Осмотр следа по E (навык решает, что видно). */
+   623→  function examineTrack(o) {
+   624→    var lv = trackLv();
+   625→    if (lv < LV_SEE_FRESH) {
+   626→      toastOnce('notrack', t9('hunt.no_skill', 'Ваши глаза скользят по снегу — нужно чутьё следопыта (навык track)'), 'info');
+   627→      return true;
+   628→    }
+   629→    var rec = o._rec;
+   630→    if (!rec) return true;
+   631→    var info = trackInfo(rec.x, rec.y);
+   632→    var who = (lv >= LV_KIND && KIND_GEN[rec.kind]) ? KIND_GEN[rec.kind] : 'зверя';
+   633→    var txt = info.fresh + ' след ' + who;
+   634→    if (lv >= LV_SEE_DIR) txt += ', идёт на ' + info.dirName;
+   635→    toast(txt, 'info');
+   636→    fxText(txt, rec.x, rec.y - 0.8, { col: '#a9c2d8', life: 2.2, size: 13 });
+   637→    sndAt('click', rec.x, rec.y, 0.4);
+   638→    if (!o._xpGiven) {
+   639→      o._xpGiven = 1;
+   640→      addXp('track', 1, 'след прочитан');
+   641→    }
+   642→    return true;
+   643→  }
+   644→
+   645→  // ====================================================================
+   646→  //  ПОИСК ЦЕЛИ ВЗАИМОДЕЙСТВИЯ (свой — только объекты охоты)
+   647→  // ====================================================================
+   648→
+   649→  function isHuntTarget(o) {
+   650→    if (!o) return false;
+   651→    return o.hunt === 'track' || o.hunt === 'remains' || !!o.bait || !!o.corpse;
+   652→  }
+   653→
+   654→  /** Мой объект под курсором (в пределах досягаемости) или рядом с игроком. */
+   655→  function findMyTarget() {
+   656→    var w = WS.World;
+   657→    var p = P();
+   658→    if (!w || !p) return null;
+   659→    var m = WS.Input.mouse();
+   660→    var i, k, list, o, d;
+   661→
+   662→    // 1) под курсором
+   663→    if (m && m.tx >= 0 && m.ty >= 0 && w.inB(m.tx, m.ty)) {
+   664→      list = w.objsAt(m.tx, m.ty);
+   665→      for (i = 0; list && i < list.length; i++) {
+   666→        o = list[i];
+   667→        if (isHuntTarget(o) && WS.M.dist(p.x, p.y, o.x, o.y) <= INTERACT_R) return o;
+   668→      }
+   669→    }
+   670→    // 2) ближайший вокруг игрока
+   671→    var ptx = Math.floor(p.x), pty = Math.floor(p.y);
+   672→    var best = null, bd = INTERACT_R;
+   673→    for (var cy = pty - 2; cy <= pty + 2; cy++) {
+   674→      for (var cx = ptx - 2; cx <= ptx + 2; cx++) {
+   675→        list = w.objsAt(cx, cy);
+   676→        if (!list) continue;
+   677→        for (k = 0; k < list.length; k++) {
+   678→          o = list[k];
+   679→          if (!isHuntTarget(o)) continue;
+   680→          d = WS.M.dist(p.x, p.y, o.x, o.y);
+   681→          if (d <= bd) { bd = d; best = o; }
+   682→        }
+   683→      }
+   684→    }
+   685→    return best;
+   686→  }
+   687→
+   688→  /** Диспетчер E/ПКМ по объектам охоты. Возвращает true, если обработано. */
+   689→  function onInteract() {
+   690→    if (!running() || !uiFree()) return false;
+   691→    var p = P();
+   692→    if (p.sleeping) return false;
+   693→    var o = findMyTarget();
+   694→    if (!o) return false;
+   695→    try {
+   696→      if (o.hunt === 'track') return examineTrack(o);
+   697→      if (o.bait) return pickupBait(o);
+   698→      if (o.corpse) return corpseInteract(o);
+   699→      if (o.hunt === 'remains') {
+   700→        toastOnce('remains', t9('hunt.remains', 'Обглоданные кости. Всё ценное уже снято.'), 'info');
+   701→        sndAt('click', o.x, o.y, 0.3);
+   702→        return true;
+   703→      }
+   704→    } catch (err) {
+   705→      WS.err('hunting.onInteract:', err && err.message);
+   706→    }
+   707→    return false;
+   708→  }
+   709→
+   710→  // ====================================================================
+   711→  //  ТРУПЫ: РЕГИСТРАЦИЯ, ОБЫСК, РАЗДЕЛКА
+   712→  // ====================================================================
+   713→
+   714→  function kindFromCorpse(o) {
+   715→    if (!o) return null;
+   716→    if (o._ckind) return o._ckind;
+   717→    var sn = String(o.sprName || '');
+   718→    var m = sn.indexOf('corpse_') === 0 ? sn.slice(7) : null;
+   719→    o._ckind = (KIND_SIZE[m] !== undefined) ? m : null;
+   720→    return o._ckind;
+   721→  }
+   722→
+   723→  function corpseRec(o) {
+   724→    for (var i = 0; i < corpses.length; i++) {
+   725→      if (corpses[i].o === o) return corpses[i];
+   726→    }
+   727→    return null;
+   728→  }
+   729→
+   730→  /** Зарегистрировать труп (вызывается из 'obj:add'). */
+   731→  function registerCorpse(o) {
+   732→    if (corpseRec(o)) return;
+   733→    corpses.push({
+   734→      o: o,
+   735→      kind: kindFromCorpse(o),
+   736→      deathMin: WS.Time.totalMin(),
+   737→      searched: false
+   738→    });
+   739→  }
+   740→
+   741→  /** E по трупу: сперва обыск (Loot.search), потом разделка. */
+   742→  function corpseInteract(o) {
+   743→    // идёт чей-то обыск — не мешаем
+   744→    try {
+   745→      if (WS.Loot && WS.Loot.isSearching && WS.Loot.isSearching()) return false;
+   746→    } catch (e) { /* пусто */ }
+   747→
+   748→    if (o.container && !o.looted) {
+   749→      // первый E: пусть actions.js/Loot.search откроют тушу как контейнер,
+   750→      // нашу работу подхватит событие 'loot:searched'
+   751→      return false;
+   752→    }
+   753→    startButcher(o);
+   754→    return true;
+   755→  }
+   756→
+   757→  /** Обыск туши завершён (событие 'loot:searched'). */
+   758→  function onCorpseSearched(d) {
+   759→    var o = d && d.o;
+   760→    if (!o || !o.corpse) return;
+   761→    var rec = corpseRec(o);
+   762→    if (!rec) registerCorpse(o);
+   763→    rec = corpseRec(o);
+   764→    if (rec) rec.searched = true;
+   765→    // старая туша: мясо в контейнере превращаем в тухлое
+   766→    var spoiled = applySpoil(o);
+   767→    if (spoiled > 0) {
+   768→      toast(t9('hunt.meat_spoiled', 'Мясо протухло — есть опасно, шкура цела'), 'warn');
+   769→      try { WS.Ev.emit('inv:changed', {}); } catch (e) { /* пусто */ }
+   770→    }
+   771→    // подсказка про разделку, если есть нож и что забирать
+   772→    if (hasKnife() && o.inv && o.inv.length) {
+   773→      toastOnce('butcherhint' + o.id,
+   774→        t9('hunt.butcher_hint', 'E у туши — разделать ножом (забрать всё)'), 'info', 6000);
+   775→    }
+   776→  }
+   777→
+   778→  /** Порча: мясо в контейнере старой туши становится meat_spoiled. */
+   779→  function applySpoil(o) {
+   780→    if (!o || !o.corpse) return 0;
+   781→    var rec = corpseRec(o);
+   782→    if (!rec) return 0;
+   783→    var ageDays = (WS.Time.totalMin() - rec.deathMin) / 1440;
+   784→    if (ageDays <= SPOIL_DAYS) return 0;
+   785→    if (!o.inv || !o.inv.length) return 0;
+   786→    var n = 0;
+   787→    for (var i = 0; i < o.inv.length; i++) {
+   788→      var it = o.inv[i];
+   789→      if (it && it.id === 'meat_raw') {
+   790→        it.id = 'meat_spoiled';
+   791→        n += (it.count || 1);
+   792→      }
+   793→    }
+   794→    return n;
+   795→  }
+   796→
+   797→  /** Разделка: длительное действие с полоской. */
+   798→  function startButcher(o) {
+   799→    if (action) {
+   800→      toastOnce('busy', t9('hunt.busy', 'Руки заняты'), 'warn');
+   801→      return;
+   802→    }
+   803→    var knife = hasKnife();
+   804→    if (!knife) {
+   805→      toast(t9('hunt.need_knife', 'Без ножа тушу не разделать'), 'warn');
+   806→      sndAt('error', o.x, o.y, 0.5);
+   807→      return;
+   808→    }
+   809→    var kind = kindFromCorpse(o);
+   810→    var size = (kind && KIND_SIZE[kind]) || 1;
+   811→    var dur = BUTCHER_DUR[Math.max(1, Math.min(4, size))] || 3;
+   812→    var mk = makeMarker(o.x, o.y, function () {
+   813→      return t9('hunt.butchering', 'Разделка…');
+   814→    }, function () {
+   815→      return action && action.o === o ? action.t / action.dur : 0;
+   816→    }, function () { return '#b0533a'; });
+   817→    action = { type: 'butcher', o: o, kind: kind, size: size, t: 0, dur: dur, mk: mk };
+   818→    sndAt('hit_flesh', o.x, o.y, 0.7);
+   819→    fxText(t9('hunt.butchering', 'Разделка…'), o.x, o.y - 1, { col: '#c99a86', size: 13 });
+   820→  }
+   821→
+   822→  /** Финиш разделки: забрать всё, XP, заменить костьми. */
+   823→  function finishButcher() {
+   824→    var a = action;
+   825→    action = null;
+   826→    dropMarker(a.mk);
+   827→    var o = a.o;
+   828→    if (!o || o.removed) return;
+   829→
+   830→    // лениво наполнить контейнер туши (если ещё не обыскана)
+   831→    try {
+   832→      if (o.container && WS.Loot && WS.Loot.fill) WS.Loot.fill(o);
+   833→    } catch (e) { /* пусто */ }
+   834→    if (!o.inv) o.inv = [];
+   835→    if (!o.inv.length && !o.container) {
+   836→      // тушки без таблицы лута: ворона, рыба
+   837→      if (a.kind === 'crow') o.inv.push({ id: 'feather_bunch', count: 1 });
+   838→      else if (a.kind === 'fish') o.inv.push({ id: 'fresh_fish', count: 1 });
+   839→    }
+   840→    applySpoil(o);
+   841→
+   842→    // забрать всё (что не влезло — на снег)
+   843→    var taken = 0, dropped = 0;
+   844→    for (var i = o.inv.length - 1; i >= 0; i--) {
+   845→      var it = o.inv[i];
+   846→      if (!it) continue;
+   847→      var given = giveItem(it.id, it.count || 1);
+   848→      taken += given;
+   849→      if (given < (it.count || 1)) {
+   850→        try {
+   851→          if (WS.Loot && WS.Loot.dropItem) {
+   852→            WS.Loot.dropItem(it.id, (it.count || 1) - given, o.x, o.y);
+   853→            dropped++;
+   854→          }
+   855→        } catch (e2) { /* пусто */ }
+   856→      }
+   857→      o.inv.splice(i, 1);
+   858→    }
+   859→    // кости — всегда небольшой довесок
+   860→    var bones = Math.floor(Math.random() * (1 + a.size));
+   861→    if (bones > 0) {
+   862→      if (giveItem('bone_old', bones) > 0) taken += bones;
+   863→    }
+   864→
+   865→    // XP: собирательство + следопытство (по ТЗ «track/forage»)
+   866→    addXp('forage', XP_BUTCHER_FORAGE + a.size, 'разделка туши');
+   867→    addXp('track', XP_BUTCHER_TRACK + Math.floor(a.size / 2), 'разделка туши');
+   868→
+   869→    // заменить труп остатками
+   870→    try { WS.World.removeObject(o); } catch (e3) { /* пусто */ }
+   871→    var rem = WS.World.addObject({
+   872→      x: o.x, y: o.y, sprName: 'carcass_remains',
+   873→      solid: false, shadow: false, name: 'Кости',
+   874→      hunt: 'remains', z: -0.2
+   875→    });
+   876→    sndAt('hit_flesh', o.x, o.y, 0.6);
+   877→    sndAt('pickup', o.x, o.y, 0.7);
+   878→    fxBurst('blood', o.x, o.y, 4, { life: 0.4 });
+   879→    fxText('+' + taken + ' ' + t9('hunt.goods', 'предм.'), o.x, o.y - 0.9, { col: '#c8b46a', life: 1.8 });
+   880→    if (dropped > 0) {
+   881→      toast(t9('hunt.inv_full', 'Руки полны — часть осталась на снегу'), 'warn');
+   882→    }
+   883→    try {
+   884→      WS.Ev.emit('hunt:butchered', { o: rem, kind: a.kind, size: a.size, taken: taken });
+   885→    } catch (e4) { /* пусто */ }
+   886→  }
+   887→
+   888→  /** Тик длительного действия. */
+   889→  function actionTick(dt) {
+   890→    if (!action) return;
+   891→    var a = action;
+   892→    var p = P();
+   893→    if (!p || !a.o || a.o.removed) {
+   894→      dropMarker(a.mk);
+   895→      action = null;
+   896→      return;
+   897→    }
+   898→    if (WS.M.dist(p.x, p.y, a.o.x, a.o.y) > 2.4) {
+   899→      dropMarker(a.mk);
+   900→      action = null;
+   901→      toastOnce('butchercancel', t9('hunt.moved', 'Работа брошена'), 'warn');
+   902→      return;
+   903→    }
+   904→    a.t += dt;
+   905→    if (Math.random() < dt * 1.2) sndAt('hit_flesh', a.o.x, a.o.y, 0.4);
+   906→    if (Math.random() < dt * 2) fxBurst('blood', a.o.x, a.o.y, 2, { life: 0.3 });
+   907→    if (a.t >= a.dur) {
+   908→      if (a.type === 'butcher') finishButcher();
+   909→      else { dropMarker(a.mk); action = null; }
+   910→    }
+   911→  }
+   912→
+   913→  /** Падальщики: раз в игровую минуту проверяем туши у хищников. */
+   914→  var scavLastMin = -1;
+   915→  function scavTick() {
+   916→    var now = Math.floor(WS.Time.totalMin());
+   917→    if (now === scavLastMin) return;
+   918→    scavLastMin = now;
+   919→    var w = WS.World;
+   920→    for (var i = corpses.length - 1; i >= 0; i--) {
+   921→      var rec = corpses[i];
+   922→      if (!rec.o || rec.o.removed) { corpses.splice(i, 1); continue; }
+   923→      var age = now - rec.deathMin;
+   924→      if (age < SCAV_DELAY_MIN) continue;
+   925→      if (rec.eaten) continue;
+   926→      var list = w.entsNear(rec.o.x, rec.o.y, SCAV_R);
+   927→      var preds = 0;
+   928→      for (var k = 0; k < list.length; k++) {
+   929→        var kk = list[k] && list[k].kind;
+   930→        if (kk === 'wolf' || kk === 'bear') preds++;
+   931→      }
+   932→      if (!preds) continue;
+   933→      if (Math.random() < SCAV_CHANCE) {
+   934→        eatCorpse(rec);
+   935→      }
+   936→    }
+   937→  }
+   938→
+   939→  function eatCorpse(rec) {
+   940→    rec.eaten = true;
+   941→    var o = rec.o;
+   942→    var p = P();
+   943→    try { WS.World.removeObject(o); } catch (e) { /* пусто */ }
+   944→    WS.World.addObject({
+   945→      x: o.x, y: o.y, sprName: 'carcass_remains',
+   946→      solid: false, shadow: false, name: 'Кости',
+   947→      hunt: 'remains', z: -0.2
+   948→    });
+   949→    sndAt('eat', o.x, o.y, 0.8);
+   950→    try { WS.Ev.emit('blood', { x: o.x, y: o.y, r: 8 }); } catch (e2) { /* пусто */ }
+   951→    if (p && WS.M.dist(p.x, p.y, o.x, o.y) < 14) {
+   952→      toast(t9('hunt.scavenged', 'Хищники растащили добычу'), 'warn');
+   953→    }
+   954→  }
+   955→
+   956→  // ====================================================================
+   957→  //  КРОВЬ: РАНЕНЫЙ ЗВЕРЬ МЕТКИТ ПУТЬ
+   958→  // ====================================================================
+   959→
+   960→  function onEntDamage(d) {
+   961→    if (!d || !d.ent) return;
+   962→    var e = d.ent;
+   963→    if (!TRACK_KINDS[e.kind] || e.dead) return;
+   964→    if (e.hp === undefined || e.maxHp === undefined) return;
+   965→    if (e.hp <= 0) return;
+   966→    if (e.hp < e.maxHp * BLEED_TRIGGER_HP) {
+   967→      // зверь ранен и кровит: хищники почуют след
+   968→      e._bleedUntil = WS.Time.totalMin() + BLEED_MIN;
+   969→      e._bx = e.x; e._by = e.y; e._bpath = 0;
+   970→    }
+   971→  }
+   972→
+   973→  function bloodTick(dt) {
+   974→    var w = WS.World;
+   975→    var now = WS.Time.totalMin();
+   976→    var list = w.ents;
+   977→    for (var i = 0; i < list.length; i++) {
+   978→      var e = list[i];
+   979→      if (!e || e.dead) continue;
+   980→      if (e._bleedUntil === undefined || e._bleedUntil < now) continue;
+   981→      if (e.x === undefined || e._bx === undefined) { e._bx = e.x; e._by = e.y; continue; }
+   982→      var dx = e.x - e._bx, dy = e.y - e._by;
+   983→      var d = Math.sqrt(dx * dx + dy * dy);
+   984→      if (d < 0.03) continue;
+   985→      e._bpath = (e._bpath || 0) + d;
+   986→      if (e._bpath >= BLEED_STEP) {
+   987→        e._bpath = 0;
+   988→        dropBlood(e._bx + dx * 0.5, e._by + dy * 0.5);
+   989→      }
+   990→      e._bx = e.x; e._by = e.y;
+   991→    }
+   992→    // старение меток
+   993→    for (var k = splats.length - 1; k >= 0; k--) {
+   994→      if (!splats[k].o || splats[k].o.removed) { splats.splice(k, 1); continue; }
+   995→      if (now - splats[k].tmin > BLEED_MIN) {
+   996→        try { WS.World.removeObject(splats[k].o); } catch (e2) { /* пусто */ }
+   997→        splats.splice(k, 1);
+   998→      }
+   999→    }
+  1000→  }
+  1001→
+  1002→  function dropBlood(x, y) {
+  1003→    if (splats.length >= BLEED_CAP) {
+  1004→      var old = splats.shift();
+  1005→      try { if (old.o && !old.o.removed) WS.World.removeObject(old.o); } catch (e) { /* пусто */ }
+  1006→    }
+  1007→    var o = WS.World.addObject({
+  1008→      x: x, y: y, sprName: 'blood_splat',
+  1009→      solid: false, shadow: false, name: 'Кровь',
+  1010→      hunt: 'blood', z: -0.5
+  1011→    });
+  1012→    splats.push({ o: o, tmin: WS.Time.totalMin() });
+  1013→    // волки сбегаются на кровь (обоняние ИИ)
+  1014→    try { WS.Ev.emit('blood', { x: x, y: y, r: BLOOD_SMELL_R }); } catch (e2) { /* пусто */ }
+  1015→  }
+  1016→
+  1017→  // ====================================================================
+  1018→  //  ПРИМАНКА
+  1019→  // ====================================================================
+  1020→
+  1021→  /** Найти приманку в инвентаре (мясо; тухлое — тоже годится). */
+  1022→  function findBaitId() {
+  1023→    var order = ['meat_raw', 'meat_spoiled'];
+  1024→    for (var i = 0; i < order.length; i++) {
+  1025→      if (hasItem(order[i]) > 0) return order[i];
+  1026→    }
+  1027→    return null;
+  1028→  }
+  1029→
+  1030→  /**
+  1031→   * Положить приманку перед собой. itemId можно задать явно,
+  1032→   * иначе берётся первое мясо из инвентаря. Возвращает true при успехе.
+  1033→   */
+  1034→  function placeBait(itemId) {
+  1035→    if (!running() || !uiFree()) return false;
+  1036→    var p = P();
+  1037→    if (p.sleeping) return false;
+  1038→    var id = itemId;
+  1039→    if (!id || !BAITS[id]) id = findBaitId();
+  1040→    if (!id || hasItem(id) <= 0) {
+  1041→      toast(t9('hunt.no_bait', 'Нет приманки — нужно мясо'), 'warn');
+  1042→      return false;
+  1043→    }
+  1044→    if (consumeItem(id, 1) <= 0) {
+  1045→      toast(t9('hunt.no_bait', 'Нет приманки — нужно мясо'), 'warn');
+  1046→      return false;
+  1047→    }
+  1048→    // тайл перед игроком (или собственный, если перед — занят)
+  1049→    var tx = Math.floor(p.x), ty = Math.floor(p.y);
+  1050→    var fx2 = DIRV[(p.dir || 4) & 7][0], fy = DIRV[(p.dir || 4) & 7][1];
+  1051→    var w = WS.World;
+  1052→    var ftx = tx + fx2, fty = ty + fy;
+  1053→    if (w.inB(ftx, fty) && !w.isTileBlocked(ftx, fty)) {
+  1054→      // не класть в стену дерева: твёрдые объекты не мешают лежать мясу,
+  1055→      // но и на дровах ему не место — проверим только тайл
+  1056→      tx = ftx; ty = fty;
+  1057→    }
+  1058→    var o = WS.World.addObject({
+  1059→      x: tx + 0.5, y: ty + 0.5, sprName: 'bait_meat',
+  1060→      solid: false, shadow: false, name: 'Приманка',
+  1061→      bait: { item: id, tmin: WS.Time.totalMin() },
+  1062→      z: -0.2
+  1063→    });
+  1064→    baits.push({ o: o, item: id, tmin: WS.Time.totalMin(), pulse: 0 });
+  1065→    sndAt('drop', o.x, o.y, 0.7);
+  1066→    fxText(t9('hunt.bait_placed', 'Приманка положена'), o.x, o.y - 0.7, { col: '#c99a86', size: 13 });
+  1067→    // первый «выдох» запаха — сразу
+  1068→    try {
+  1069→      WS.Ev.emit('blood', { x: o.x, y: o.y, r: 12 });
+  1070→      WS.Ev.emit('noise', { x: o.x, y: o.y, r: 4 });
+  1071→    } catch (e) { /* пусто */ }
+  1072→    return true;
+  1073→  }
+  1074→
+  1075→  /** Поднять свою приманку обратно. */
+  1076→  function pickupBait(o) {
+  1077→    var id = o.bait && o.bait.item;
+  1078→    if (giveItem(id || 'meat_raw', 1) <= 0) {
+  1079→      toastOnce('invfull', t9('hunt.inv_full2', 'Некуда положить'), 'warn');
+  1080→      return true;
+  1081→    }
+  1082→    for (var i = baits.length - 1; i >= 0; i--) {
+  1083→      if (baits[i].o === o) baits.splice(i, 1);
+  1084→    }
+  1085→    try { WS.World.removeObject(o); } catch (e) { /* пусто */ }
+  1086→    sndAt('pickup', o.x, o.y, 0.7);
+  1087→    fxText('+ ' + itemName(id || 'meat_raw'), o.x, o.y - 0.7, { col: '#c8b46a', size: 13 });
+  1088→    return true;
+  1089→  }
+  1090→
+  1091→  /** Мир: пульс запаха, поедание хищниками, заметание снегом. */
+  1092→  function baitTick(dt) {
+  1093→    var w = WS.World;
+  1094→    var now = WS.Time.totalMin();
+  1095→    for (var i = baits.length - 1; i >= 0; i--) {
+  1096→      var b = baits[i];
+  1097→      if (!b.o || b.o.removed) { baits.splice(i, 1); continue; }
+  1098→      // замело снегом
+  1099→      if (now - b.tmin > BAIT_LIFE_MIN) {
+  1100→        try { WS.World.removeObject(b.o); } catch (e) { /* пусто */ }
+  1101→        baits.splice(i, 1);
+  1102→        continue;
+  1103→      }
+  1104→      // хищник добрался — съел
+  1105→      var list = w.entsNear(b.o.x, b.o.y, BAIT_EAT_R);
+  1106→      for (var k = 0; k < list.length; k++) {
+  1107→        var kk = list[k] && list[k].kind;
+  1108→        if (kk === 'wolf' || kk === 'bear') {
+  1109→          try { WS.World.removeObject(b.o); } catch (e2) { /* пусто */ }
+  1110→          baits.splice(i, 1);
+  1111→          sndAt('eat', b.o.x, b.o.y, 0.9);
+  1112→          var p = P();
+  1113→          if (p && WS.M.dist(p.x, p.y, b.o.x, b.o.y) < 14) {
+  1114→            toast(t9('hunt.bait_eaten', 'Приманку съели'), 'info');
+  1115→          }
+  1116→          try { WS.Ev.emit('blood', { x: b.o.x, y: b.o.y, r: 8 }); } catch (e3) { /* пусто */ }
+  1117→          break;
+  1118→        }
+  1119→      }
+  1120→      if (i >= baits.length || baits[i] !== b) continue;
+  1121→      // пульс запаха: хищники чуют издалека
+  1122→      b.pulse = (b.pulse || 0) + dt;
+  1123→      if (b.pulse >= BAIT_PULSE_SEC) {
+  1124→        b.pulse = 0;
+  1125→        try {
+  1126→          WS.Ev.emit('blood', { x: b.o.x, y: b.o.y, r: 14 });
+  1127→          WS.Ev.emit('noise', { x: b.o.x, y: b.o.y, r: 6 });
+  1128→        } catch (e4) { /* пусто */ }
+  1129→      }
+  1130→    }
+  1131→  }
+  1132→
+  1133→  // ====================================================================
+  1134→  //  МАНОК НА ОЛЕНЯ
+  1135→  // ====================================================================
+  1136→
+  1137→  /**
+  1138→   * Подать голос берестяным манком: олени в CALL_RANGE тайлах идут на зов
+  1139→   * CALL_DUR секунд (не подходя ближе CALL_KEEP_DIST). Возвращает true.
+  1140→   */
+  1141→  function useDeerCall() {
+  1142→    if (!running() || !uiFree()) return false;
+  1143→    var p = P();
+  1144→    if (p.sleeping) return false;
+  1145→    if (hasItem('deer_call') <= 0) {
+  1146→      toastOnce('nocall', t9('hunt.no_call', 'Нет манка (крафт: береста + нож)'), 'info');
+  1147→      return false;
+  1148→    }
+  1149→    var nowS = Date.now();
+  1150→    if (call && call.cd > nowS) {
+  1151→      toastOnce('callcd', t9('hunt.call_cd', 'Манок ещё не остыл'), 'info', 3000);
+  1152→      return false;
+  1153→    }
+  1154→    sndAt('craft', p.x, p.y, 0.5);
+  1155→    if (Math.random() < CALL_FAIL) {
+  1156→      fxText(t9('hunt.call_fail', 'Олени не отзываются…'), p.x, p.y - 1.1, { col: '#8b95a5', size: 13 });
+  1157→      call = { t: 0, deer: [], cd: nowS + CALL_CD * 500 };
+  1158→      return true;
+  1159→    }
+  1160→    // собрать оленей в радиусе зова
+  1161→    var deer = [];
+  1162→    var list = WS.World.entsNear(p.x, p.y, CALL_RANGE);
+  1163→    for (var i = 0; i < list.length; i++) {
+  1164→      if (list[i] && list[i].kind === 'deer' && !list[i].dead) deer.push(list[i]);
+  1165→    }
+  1166→    call = { t: CALL_DUR, deer: deer, cd: nowS + CALL_CD * 1000 };
+  1167→    fxText(t9('hunt.call_ok', 'Манк оленя!'), p.x, p.y - 1.1, { col: '#c8b46a', size: 13 });
+  1168→    addXp('track', 1, 'зов оленя');
+  1169→    if (!deer.length) {
+  1170→      toastOnce('callnone', t9('hunt.call_none', 'Тишина. Оленей поблизости нет'), 'info');
+  1171→    }
+  1172→    return true;
+  1173→  }
+  1174→
+  1175→  /** Тик зова: олени бредут к игроку (не в панике). */
+  1176→  function callTick(dt) {
+  1177→    if (!call) return;
+  1178→    call.t -= dt;
+  1179→    if (call.t <= 0) { call = null; return; }
+  1180→    var p = P();
+  1181→    if (!p) { call = null; return; }
+  1182→    for (var i = 0; i < call.deer.length; i++) {
+  1183→      var e = call.deer[i];
+  1184→      if (!e || e.dead) continue;
+  1185→      var herd = e.herd;
+  1186→      if (herd && herd.state === 'flee') continue;   // спугнуты — зов не действует
+  1187→      // точка привязи: кольцо вокруг игрока, чуть дальше дневного чутья
+  1188→      var a = Math.atan2(e.y - p.y, e.x - p.x) + (Math.random() - 0.5) * 0.6;
+  1189→      var rr = CALL_KEEP_DIST + Math.random() * 1.5;
+  1190→      e.wanderPt = {
+  1191→        x: clamp(p.x + Math.cos(a) * rr, 4, 215),
+  1192→        y: clamp(p.y + Math.sin(a) * rr * 0.85, 4, 215)
+  1193→      };
+  1194→      e.wanderWait = 0;
+  1195→    }
+  1196→  }
+  1197→
+  1198→  // ====================================================================
+  1199→  //  ВВОД: E / ПКМ / T (приманка) / V (манок)
+  1200→  // ====================================================================
+  1201→
+  1202→  function onKey(d) {
+  1203→    if (!d || !d.code) return;
+  1204→    if (d.code === 'KeyE') {
+  1205→      if (Date.now() - lastInteractMs < 150) return;
+  1206→      lastInteractMs = Date.now();
+  1207→      onInteract();
+  1208→    } else if (d.code === 'KeyT') {
+  1209→      placeBait(null);
+  1210→    } else if (d.code === 'KeyV') {
+  1211→      useDeerCall();
+  1212→    }
+  1213→  }
+  1214→
+  1215→  function onMouse(d) {
+  1216→    if (!d || d.button !== 2) return;
+  1217→    if (Date.now() - lastInteractMs < 150) return;
+  1218→    lastInteractMs = Date.now();
+  1219→    onInteract();
+  1220→  }
+  1221→
+  1222→  // ====================================================================
+  1223→  //  СОБЫТИЯ МИРА
+  1224→  // ====================================================================
+  1225→
+  1226→  function onObjAdd(d) {
+  1227→    var o = d && d.o;
+  1228→    if (!o) return;
+  1229→    // декоративные следы из ai/animals.js заменяет наша система:
+  1230→    // безымянный 'footprint' без метки hunt — удаляем (он продублировал бы след)
+  1231→    if (o.sprName === 'footprint' && !o.hunt) {
+  1232→      try { WS.World.removeObject(o); } catch (e) { /* пусто */ }
+  1233→      return;
+  1234→    }
+  1235→    if (o.corpse) registerCorpse(o);
+  1236→  }
+  1237→
+  1238→  function onObjRemove(d) {
+  1239→    var o = d && d.o;
+  1240→    if (!o) return;
+  1241→    for (var i = corpses.length - 1; i >= 0; i--) {
+  1242→      if (corpses[i].o === o) corpses.splice(i, 1);
+  1243→    }
+  1244→  }
+  1245→
+  1246→  // ====================================================================
+  1247→  //  СБРОС / НОВАЯ ПАРТИЯ
+  1248→  // ====================================================================
+  1249→
+  1250→  function resetHunt() {
+  1251→    var w = WS.World;
+  1252→    var i;
+  1253→    // снять наши объекты (следы/кровь/приманки/кости/маркеры)
+  1254→    var mine = [];
+  1255→    for (i = 0; i < w.objects.length; i++) {
+  1256→      var o = w.objects[i];
+  1257→      if (o && o.hunt) mine.push(o);
+  1258→    }
+  1259→    for (i = 0; i < mine.length; i++) {
+  1260→      try { w.removeObject(mine[i]); } catch (e) { /* пусто */ }
+  1261→    }
+  1262→    trks = [];
+  1263→    splats = [];
+  1264→    baits = [];
+  1265→    corpses = [];
+  1266→    action = null;
+  1267→    call = null;
+  1268→    scavLastMin = -1;
+  1269→    lastToastAt = {};
+  1270→  }
+  1271→
+  1272→  // ====================================================================
+  1273→  //  ТИКИ
+  1274→  // ====================================================================
+  1275→
+  1276→  function huntWorldTick(dt) {
+  1277→    if (!running()) return;
+  1278→    try {
+  1279→      baitTick(dt);
+  1280→      scavTick();
+  1281→    } catch (e) {
+  1282→      WS.err('huntWorldTick:', e && e.message);
+  1283→    }
+  1284→  }
+  1285→
+  1286→  // ====================================================================
+  1287→  //  САМОТЕСТ
+  1288→  // ====================================================================
+  1289→
+  1290→  function selftest() {
+  1291→    var out = [];
+  1292→    var pass = 0, fail = 0;
+  1293→    function ok(name, cond) {
+  1294→      if (cond) { pass++; out.push('  ok   ' + name); }
+  1295→      else { fail++; out.push('  FAIL ' + name); }
+  1296→    }
+  1297→    ok('модуль зарегистрирован', !!WS.Hunting);
+  1298→    ok('спрайт foot_wolf определён', !!(WS.Spr.specs && WS.Spr.specs().foot_wolf));
+  1299→    ok('спрайт foot_bear определён', !!(WS.Spr.specs && WS.Spr.specs().foot_bear));
+  1300→    ok('спрайт bait_meat определён', !!(WS.Spr.specs && WS.Spr.specs().bait_meat));
+  1301→    ok('предмет meat_spoiled объявлен', !!(WS.Data && WS.Data.items && WS.Data.items.meat_spoiled));
+  1302→    ok('предмет deer_call объявлен', !!(WS.Data && WS.Data.items && WS.Data.items.deer_call));
+  1303→    ok('рецепт deer_call есть', !!(WS.Data && WS.Data.recipesById && WS.Data.recipesById.deer_call));
+  1304→    ok('DIR_NAME — 8 сторон', DIR_NAME.length === 8);
+  1305→    ok('BUTCHER_DUR — 5 размеров', BUTCHER_DUR.length === 5);
+  1306→    var lv = trackLv();
+  1307→    ok('canSeeTrack: ур.0 ничего', canSeeTrack(0, 5) === false);
+  1308→    ok('canSeeTrack: ур.1 свежий', canSeeTrack(1, 5) === true);
+  1309→    ok('canSeeTrack: ур.1 старый скрыт', canSeeTrack(1, 25) === false);
+  1310→    ok('canSeeTrack: ур.3 всё', canSeeTrack(3, 29) === true);
+  1311→    ok('текущий track-уровень число', typeof lv === 'number');
+  1312→    ok('kindFromCorpse(wolf)', kindFromCorpse({ sprName: 'corpse_wolf' }) === 'wolf');
+  1313→    out.unshift('hunting.selftest: ' + pass + ' ок, ' + fail + ' провалено');
+  1314→    return out;
+  1315→  }
+  1316→
+  1317→  // ====================================================================
+  1318→  //  ПУБЛИЧНЫЙ API
+  1319→  // ====================================================================
+  1320→
+  1321→  WS.def('Hunting', {
+  1322→    // следы
+  1323→    tracks: function () { return trks; },
+  1324→    trackInfo: trackInfo,
+  1325→    canSeeTrack: canSeeTrack,
+  1326→    // разделка
+  1327→    butcher: startButcher,
+  1328→    hasKnife: hasKnife,
+  1329→    // приманка и манок
+  1330→    placeBait: placeBait,
+  1331→    useDeerCall: useDeerCall,
+  1332→    baits: function () { return baits; },
+  1333→    corpses: function () { return corpses; },
+  1334→    // служебное
+  1335→    reset: resetHunt,
+  1336→    selftest: selftest
+  1337→  });
+  1338→
+  1339→  // ====================================================================
+  1340→  //  BOOT
+  1341→  // ====================================================================
+  1342→
+  1343→  WS.boot(function initHunting() {
+  1344→    defHuntSprites();
+  1345→    defHuntItems();
+  1346→
+  1347→    // страховка: если наш файл загрузился раньше data/recipes.js, тот мог
+  1348→    // перезаписать WS.Data.recipes своим массивом — вернём рецепт после бута
+  1349→    WS.afterFirstFrame(function () {
+  1350→      try { defHuntItems(); } catch (e) { WS.err('hunting.items:', e && e.message); }
+  1351→    });
+  1352→
+  1353→    // следы/кровь/зов/действия — после ИИ (51)
+  1354→    WS.tick(TICK_AI, tracksTick, 'hunt:core');
+  1355→    // приманки и падальщики — в мире (22)
+  1356→    WS.tick(TICK_WORLD, huntWorldTick, 'hunt:world');
+  1357→
+  1358→    // объекты мира: трупы регистрируем, чужие следы снимаем
+  1359→    WS.Ev.on('obj:add', onObjAdd);
+  1360→    WS.Ev.on('obj:remove', onObjRemove);
+  1361→
+  1362→    // раны зверей -> кровавый след
+  1363→    WS.Ev.on('ent:damage', onEntDamage);
+  1364→
+  1365→    // обыск туши завершён -> порча + подсказка о разделке
+  1366→    WS.Ev.on('loot:searched', onCorpseSearched);
+  1367→
+  1368→    // ввод: E/ПКМ — осмотр, T — приманка, V — манок
+  1369→    WS.Ev.on('key:down', onKey);
+  1370→    WS.Ev.on('mouse:down', onMouse);
+  1371→
+  1372→    // новый мир — чистые списки
+  1373→    WS.Ev.on('gen:town', resetHunt);
+  1374→
+  1375→    WS.log('hunting: охота готова (следы, разделка, приманка, манок)');
+  1376→  }, 'hunt:init');
+  1377→})();
+  1378→

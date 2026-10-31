@@ -830,7 +830,7 @@
       try { WS.Needs.makeSick('cold', COLD_DURATION); return; } catch (e) { /* ниже сами */ }
     }
     if (!p.sick) {
-      p.sick = { id: 'cold', t: COLD_DURATION };
+      p.sick = { id: 'cold', t: COLD_DURATION, fired: {}, compT: 0, tea: false };
       toast('Вы простудились', 'bad');
     }
   }

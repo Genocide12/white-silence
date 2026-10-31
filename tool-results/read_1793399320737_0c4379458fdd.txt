@@ -1,0 +1,1128 @@
+     1→/* ============================================================================
+     2→ * screens.css — «Белое Безмолвие», экраны D3:
+     3→ *   КАРТА (M) · ЗДОРОВЬЕ (H) · НАВЫКИ (K) · ЖУРНАЛ (J)
+     4→ * Стиль — продолжение base.css: тёмная бумага, акцент #d8a45c,
+     5→ * serif-типографика, никакой кислотности. Русский Север, 1917.
+     6→ *
+     7→ * Разделы:
+     8→ *   1. Каркас экрана (оверлей, рамка, шапка, подвал)
+     9→ *   2. Общие элементы (полосы, пипсы, ярлыки, списки, кнопки)
+    10→ *   3. Тосты (fallback WS.Ui.toast, если Ui ещё не загружен)
+    11→ *   4. Карта — компоновка, сцена, легенда, панель состояния
+    12→ *   5. Здоровье — кукла тела, зоны, состояния, действия
+    13→ *   6. Навыки — сетка карточек, профиль персонажа
+    14→ *   7. Журнал — вкладки, хроника, записки, статистика, радио
+    15→ *   8. Анимации
+    16→ *   9. Адаптив и мелочи
+    17→ * ========================================================================== */
+    18→
+    19→/* ============================================================================
+    20→ * 1. КАРКАС ЭКРАНА
+    21→ * ========================================================================== */
+    22→
+    23→/* оверлей на весь экран; окно живёт в #ui-root (pointer-events: auto) */
+    24→.ws-screen {
+    25→  position: fixed;
+    26→  left: 0; top: 0; right: 0; bottom: 0;
+    27→  display: flex;
+    28→  align-items: center;
+    29→  justify-content: center;
+    30→  background: rgba(3, 5, 9, 0.78);
+    31→  z-index: 120;
+    32→  animation: ws-fade-in 0.14s ease-out;
+    33→}
+    34→
+    35→/* полноэкранный режим (карта) — рамка прижимается к краям */
+    36→.ws-screen.full {
+    37→  padding: 14px;
+    38→}
+    39→
+    40→/* класс .hidden из base.css скрывает экран */
+    41→.ws-screen.hidden { display: none !important; }
+    42→
+    43→/* рамка окна в стиле бумажного листа на столе */
+    44→.ws-frame {
+    45→  position: relative;
+    46→  display: flex;
+    47→  flex-direction: column;
+    48→  background: linear-gradient(180deg, rgba(22, 30, 43, 0.985), rgba(13, 18, 27, 0.985));
+    49→  border: 1px solid var(--line);
+    50→  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.75),
+    51→              inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    52→  border-radius: 5px;
+    53→  max-width: 96vw;
+    54→  max-height: 94vh;
+    55→  animation: ws-rise 0.16s ease-out;
+    56→}
+    57→
+    58→/* полноэкранная рамка карты */
+    59→.ws-screen.full .ws-frame {
+    60→  width: 100%;
+    61→  height: 100%;
+    62→  max-width: none;
+    63→  max-height: none;
+    64→}
+    65→
+    66→/* шапка окна: заголовок + служебная строка + закрыть */
+    67→.scr-head {
+    68→  display: flex;
+    69→  align-items: baseline;
+    70→  gap: 14px;
+    71→  padding: 10px 16px 9px;
+    72→  border-bottom: 1px solid var(--line);
+    73→  background: linear-gradient(180deg, rgba(30, 40, 54, 0.6), rgba(18, 24, 35, 0.2));
+    74→  border-radius: 5px 5px 0 0;
+    75→  flex: 0 0 auto;
+    76→}
+    77→
+    78→.scr-title {
+    79→  font-family: 'PT Serif', Georgia, 'Times New Roman', serif;
+    80→  font-size: 17px;
+    81→  font-weight: bold;
+    82→  letter-spacing: 0.14em;
+    83→  color: var(--accent);
+    84→  text-transform: uppercase;
+    85→  white-space: nowrap;
+    86→}
+    87→
+    88→/* декоративная черта-разделитель в духе телеграфных бланков */
+    89→.scr-title::after {
+    90→  content: ' · · ';
+    91→  color: var(--accent2);
+    92→  font-weight: normal;
+    93→}
+    94→
+    95→.scr-sub {
+    96→  font-size: 12px;
+    97→  color: var(--ink-dim);
+    98→  font-style: italic;
+    99→  overflow: hidden;
+   100→  text-overflow: ellipsis;
+   101→  white-space: nowrap;
+   102→  flex: 1 1 auto;
+   103→}
+   104→
+   105→.scr-key {
+   106→  display: inline-block;
+   107→  border: 1px solid var(--line);
+   108→  border-radius: 3px;
+   109→  padding: 0 6px;
+   110→  font-size: 11px;
+   111→  color: var(--ink-dim);
+   112→  background: rgba(10, 14, 21, 0.8);
+   113→  margin-left: 4px;
+   114→}
+   115→
+   116→.scr-close {
+   117→  position: absolute;
+   118→  top: 7px;
+   119→  right: 9px;
+   120→  width: 26px;
+   121→  height: 26px;
+   122→  line-height: 24px;
+   123→  text-align: center;
+   124→  color: var(--ink-dim);
+   125→  background: transparent;
+   126→  border: 1px solid transparent;
+   127→  border-radius: 3px;
+   128→  font-size: 15px;
+   129→  font-family: Georgia, serif;
+   130→  cursor: pointer;
+   131→  transition: color 0.12s, border-color 0.12s, background 0.12s;
+   132→}
+   133→
+   134→.scr-close:hover {
+   135→  color: #f0d8b4;
+   136→  border-color: #8a3a30;
+   137→  background: rgba(138, 42, 34, 0.25);
+   138→}
+   139→
+   140→/* тело окна — прокручиваемая рабочая зона */
+   141→.scr-body {
+   142→  flex: 1 1 auto;
+   143→  overflow: hidden;
+   144→  display: flex;
+   145→  min-height: 0;
+   146→}
+   147→
+   148→/* подвал окна: подсказки управления */
+   149→.scr-foot {
+   150→  flex: 0 0 auto;
+   151→  padding: 6px 16px;
+   152→  border-top: 1px solid var(--line);
+   153→  font-size: 11px;
+   154→  color: var(--ink-dim);
+   155→  letter-spacing: 0.03em;
+   156→  background: rgba(9, 13, 20, 0.6);
+   157→  border-radius: 0 0 5px 5px;
+   158→}
+   159→
+   160→.scr-foot b { color: #b8a888; font-weight: normal; }
+   161→
+   162→/* ============================================================================
+   163→ * 2. ОБЩИЕ ЭЛЕМЕНТЫ
+   164→ * ========================================================================== */
+   165→
+   166→/* полоса-индикатор */
+   167→.bar {
+   168→  position: relative;
+   169→  height: 14px;
+   170→  background: #0a0f16;
+   171→  border: 1px solid var(--line);
+   172→  border-radius: 2px;
+   173→  overflow: hidden;
+   174→}
+   175→
+   176→.bar > i {
+   177→  display: block;
+   178→  height: 100%;
+   179→  width: 0;
+   180→  transition: width 0.35s ease-out;
+   181→}
+   182→
+   183→.bar.b-ok   > i { background: linear-gradient(180deg, #8fb374, #5d7a46); }
+   184→.bar.b-warn > i { background: linear-gradient(180deg, #d1a24a, #8f6d2a); }
+   185→.bar.b-bad  > i { background: linear-gradient(180deg, #bd5348, #7e2b23); }
+   186→.bar.b-cold > i { background: linear-gradient(180deg, #8fb4d6, #4d7093); }
+   187→.bar.b-xp   > i { background: linear-gradient(180deg, #d8a45c, #8f6a32); }
+   188→
+   189→/* подпись к полосе */
+   190→.bar-line { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+   191→
+   192→.bar-name {
+   193→  width: 92px;
+   194→  flex: 0 0 auto;
+   195→  font-size: 11px;
+   196→  letter-spacing: 0.08em;
+   197→  text-transform: uppercase;
+   198→  color: var(--ink-dim);
+   199→}
+   200→
+   201→.bar-val {
+   202→  flex: 0 0 auto;
+   203→  width: 66px;
+   204→  text-align: right;
+   205→  font-size: 12px;
+   206→  color: var(--ink);
+   207→  font-variant-numeric: tabular-nums;
+   208→}
+   209→
+   210→.bar-line .bar { flex: 1 1 auto; }
+   211→
+   212→/* десять пипсов уровня навыка */
+   213→.pips { display: flex; gap: 2px; margin-top: 4px; }
+   214→
+   215→.pips i {
+   216→  width: 7px;
+   217→  height: 8px;
+   218→  background: #131a26;
+   219→  border: 1px solid #2c3a4e;
+   220→  border-radius: 1px;
+   221→}
+   222→
+   223→.pips i.on {
+   224→  background: linear-gradient(180deg, #e4b877, #b57f3e);
+   225→  border-color: #d8a45c;
+   226→}
+   227→
+   228→/* ярлык-категория */
+   229→.tag {
+   230→  display: inline-block;
+   231→  font-size: 10px;
+   232→  letter-spacing: 0.1em;
+   233→  text-transform: uppercase;
+   234→  color: #9aa7b8;
+   235→  border: 1px solid #35435a;
+   236→  border-radius: 2px;
+   237→  padding: 1px 6px;
+   238→  background: rgba(16, 22, 32, 0.8);
+   239→}
+   240→
+   241→.tag.t-warn { color: #d1a24a; border-color: #6e5525; }
+   242→.tag.t-bad  { color: #bd5348; border-color: #6e2b23; }
+   243→.tag.t-ok   { color: #8fb374; border-color: #46603a; }
+   244→.tag.t-cold { color: #8fb4d6; border-color: #3c5871; }
+   245→
+   246→/* строка «ключ — значение» */
+   247→.kv {
+   248→  display: flex;
+   249→  justify-content: space-between;
+   250→  gap: 12px;
+   251→  padding: 4px 2px;
+   252→  border-bottom: 1px dotted #243044;
+   253→  font-size: 13px;
+   254→}
+   255→
+   256→.kv b { font-weight: normal; color: var(--ink-dim); }
+   257→.kv span { color: var(--ink); font-variant-numeric: tabular-nums; }
+   258→
+   259→/* маленькая кнопка внутри окон */
+   260→.ws-btn.btn-s {
+   261→  padding: 5px 12px;
+   262→  font-size: 13px;
+   263→}
+   264→
+   265→/* ряд кнопок с переносом */
+   266→.btn-row {
+   267→  display: flex;
+   268→  flex-wrap: wrap;
+   269→  gap: 8px;
+   270→  align-items: center;
+   271→}
+   272→
+   273→/* ============================================================================
+   274→ * 3. ТОСТЫ
+   275→ *    Экраны ставят минимальный WS.Ui, если настоящий UI ещё не загружен
+   276→ *    (агент D1); как только он появится — тосты берёт на себя он.
+   277→ * ========================================================================== */
+   278→
+   279→#ws-toast-root {
+   280→  position: fixed;
+   281→  left: 50%;
+   282→  bottom: 74px;
+   283→  transform: translateX(-50%);
+   284→  display: flex;
+   285→  flex-direction: column;
+   286→  align-items: center;
+   287→  gap: 6px;
+   288→  z-index: 400;
+   289→  pointer-events: none;
+   290→}
+   291→
+   292→.ws-toast {
+   293→  max-width: 460px;
+   294→  padding: 7px 18px;
+   295→  font-family: 'PT Serif', Georgia, serif;
+   296→  font-size: 14px;
+   297→  color: var(--ink);
+   298→  background: rgba(14, 19, 28, 0.96);
+   299→  border: 1px solid var(--line);
+   300→  border-left: 3px solid #55637a;
+   301→  border-radius: 3px;
+   302→  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+   303→  animation: ws-toast-in 0.18s ease-out, ws-toast-out 0.4s ease-in 2.9s forwards;
+   304→}
+   305→
+   306→.ws-toast.good { border-left-color: var(--ok);  color: #b6d0a4; }
+   307→.ws-toast.warn { border-left-color: var(--warn); color: #dcc084; }
+   308→.ws-toast.bad  { border-left-color: var(--bad);  color: #dda79f; }
+   309→.ws-toast.info { border-left-color: #55637a; }
+   310→
+   311→/* ============================================================================
+   312→ * 4. КАРТА (M)
+   313→ * ========================================================================== */
+   314→
+   315→.ws-map-frame { border-radius: 5px; }
+   316→
+   317→.map-main {
+   318→  flex: 1 1 auto;
+   319→  display: flex;
+   320→  gap: 12px;
+   321→  padding: 12px;
+   322→  min-height: 0;
+   323→}
+   324→
+   325→/* сцена карты: тёмная «столешница», канвас по центру */
+   326→.map-stage {
+   327→  flex: 1 1 auto;
+   328→  display: flex;
+   329→  align-items: center;
+   330→  justify-content: center;
+   331→  min-width: 0;
+   332→  background:
+   333→    radial-gradient(ellipse at 50% 40%, rgba(30, 40, 56, 0.25), rgba(5, 7, 12, 0.55)),
+   334→    #080c13;
+   335→  border: 1px solid #1d2736;
+   336→  border-radius: 4px;
+   337→  overflow: hidden;
+   338→  position: relative;
+   339→}
+   340→
+   341→#ws-map-canvas {
+   342→  display: block;
+   343→  width: auto;
+   344→  height: auto;
+   345→  max-width: 100%;
+   346→  max-height: 100%;
+   347→  cursor: grab;
+   348→  box-shadow: 0 0 0 1px #060a10, 0 10px 34px rgba(0, 0, 0, 0.6);
+   349→}
+   350→
+   351→#ws-map-canvas.dragging { cursor: grabbing; }
+   352→
+   353→/* боковая панель карты: легенда + состояние + управление */
+   354→.map-side {
+   355→  flex: 0 0 236px;
+   356→  display: flex;
+   357→  flex-direction: column;
+   358→  gap: 10px;
+   359→  min-height: 0;
+   360→  overflow-y: auto;
+   361→  padding-right: 2px;
+   362→}
+   363→
+   364→.map-box {
+   365→  border: 1px solid var(--line);
+   366→  border-radius: 3px;
+   367→  background: rgba(13, 18, 27, 0.55);
+   368→  padding: 9px 11px;
+   369→}
+   370→
+   371→.map-box h4 {
+   372→  font-size: 11px;
+   373→  letter-spacing: 0.14em;
+   374→  text-transform: uppercase;
+   375→  color: var(--accent);
+   376→  margin-bottom: 7px;
+   377→  font-weight: bold;
+   378→}
+   379→
+   380→/* легенда: маркер-квадратик + подпись */
+   381→.map-lg-item {
+   382→  display: flex;
+   383→  align-items: center;
+   384→  gap: 9px;
+   385→  padding: 3px 0;
+   386→  font-size: 12.5px;
+   387→  color: var(--ink);
+   388→}
+   389→
+   390→.map-lg-sw {
+   391→  flex: 0 0 18px;
+   392→  width: 18px;
+   393→  height: 12px;
+   394→  border-radius: 2px;
+   395→  border: 1px solid rgba(0, 0, 0, 0.5);
+   396→  background: #18202e;
+   397→  position: relative;
+   398→}
+   399→
+   400→.map-lg-sw.sw-player { background: #d8a45c; border-radius: 50%; }
+   401→.map-lg-sw.sw-house { background: #8a6f4d; }
+   402→.map-lg-sw.sw-station { background: #e8c470; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+   403→.map-lg-sw.sw-cemetery { background: transparent; border: none; }
+   404→.map-lg-sw.sw-cemetery::before,
+   405→.map-lg-sw.sw-cemetery::after {
+   406→  content: '';
+   407→  position: absolute;
+   408→  background: #b9c2cc;
+   409→}
+   410→.map-lg-sw.sw-cemetery::before { left: 8px; top: 0; width: 2px; height: 12px; }
+   411→.map-lg-sw.sw-cemetery::after  { left: 4px; top: 4px; width: 10px; height: 2px; }
+   412→.map-lg-sw.sw-pier { background: linear-gradient(180deg, #7ea3c4 40%, #655130 40%); }
+   413→.map-lg-sw.sw-cache { background: #7ea36a; transform: rotate(45deg) scale(0.8); border-color: #46603a; }
+   414→.map-lg-sw.sw-corpse { background: transparent; border: 1px solid #8a2a22; border-radius: 50%; }
+   415→.map-lg-sw.sw-wolf { border: 1px dashed #b0483f; border-radius: 50%; background: transparent; }
+   416→.map-lg-sw.sw-fog { background: linear-gradient(90deg, #05070d 55%, #93a1b2); }
+   417→
+   418→.map-lg-item.dim { color: var(--ink-dim); font-style: italic; }
+   419→.map-lg-hint { font-size: 11px; color: var(--ink-dim); margin-left: 27px; margin-top: -2px; }
+   420→
+   421→/* панель состояния карты */
+   422→.map-stats .kv { font-size: 12.5px; }
+   423→
+   424→/* строка координат под сценой */
+   425→.map-status {
+   426→  flex: 0 0 auto;
+   427→  display: flex;
+   428→  gap: 18px;
+   429→  padding: 5px 14px;
+   430→  border-top: 1px solid #1d2736;
+   431→  font-size: 12px;
+   432→  color: var(--ink-dim);
+   433→  font-variant-numeric: tabular-nums;
+   434→}
+   435→
+   436→.map-status b { color: #b8a888; font-weight: normal; }
+   437→
+   438→.map-status .mstat { white-space: nowrap; }
+   439→
+   440→/* ============================================================================
+   441→ * 5. ЗДОРОВЬЕ (H)
+   442→ * ========================================================================== */
+   443→
+   444→.hp-body { gap: 16px; padding: 14px 16px; }
+   445→
+   446→.hp-left {
+   447→  flex: 0 0 300px;
+   448→  display: flex;
+   449→  flex-direction: column;
+   450→  gap: 6px;
+   451→}
+   452→
+   453→/* подиум-сцена куклы */
+   454→.hp-doll-wrap {
+   455→  position: relative;
+   456→  border: 1px solid var(--line);
+   457→  border-radius: 4px;
+   458→  background:
+   459→    radial-gradient(ellipse at 50% 30%, rgba(38, 50, 68, 0.35), rgba(8, 11, 17, 0.2)),
+   460→    linear-gradient(180deg, #101620, #0b0f16);
+   461→  padding: 10px 8px 6px;
+   462→  overflow: hidden;
+   463→}
+   464→
+   465→/* виньетка вокруг куклы — «лампа у постели» */
+   466→.hp-doll-wrap::after {
+   467→  content: '';
+   468→  position: absolute;
+   469→  inset: 0;
+   470→  pointer-events: none;
+   471→  box-shadow: inset 0 0 52px rgba(0, 0, 0, 0.65);
+   472→  border-radius: 4px;
+   473→}
+   474→
+   475→/* сама кукла: абсолютные части на сетке */
+   476→.hp-doll {
+   477→  position: relative;
+   478→  width: 240px;
+   479→  height: 352px;
+   480→  margin: 0 auto;
+   481→  animation: hp-breathe 4.6s ease-in-out infinite;
+   482→}
+   483→
+   484→.hp-doll .part {
+   485→  position: absolute;
+   486→  border: 1px solid #3a4656;
+   487→  background: linear-gradient(180deg, #2a3444, #1d2531);
+   488→  border-radius: 10px;
+   489→  cursor: pointer;
+   490→  transition: box-shadow 0.25s, border-color 0.25s, background 0.4s;
+   491→  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+   492→}
+   493→
+   494→.hp-doll .part:hover,
+   495→.hp-doll .part.sel {
+   496→  border-color: var(--accent);
+   497→  box-shadow: 0 0 0 1px rgba(216, 164, 92, 0.35), inset 0 0 14px rgba(216, 164, 92, 0.1);
+   498→}
+   499→
+   500→/* пропорции куклы */
+   501→.d-head  { left: 90px;  top: 4px;   width: 58px; height: 62px;  border-radius: 48% 48% 42% 42%; }
+   502→.d-torso { left: 73px;  top: 72px;  width: 92px; height: 118px; border-radius: 16px 16px 10px 10px; }
+   503→.d-arm-l { left: 42px;  top: 80px;  width: 26px; height: 112px; transform: rotate(7deg);  border-radius: 8px; }
+   504→.d-arm-r { right: 42px; top: 80px;  width: 26px; height: 112px; transform: rotate(-7deg); border-radius: 8px; }
+   505→.d-leg-l { left: 80px;  top: 196px; width: 34px; height: 132px; border-radius: 8px 8px 4px 4px; }
+   506→.d-leg-r { right: 80px; top: 196px; width: 34px; height: 132px; border-radius: 8px 8px 4px 4px; }
+   507→
+   508→/* бейдж-счётчик состояния на части тела */
+   509→.part .pbadge {
+   510→  position: absolute;
+   511→  top: -7px;
+   512→  right: -9px;
+   513→  min-width: 15px;
+   514→  height: 15px;
+   515→  line-height: 13px;
+   516→  padding: 0 3px;
+   517→  border-radius: 8px;
+   518→  font-size: 10px;
+   519→  text-align: center;
+   520→  color: #f4e6c8;
+   521→  background: #7e2b23;
+   522→  border: 1px solid #a0483c;
+   523→  display: none;
+   524→}
+   525→
+   526→.part .pbadge.show { display: block; }
+   527→
+   528→/* --- состояния зон --- */
+   529→
+   530→/* обморожение: холодные тени, нарастает */
+   531→.part.z-frost1 { box-shadow: inset 0 0 12px rgba(126, 163, 196, 0.4); }
+   532→.part.z-frost2 {
+   533→  border-color: #5c7f9e;
+   534→  box-shadow: inset 0 0 22px rgba(126, 163, 196, 0.6);
+   535→}
+   536→.part.z-frost3 {
+   537→  border-color: #7ea3c4;
+   538→  background: linear-gradient(180deg, #2a3d52, #1c2c3e);
+   539→  box-shadow: inset 0 0 30px rgba(150, 190, 225, 0.7);
+   540→  animation: frost-tingle 2.8s ease-in-out infinite;
+   541→}
+   542→
+   543→/* кровотечение: пульс тёмно-красного */
+   544→.part.z-bleed {
+   545→  border-color: #a03528;
+   546→  animation: hp-bleed 1.15s ease-in-out infinite;
+   547→}
+   548→
+   549→/* рана/повреждение */
+   550→.part.z-wound { border-color: #8a2a22; box-shadow: inset 0 0 14px rgba(138, 42, 34, 0.5); }
+   551→
+   552→/* инфекция: гнойный оттенок */
+   553→.part.z-infect {
+   554→  border-color: #8a8a3a;
+   555→  box-shadow: inset 0 0 20px rgba(160, 160, 60, 0.35);
+   556→}
+   557→
+   558→/* перелом: жёсткая рамка + крест */
+   559→.part.z-fract {
+   560→  border: 2px dashed #c0483f;
+   561→  background: linear-gradient(180deg, #3a2c2c, #241b1b);
+   562→}
+   563→
+   564→.part.z-fract::before,
+   565→.part.z-fract::after {
+   566→  content: '';
+   567→  position: absolute;
+   568→  left: 50%; top: 50%;
+   569→  width: 26px;
+   570→  height: 2px;
+   571→  background: #c0483f;
+   572→}
+   573→.part.z-fract::before { transform: translate(-50%, -50%) rotate(45deg); }
+   574→.part.z-fract::after  { transform: translate(-50%, -50%) rotate(-45deg); }
+   575→
+   576→/* подсказка выбранной зоны */
+   577→.hp-zone-info {
+   578→  min-height: 46px;
+   579→  padding: 7px 10px;
+   580→  font-size: 12.5px;
+   581→  color: var(--ink-dim);
+   582→  border: 1px dashed #2c3a4e;
+   583→  border-radius: 3px;
+   584→  line-height: 1.45;
+   585→}
+   586→
+   587→.hp-zone-info b { color: var(--ink); font-weight: normal; }
+   588→
+   589→/* правая колонка здоровья */
+   590→.hp-right {
+   591→  flex: 1 1 auto;
+   592→  min-width: 0;
+   593→  display: flex;
+   594→  flex-direction: column;
+   595→  gap: 12px;
+   596→  overflow-y: auto;
+   597→  padding-right: 4px;
+   598→}
+   599→
+   600→.hp-states { display: flex; flex-direction: column; gap: 6px; }
+   601→
+   602→/* карточка состояния */
+   603→.st-card {
+   604→  display: flex;
+   605→  gap: 10px;
+   606→  padding: 7px 10px;
+   607→  border: 1px solid #26334a;
+   608→  border-left: 3px solid #55637a;
+   609→  border-radius: 3px;
+   610→  background: linear-gradient(180deg, rgba(20, 27, 39, 0.7), rgba(13, 18, 27, 0.7));
+   611→}
+   612→
+   613→.st-card .st-ico {
+   614→  flex: 0 0 22px;
+   615→  width: 22px;
+   616→  height: 22px;
+   617→  border: 1px solid #3a4656;
+   618→  border-radius: 50%;
+   619→  color: #b9c2cc;
+   620→  font-size: 12px;
+   621→  line-height: 20px;
+   622→  text-align: center;
+   623→  font-family: Georgia, serif;
+   624→}
+   625→
+   626→.st-card.c-bad   { border-left-color: var(--bad);  }
+   627→.st-card.c-bad   .st-ico { color: #dda79f; border-color: #6e2b23; }
+   628→.st-card.c-warn  { border-left-color: var(--warn); }
+   629→.st-card.c-warn  .st-ico { color: #dcc084; border-color: #6e5525; }
+   630→.st-card.c-cold  { border-left-color: var(--cold); }
+   631→.st-card.c-cold  .st-ico { color: #a9c6dd; border-color: #3c5871; }
+   632→.st-card.c-ok    { border-left-color: var(--ok);  }
+   633→.st-card.c-ok    .st-ico { color: #b6d0a4; border-color: #46603a; }
+   634→
+   635→.st-card .st-mid { flex: 1 1 auto; min-width: 0; }
+   636→
+   637→.st-card .st-name {
+   638→  font-size: 13.5px;
+   639→  color: var(--ink);
+   640→}
+   641→
+   642→.st-card .st-name .st-val {
+   643→  color: var(--accent);
+   644→  font-variant-numeric: tabular-nums;
+   645→}
+   646→
+   647→.st-card .st-desc {
+   648→  font-size: 11.5px;
+   649→  color: var(--ink-dim);
+   650→  line-height: 1.4;
+   651→  margin-top: 2px;
+   652→}
+   653→
+   654→.st-card .st-timer {
+   655→  flex: 0 0 auto;
+   656→  font-size: 11px;
+   657→  color: #b8a888;
+   658→  font-variant-numeric: tabular-nums;
+   659→  white-space: nowrap;
+   660→}
+   661→
+   662→/* блок действий */
+   663→.hp-actions {
+   664→  border-top: 1px solid var(--line);
+   665→  padding-top: 10px;
+   666→}
+   667→
+   668→.hp-actions h4 {
+   669→  font-size: 11px;
+   670→  letter-spacing: 0.14em;
+   671→  text-transform: uppercase;
+   672→  color: var(--accent);
+   673→  margin: 0 0 8px;
+   674→}
+   675→
+   676→.hp-actions .btn-row { margin-bottom: 8px; }
+   677→
+   678→/* «таблетки» обезболивающего */
+   679→.pill-btn {
+   680→  border: 1px solid #354863;
+   681→  border-radius: 12px;
+   682→  background: linear-gradient(180deg, #243248, #1a2334);
+   683→  color: var(--ink);
+   684→  font-size: 12px;
+   685→  padding: 4px 12px;
+   686→  cursor: pointer;
+   687→  font-family: 'PT Serif', Georgia, serif;
+   688→  transition: border-color 0.12s, background 0.12s;
+   689→}
+   690→
+   691→.pill-btn:hover { border-color: #4a6285; background: linear-gradient(180deg, #2d3f5a, #212d42); }
+   692→.pill-btn:disabled { opacity: 0.35; cursor: default; }
+   693→.pill-btn b { color: var(--accent); font-weight: normal; }
+   694→
+   695→/* ============================================================================
+   696→ * 6. НАВЫКИ (K)
+   697→ * ========================================================================== */
+   698→
+   699→.sk-body { flex-direction: column; padding: 12px 14px; gap: 12px; overflow-y: auto; }
+   700→
+   701→/* профиль: профессия + черты */
+   702→.sk-profile {
+   703→  display: flex;
+   704→  gap: 14px;
+   705→  border: 1px solid var(--line);
+   706→  border-radius: 4px;
+   707→  padding: 10px 14px;
+   708→  background: linear-gradient(180deg, rgba(24, 32, 46, 0.5), rgba(13, 18, 27, 0.5));
+   709→}
+   710→
+   711→.sk-prof { flex: 1 1 46%; }
+   712→
+   713→.sk-prof h3 {
+   714→  font-size: 16px;
+   715→  color: var(--accent);
+   716→  letter-spacing: 0.06em;
+   717→  font-weight: bold;
+   718→  margin-bottom: 3px;
+   719→}
+   720→
+   721→.sk-prof .sk-prof-desc {
+   722→  font-size: 12.5px;
+   723→  color: var(--ink-dim);
+   724→  font-style: italic;
+   725→  line-height: 1.45;
+   726→}
+   727→
+   728→.sk-traits { flex: 1 1 54%; border-left: 1px dotted #2c3a4e; padding-left: 14px; }
+   729→
+   730→.sk-traits h4, .sk-prof h4 {
+   731→  font-size: 10.5px;
+   732→  letter-spacing: 0.14em;
+   733→  text-transform: uppercase;
+   734→  color: #9aa7b8;
+   735→  margin: 2px 0 6px;
+   736→}
+   737→
+   738→.sk-trait {
+   739→  display: inline-block;
+   740→  border: 1px solid #3c5033;
+   741→  color: #b6d0a4;
+   742→  border-radius: 3px;
+   743→  padding: 2px 8px;
+   744→  font-size: 12px;
+   745→  margin: 0 6px 6px 0;
+   746→  cursor: help;
+   747→  background: rgba(30, 40, 28, 0.35);
+   748→}
+   749→
+   750→.sk-trait.neg { border-color: #6e2b23; color: #dda79f; background: rgba(50, 24, 20, 0.35); }
+   751→
+   752→/* сетка карточек навыков */
+   753→.sk-grid {
+   754→  display: grid;
+   755→  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+   756→  gap: 10px;
+   757→}
+   758→
+   759→.sk-card {
+   760→  border: 1px solid var(--line);
+   761→  border-radius: 4px;
+   762→  padding: 10px 12px;
+   763→  background: linear-gradient(180deg, #18202e, #121926);
+   764→  transition: border-color 0.15s;
+   765→}
+   766→
+   767→.sk-card:hover { border-color: #3d5068; }
+   768→
+   769→.sk-card.cat-war    { border-left: 3px solid #a0483c; }
+   770→.sk-card.cat-stealth{ border-left: 3px solid #5c7f9e; }
+   771→.sk-card.cat-home   { border-left: 3px solid #b57f3e; }
+   772→
+   773→.sk-top { display: flex; gap: 10px; align-items: flex-start; }
+   774→
+   775→/* ромб-монограмма */
+   776→.sk-ico {
+   777→  flex: 0 0 40px;
+   778→  width: 40px;
+   779→  height: 40px;
+   780→  border: 1px solid var(--accent2);
+   781→  border-radius: 4px;
+   782→  transform: rotate(45deg);
+   783→  display: flex;
+   784→  align-items: center;
+   785→  justify-content: center;
+   786→  background: linear-gradient(180deg, #2a3444, #1a2334);
+   787→  margin: 5px 6px 8px 5px;
+   788→}
+   789→
+   790→.sk-ico span {
+   791→  transform: rotate(-45deg);
+   792→  color: var(--accent);
+   793→  font-family: 'PT Serif', Georgia, serif;
+   794→  font-size: 19px;
+   795→  font-weight: bold;
+   796→}
+   797→
+   798→.sk-head { flex: 1 1 auto; min-width: 0; }
+   799→
+   800→.sk-name {
+   801→  font-size: 14.5px;
+   802→  color: var(--ink);
+   803→  display: flex;
+   804→  align-items: baseline;
+   805→  gap: 8px;
+   806→}
+   807→
+   808→.sk-lv {
+   809→  margin-left: auto;
+   810→  font-size: 18px;
+   811→  color: var(--accent);
+   812→  font-variant-numeric: tabular-nums;
+   813→}
+   814→
+   815→.sk-lv small { font-size: 11px; color: var(--ink-dim); }
+   816→
+   817→.sk-fx {
+   818→  font-size: 11.5px;
+   819→  color: var(--ink-dim);
+   820→  line-height: 1.45;
+   821→  margin-top: 3px;
+   822→}
+   823→
+   824→.sk-xp-line {
+   825→  display: flex;
+   826→  align-items: center;
+   827→  gap: 8px;
+   828→  margin-top: 7px;
+   829→}
+   830→
+   831→.sk-xp-line .bar { flex: 1 1 auto; height: 7px; }
+   832→
+   833→.sk-xp-num {
+   834→  font-size: 10.5px;
+   835→  color: var(--ink-dim);
+   836→  font-variant-numeric: tabular-nums;
+   837→  white-space: nowrap;
+   838→}
+   839→
+   840→/* суммарная строка в шапке */
+   841→.sk-sum { color: #b8a888; }
+   842→.sk-sum b { color: var(--accent); font-weight: bold; }
+   843→
+   844→/* вспышка при росте навыка, пока окно открыто */
+   845→.sk-card.raised { animation: sk-pop 0.9s ease-out; }
+   846→
+   847→/* ============================================================================
+   848→ * 7. ЖУРНАЛ (J)
+   849→ * ========================================================================== */
+   850→
+   851→.jr-body { flex-direction: column; }
+   852→
+   853→/* вкладки */
+   854→.jr-tabs {
+   855→  flex: 0 0 auto;
+   856→  display: flex;
+   857→  gap: 2px;
+   858→  padding: 8px 12px 0;
+   859→  border-bottom: 1px solid var(--line);
+   860→}
+   861→
+   862→.jr-tab {
+   863→  border: 1px solid transparent;
+   864→  border-bottom: none;
+   865→  background: transparent;
+   866→  color: var(--ink-dim);
+   867→  font-family: 'PT Serif', Georgia, serif;
+   868→  font-size: 14px;
+   869→  letter-spacing: 0.06em;
+   870→  padding: 7px 16px 6px;
+   871→  cursor: pointer;
+   872→  border-radius: 4px 4px 0 0;
+   873→  transition: color 0.12s, background 0.12s;
+   874→}
+   875→
+   876→.jr-tab:hover { color: var(--ink); background: rgba(30, 40, 56, 0.35); }
+   877→
+   878→.jr-tab.active {
+   879→  color: var(--accent);
+   880→  border-color: var(--line);
+   881→  background: linear-gradient(180deg, rgba(30, 40, 56, 0.8), rgba(18, 24, 35, 0.9));
+   882→}
+   883→
+   884→.jr-tab .jr-count {
+   885→  font-size: 10.5px;
+   886→  color: #8b95a5;
+   887→  margin-left: 5px;
+   888→}
+   889→
+   890→/* прокручиваемое содержимое вкладки */
+   891→.jr-page {
+   892→  flex: 1 1 auto;
+   893→  overflow-y: auto;
+   894→  padding: 12px 16px 16px;
+   895→  min-height: 0;
+   896→}
+   897→
+   898→/* --- хроника --- */
+   899→.ch-item {
+   900→  display: flex;
+   901→  gap: 14px;
+   902→  padding: 5px 2px;
+   903→  border-bottom: 1px dotted #243044;
+   904→  font-size: 13.5px;
+   905→  line-height: 1.5;
+   906→}
+   907→
+   908→.ch-day {
+   909→  flex: 0 0 118px;
+   910→  color: var(--accent);
+   911→  font-size: 12px;
+   912→  letter-spacing: 0.04em;
+   913→  font-variant-numeric: tabular-nums;
+   914→  padding-top: 1px;
+   915→}
+   916→
+   917→.ch-day small { color: var(--ink-dim); display: block; font-size: 10.5px; }
+   918→
+   919→.ch-text { flex: 1 1 auto; color: var(--ink); }
+   920→
+   921→.ch-item.anom .ch-text { color: #dcc084; }
+   922→.ch-item.kill .ch-text  { color: #dda79f; }
+   923→.ch-item.find .ch-text  { color: #b6d0a4; }
+   924→.ch-item.death .ch-text { color: var(--bad); font-weight: bold; }
+   925→
+   926→.jr-empty {
+   927→  padding: 34px 20px;
+   928→  text-align: center;
+   929→  color: var(--ink-dim);
+   930→  font-style: italic;
+   931→  font-size: 14px;
+   932→}
+   933→
+   934→/* --- записки: пожелтевшая бумага --- */
+   935→
+   936→.notes-col { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+   937→
+   938→.note-card {
+   939→  position: relative;
+   940→  background: linear-gradient(177deg, #d9cfae, #c8bd97 70%, #bcb088);
+   941→  color: #2a2418;
+   942→  padding: 14px 18px 12px;
+   943→  border-radius: 2px;
+   944→  box-shadow: 2px 3px 10px rgba(0, 0, 0, 0.45);
+   945→  font-style: italic;
+   946→  font-size: 13.5px;
+   947→  line-height: 1.55;
+   948→  transform: rotate(-0.35deg);
+   949→}
+   950→
+   951→.note-card:nth-child(even) { transform: rotate(0.4deg); }
+   952→
+   953→.note-card::before {
+   954→  content: '';
+   955→  position: absolute;
+   956→  left: 50%;
+   957→  top: -4px;
+   958→  width: 46px;
+   959→  height: 9px;
+   960→  transform: translateX(-50%) rotate(-1.5deg);
+   961→  background: rgba(120, 96, 60, 0.35);
+   962→  border: 1px solid rgba(90, 70, 42, 0.3);
+   963→}
+   964→
+   965→.note-title {
+   966→  font-style: normal;
+   967→  font-weight: bold;
+   968→  letter-spacing: 0.08em;
+   969→  text-transform: uppercase;
+   970→  font-size: 11px;
+   971→  color: #6e5a34;
+   972→  margin-bottom: 5px;
+   973→}
+   974→
+   975→.note-text { white-space: pre-line; }
+   976→
+   977→.note-src {
+   978→  margin-top: 8px;
+   979→  font-style: normal;
+   980→  font-size: 10.5px;
+   981→  color: #7a6844;
+   982→  text-align: right;
+   983→}
+   984→
+   985→/* --- статистика --- */
+   986→
+   987→.stats-grid {
+   988→  display: grid;
+   989→  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+   990→  gap: 4px 26px;
+   991→}
+   992→
+   993→.stat-big {
+   994→  grid-column: 1 / -1;
+   995→  display: flex;
+   996→  gap: 26px;
+   997→  padding: 10px 12px;
+   998→  margin-bottom: 8px;
+   999→  border: 1px solid var(--line);
+  1000→  border-radius: 4px;
+  1001→  background: linear-gradient(180deg, rgba(24, 32, 46, 0.55), rgba(13, 18, 27, 0.55));
+  1002→}
+  1003→
+  1004→.stat-big .sb { flex: 1; }
+  1005→
+  1006→.stat-big .sb-n {
+  1007→  font-size: 26px;
+  1008→  color: var(--accent);
+  1009→  font-variant-numeric: tabular-nums;
+  1010→  line-height: 1.1;
+  1011→}
+  1012→
+  1013→.stat-big .sb-l {
+  1014→  font-size: 11px;
+  1015→  color: var(--ink-dim);
+  1016→  text-transform: uppercase;
+  1017→  letter-spacing: 0.08em;
+  1018→}
+  1019→
+  1020→/* --- радио --- */
+  1021→
+  1022→.radio-item {
+  1023→  display: flex;
+  1024→  gap: 12px;
+  1025→  padding: 8px 4px;
+  1026→  border-bottom: 1px dotted #243044;
+  1027→  font-size: 13.5px;
+  1028→  line-height: 1.5;
+  1029→}
+  1030→
+  1031→.radio-item .r-freq {
+  1032→  flex: 0 0 92px;
+  1033→  color: var(--cold);
+  1034→  font-size: 12px;
+  1035→  font-variant-numeric: tabular-nums;
+  1036→  padding-top: 1px;
+  1037→}
+  1038→
+  1039→.radio-item .r-text { flex: 1 1 auto; color: #cdd6e2; }
+  1040→
+  1041→.radio-static-line {
+  1042→  color: var(--ink-dim);
+  1043→  font-size: 12px;
+  1044→  font-style: italic;
+  1045→  padding: 3px 0;
+  1046→}
+  1047→
+  1048→/* ============================================================================
+  1049→ * 8. АНИМАЦИИ
+  1050→ * ========================================================================== */
+  1051→
+  1052→@keyframes ws-fade-in {
+  1053→  from { opacity: 0; }
+  1054→  to   { opacity: 1; }
+  1055→}
+  1056→
+  1057→@keyframes ws-rise {
+  1058→  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  1059→  to   { opacity: 1; transform: none; }
+  1060→}
+  1061→
+  1062→@keyframes ws-toast-in {
+  1063→  from { opacity: 0; transform: translateY(10px); }
+  1064→  to   { opacity: 1; transform: none; }
+  1065→}
+  1066→
+  1067→@keyframes ws-toast-out {
+  1068→  to { opacity: 0; transform: translateY(-8px); }
+  1069→}
+  1070→
+  1071→/* дыхание живого человека */
+  1072→@keyframes hp-breathe {
+  1073→  0%, 100% { transform: translateY(0); }
+  1074→  50%      { transform: translateY(2px); }
+  1075→}
+  1076→
+  1077→/* пульс кровотечения */
+  1078→@keyframes hp-bleed {
+  1079→  0%, 100% { box-shadow: inset 0 0 6px rgba(138, 42, 34, 0.45); }
+  1080→  50%      { box-shadow: inset 0 0 26px rgba(170, 56, 44, 0.95); }
+  1081→}
+  1082→
+  1083→/* покалывание обмороженных тканей */
+  1084→@keyframes frost-tingle {
+  1085→  0%, 100% { filter: none; }
+  1086→  50%      { filter: brightness(1.12); }
+  1087→}
+  1088→
+  1089→/* вспышка роста навыка */
+  1090→@keyframes sk-pop {
+  1091→  0%   { box-shadow: 0 0 0 rgba(216, 164, 92, 0); }
+  1092→  35%  { box-shadow: 0 0 22px rgba(216, 164, 92, 0.65); border-color: var(--accent); }
+  1093→  100% { box-shadow: 0 0 0 rgba(216, 164, 92, 0); }
+  1094→}
+  1095→
+  1096→/* ============================================================================
+  1097→ * 9. АДАПТИВ И МЕЛОЧИ
+  1098→ * ========================================================================== */
+  1099→
+  1100→/* на узких экранах боковая панель карты уходит вниз */
+  1101→@media (max-width: 900px) {
+  1102→  .map-main { flex-direction: column; overflow-y: auto; }
+  1103→  .map-side { flex: 1 1 auto; flex-direction: row; flex-wrap: wrap; }
+  1104→  .map-box { flex: 1 1 200px; }
+  1105→  .hp-body { flex-direction: column; overflow-y: auto; }
+  1106→  .hp-left { flex: 0 0 auto; }
+  1107→  .hp-right { overflow: visible; }
+  1108→}
+  1109→
+  1110→/* уважение к prefers-reduced-motion: гасим декоративные пульсации */
+  1111→@media (prefers-reduced-motion: reduce) {
+  1112→  .hp-doll, .part.z-bleed, .part.z-frost3, .ws-frame, .ws-screen { animation: none; }
+  1113→}
+  1114→
+  1115→/* выделение текста внутри записок всё же нужно — вдруг игрок захочет цитировать */
+  1116→.note-card, .note-card * { user-select: text; -webkit-user-select: text; }
+  1117→
+  1118→/* тонкая полоса прокрутки для страниц журнала */
+  1119→.jr-page::-webkit-scrollbar,
+  1120→.hp-right::-webkit-scrollbar,
+  1121→.map-side::-webkit-scrollbar { width: 8px; }
+  1122→
+  1123→/* фокус с клавиатуры — рамка акцентом, не теряемся */
+  1124→.ws-frame :focus-visible {
+  1125→  outline: 1px solid var(--accent);
+  1126→  outline-offset: 1px;
+  1127→}
+  1128→

@@ -21,7 +21,9 @@
     footprints: true,
     autosave: true,
     showFps: false,
-    hints: true
+    hints: true,
+    voice: true,           // ОЗВУЧКА ГОЛОСОМ (js/core/voice.js)
+    voiceDemo: true        // озвучивать и реплики демо-автопилота
   };
 
   function load() {
@@ -76,6 +78,12 @@
         break;
       case 'tutorial':
         if (WS.Tutorial && WS.Tutorial.setEnabled) WS.Tutorial.setEnabled(!!v);
+        break;
+      case 'voice':
+        if (WS.Voice && WS.Voice.setEnabled) WS.Voice.setEnabled(!!v);
+        break;
+      case 'voiceDemo':
+        // читает voice.js при озвучке журнала демо
         break;
       case 'weatherFx':
       case 'blood':
@@ -134,6 +142,8 @@
 
     // --- тумблеры ---
     el.appendChild(row('Обучение', 'tutorial', 'check'));
+    el.appendChild(row('Озвучка событий (голос)', 'voice', 'check'));
+    el.appendChild(row('Озвучка реплик демо-бота', 'voiceDemo', 'check'));
     el.appendChild(row('Частицы погоды', 'weatherFx', 'check'));
     el.appendChild(row('Кровь', 'blood', 'check'));
     el.appendChild(row('Следы на снегу', 'footprints', 'check'));

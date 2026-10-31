@@ -796,6 +796,13 @@
   function tickSick(p, gh) {
     var sk = p.sick;
     if (!sk) return;
+    // ЗАЩИТА: структуру могли создать другие системы/старые сейвы —
+    // нормализуем, чтобы тик не падал и не выключал здоровье навсегда
+    if (!sk.fired || typeof sk.fired !== 'object') sk.fired = {};
+    if (typeof sk.compT !== 'number') sk.compT = 0;
+    if (typeof sk.t !== 'number') sk.t = 0;
+    if (sk.tea === undefined) sk.tea = false;
+    if (sk.id === 'food_poisoning') sk.id = 'food_poison';   // алиас needs.js
     var D = DISEASES[sk.id];
     if (!D) { p.sick = null; return; }
     var n = p.needs;
@@ -1296,6 +1303,9 @@
   var Health = {
 
     DISEASES: DISEASES,
+
+    /** Заразить болезнью (каноническая структура p.sick). */
+    infectDisease: infectDisease,
 
     /** HUD-сводка (по ТЗ): {hp, bleed, fracture, infection, pain, sick, drunk}. */
     status: function () {

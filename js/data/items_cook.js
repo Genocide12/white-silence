@@ -739,7 +739,7 @@
 
   // — Настоящий ржаной хлеб: кислый, тёмный, честный.
   def({
-    id: 'bread_rye_black', cat: 'food', name: 'Ржаной хлеб',
+    id: 'bread_rye_black', cat: 'food', name: 'Чёрный ржаной хлеб',
     desc: 'Чёрный, на закваске: буханка на неделю.',
     w: 0.9, stack: 3,
     cal: 1250, thir: -8, per: 7, cook: 'suhari',

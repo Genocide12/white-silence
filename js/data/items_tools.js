@@ -77,7 +77,7 @@
       'item.needle_sewing.name': 'Игла швейная', 'item.needle_sewing.desc': 'Стальная игла для починки одежды.',
       'item.thimble.name': 'Напёрсток', 'item.thimble.desc': 'Медный напёрсток. Бережёт палец.',
       'item.scissors_tailor.name': 'Ножницы портновские', 'item.scissors_tailor.desc': 'Большие, тяжёлые, кроят сукно.',
-      'item.file_steel.name': 'Напильник', 'item.file_steel.desc': 'Стальной напильник по металлу.',
+      'item.file_steel.name': 'Напильник стальной', 'item.file_steel.desc': 'Стальной напильник по металлу.',
       'item.tongs_smith.name': 'Клещи кузнечные', 'item.tongs_smith.desc': 'Держат раскалённое железо.',
       'item.hammer_locksmith.name': 'Молоток слесарный', 'item.hammer_locksmith.desc': 'Тяжёлый, удобный в руке.',
       'item.plane_smooth.name': 'Рубанок', 'item.plane_smooth.desc': 'Гладит дерево до блеска.',

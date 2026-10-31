@@ -399,7 +399,7 @@
 
     var btnHow = el('button', 'ws-btn', actions);
     setText(btnHow, 'Как играть');
-    btnHow.addEventListener('click', function () { openModal('how'); });
+    btnHow.addEventListener('click', function () { openModal('how'); });   // повторный клик — закрыть (toggle)
 
     var btnAbout = el('button', 'ws-btn', actions);
     setText(btnAbout, 'Об игре');
@@ -408,7 +408,7 @@
     // --- подвал ------------------------------------------------------------
     var foot = el('div', 'menu-foot', wrap);
     var ver = 'v' + (WS.VERSION || '1.0.0') + ' · сборка ' + (WS.BUILD || '1917');
-    setText(foot, ver + ' · студия «studioigor» · изометрический сурвайвл по мотивам Севера');
+    setText(foot, ver + ' · игра: DirtyG/ · изометрический сурвайвл по мотивам Севера');
 
     // --- модальные окна (внутри меню) ---------------------------------------
     buildModals(root);
@@ -581,6 +581,8 @@
 
   function openModal(kind) {
     if (!built) return;
+    // ПОВТОРНОЕ НАЖАТИЕ ТОЙ ЖЕ КНОПКИ — ЗАКРЫТЬ (toggle, запрос пользователя)
+    if (modalOpen === kind) { closeModal(); return; }
     snd('click');
     modalOpen = kind;
     els.modalBody.textContent = '';

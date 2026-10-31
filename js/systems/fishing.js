@@ -419,7 +419,7 @@
     addRecipe({
       id: 'fish_trap', name: 'Верша', cat: 'survival',
       station: null, time: 6,
-      req: [{ id: 'pine_branches', n: 5 }, { id: 'rope', n: 1 }],
+      req: [{ id: 'pine_branch', n: 5 }, { id: 'rope', n: 1 }],
       tools: ['knife'],
       out: [{ id: 'fish_trap', n: 1 }],
       skill: { id: 'survive', lv: 0 }

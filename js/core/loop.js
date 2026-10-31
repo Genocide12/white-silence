@@ -92,6 +92,7 @@
         t.fn(dt);
       } catch (e) {
         WS.err('tick "' + t.name + '" failed:', e && e.message);
+        try { console.warn('[tick-fail-stack]', t.name, e && e.stack); } catch (eS) { /* пусто */ }
         // выкидываем падающий тик, чтобы не заспамить консоль
         tickers.splice(i, 1); i--;
       }

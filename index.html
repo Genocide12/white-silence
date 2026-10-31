@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Белое Безмолвие — изометрический сурвайвл в духе Project Zomboid: Русский Север, зима 1917 года.">
+  <meta name="author" content="DirtyG/">
   <meta name="theme-color" content="#070a10">
   <title>Белое Безмолвие — White Silence</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23070a10'/><circle cx='16' cy='16' r='8' fill='%23dfe6ee'/><circle cx='13' cy='14' r='6' fill='%23a9c6dd'/></svg>">
-  <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/demo.css">
   <link rel="stylesheet" href="css/hud.css">
@@ -16,6 +16,8 @@
   <link rel="stylesheet" href="css/panels.css">
   <link rel="stylesheet" href="css/screens.css">
   <link rel="stylesheet" href="css/ui.css">
+  <link rel="stylesheet" href="css/worldux.css">
+  <link rel="stylesheet" href="css/ux-fixes.css">
 </head>
 <body>
   <canvas id="game" width="1280" height="720"></canvas>
@@ -38,6 +40,7 @@
   <script src="js/core/sprites.js"></script>
   <script src="js/core/state.js"></script>
   <script src="js/core/time.js"></script>
+  <script src="js/core/voice.js"></script>
   <script src="js/data/difficulty.js"></script>
   <script src="js/data/items_books.js"></script>
   <script src="js/data/items_cloth.js"></script>
@@ -49,6 +52,7 @@
   <script src="js/data/loot_professions.js"></script>
   <script src="js/data/loot_tables.js"></script>
   <script src="js/data/loot_tables2.js"></script>
+  <script src="js/data/items_i18n_patch.js"></script>
   <script src="js/data/manifest.js"></script>
   <script src="js/data/recipes.js"></script>
   <script src="js/data/recipes_cook.js"></script>
@@ -96,6 +100,7 @@
   <script src="js/ai/bandit.js"></script>
   <script src="js/ai/bear.js"></script>
   <script src="js/ai/hermit.js"></script>
+  <script src="js/ai/imps.js"></script>
   <script src="js/ai/wanderers.js"></script>
   <script src="js/ai/wolf.js"></script>
   <script src="js/entities/actions.js"></script>
@@ -123,6 +128,7 @@
   <script src="js/ui/tooltips.js"></script>
   <script src="js/ui/tutorial.js"></script>
   <script src="js/ui/ui.js"></script>
+  <script src="js/ui/world_ux.js"></script>
   <script src="js/content/bestiary.js"></script>
   <script src="js/content/calendar.js"></script>
   <script src="js/content/carols.js"></script>

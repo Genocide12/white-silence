@@ -150,7 +150,7 @@ python3 scripts/build.py
 
 ## О проекте
 
-Игра разработана агентной студией **studioigor-pipeline** ([studioigor-skill](https://github.com/studioigor/studioigor-skill)) по заданию: «не хуже 2D Project Zomboid, только не про зомби». Вдохновение: Project Zomboid, The Long Dark, рассказы Джека Лондона.
+Автор игры — **DirtyG/**. Разработка и спасение проекта велись агентным конвейером по заданию: «не хуже 2D Project Zomboid, только не про зомби». Вдохновение: Project Zomboid, The Long Dark, рассказы Джека Лондона.
 
 - **Объём**: ~95 000 строк кода (JS/CSS/HTML)
 - **Файлов**: 120+

@@ -634,6 +634,9 @@
     setText(els.chipPolar, 'полярная ночь');
     els.chipSpeed = el('span', 'hud-chip chip-speed', chips);
     setText(els.chipSpeed, '×2');
+    els.chipImps = el('span', 'hud-chip chip-imps', chips);
+    setText(els.chipImps, 'изгнано мультяшек: 0');
+    els.chipImps.title = 'Морозные мультяшки воруют еду ночью. Свет, шум и удар их изгоняют.';
 
     var wx = el('div', 'hud-weather', topLeft);
     els.wxIco = document.createElement('canvas');
@@ -875,6 +878,14 @@
     var polar = false;
     try { polar = WS.Time.isPolarNight(); } catch (e3) { polar = false; }
     if (polar) showEl(els.chipPolar); else hideEl(els.chipPolar);
+
+    // счётчик изгнанных мультяшек (js/ai/imps.js)
+    var impsEx = 0;
+    try { impsEx = WS.Imps ? WS.Imps.expelled() : 0; } catch (eImp) { impsEx = 0; }
+    if (impsEx > 0) {
+      setText(els.chipImps, 'изгнано мультяшек: ' + impsEx);
+      showEl(els.chipImps);
+    } else hideEl(els.chipImps);
 
     // скорость/пауза
     var spTxt = '';

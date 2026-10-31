@@ -1,0 +1,771 @@
+     1→/**
+     2→ * A4 — волчьи стаи, ГЛАВНАЯ угроза «Белого Безмолвия» (аналог зомби PZ).
+     3→ * Стая: {members, alpha, territory, mode 'den'|'patrol'|'hunt', target}.
+     4→ * День: патруль территории (r=25), игрок дальше 15 тайлов не существует,
+     5→ * огонь (костры) и фонарь игрока отпугивают. Ночь (и полярная ночь):
+     6→ * вой, охота на окраины посёлка, чутьё крови/мяса/спящего игрока,
+     7→ * окружение цели кольцом и очерёдные атаки (не больше двух волков у цели).
+     8→ * Убийство: hp<=0 -> WS.AI.kill (труп через WS.Loot.makeCorpse).
+     9→ */
+    10→(function () {
+    11→  'use strict';
+    12→
+    13→  var AI = null;   // WS.AI (алиас назначается в boot, договор CONTRACT.md)
+    14→
+    15→  // ================================================================ настройки
+    16→
+    17→  var TERRITORY_R = 25;          // радиус патрулируемой территории, тайлов
+    18→  var DAY_IGNORE = 15;           // дальше — волк игрока «не замечает»
+    19→  var DAY_DEFEND = 8;            // ближе — защита территории атакой
+    20→  var NIGHT_SPD = 3.1 / 2.8;     // ночью волки быстрее (2.8 -> 3.1)
+    21→  var FEAR_FIRE_R = 4.5;         // радиус паники от огня
+    22→  var SMELL_RANGE = 45;          // ночью чуют кровь за 45 тайлов
+    23→  var ATTACK_RING_X = 3.2;       // эллипс окружения цели (изометрия)
+    24→  var ATTACK_RING_Y = 2.4;
+    25→  var PACK_TICK = 0.4;           // контролёр стаи — 2.5 раза в секунду
+    26→
+    27→  // пиксельные цвета (из палитры WS.Spr.pal)
+    28→  var W1 = '#8b909b', W2 = '#a7adb8', WD = '#5a5f6a', WS0 = '#3f434c';
+    29→  var EYE = '#ffd75e';           // янтарные глаза
+    30→
+    31→  var packs = [];                // все стаи карты
+    32→
+    33→  // ================================================================ спрайты
+    34→
+    35→  /** Мелкая заливка-пиксель. */
+    36→  function p(c, x, y, w, h, col) {
+    37→    c.fillStyle = col;
+    38→    c.fillRect(x, y, w, h);
+    39→  }
+    40→
+    41→  /** Волк в профиль, морда вправо (кадры бега 0/1). */
+    42→  function wolfSide(c, frame, bob) {
+    43→    var dy = frame === 1 ? 1 : 0;   // лёгкое покачивание корпуса
+    44→    // хвост — пушистый, поднят
+    45→    p(c, 1, 9 + dy, 7, 5, W1);
+    46→    p(c, 0, 7 + dy, 4, 4, W2);
+    47→    p(c, 6, 12 + dy, 2, 2, WD);
+    48→    // корпус — поджарый, спина выше крестца
+    49→    p(c, 8, 11 + dy, 26, 8, W1);
+    50→    p(c, 9, 10 + dy, 24, 2, W2);
+    51→    p(c, 9, 17 + dy, 24, 2, WD);
+    52→    p(c, 12, 19 + dy, 16, 1, WD);
+    53→    // грудь глубже у передних лап
+    54→    p(c, 27, 13 + dy, 6, 6, W1);
+    55→    p(c, 28, 13 + dy, 4, 3, W2);
+    56→    // шея и голова
+    57→    p(c, 31, 6 + dy, 10, 8, W1);
+    58→    p(c, 32, 5 + dy, 8, 2, W2);
+    59→    p(c, 39, 8 + dy, 4, 5, W1);
+    60→    // уши
+    61→    p(c, 32, 1 + dy, 3, 5, W1);
+    62→    p(c, 37, 1 + dy, 3, 5, W1);
+    63→    p(c, 33, 2 + dy, 1, 3, WD);
+    64→    p(c, 38, 2 + dy, 1, 3, WD);
+    65→    // морда и нос
+    66→    p(c, 40, 9 + dy, 6, 4, WD);
+    67→    p(c, 45, 9 + dy, 2, 3, '#1a1c20');
+    68→    // глаз — светящийся янтарь
+    69→    p(c, 37, 8 + dy, 2, 2, EYE);
+    70→    // ноги: рысь — два кадра «разножка/сближение»
+    71→    if (frame === 0) {
+    72→      p(c, 32, 18 + dy, 3, 9, WD); p(c, 27, 18 + dy, 3, 9, WD);
+    73→      p(c, 14, 18 + dy, 3, 9, WD); p(c, 9, 18 + dy, 3, 9, WD);
+    74→      p(c, 32, 25 + dy, 3, 2, WS0); p(c, 9, 25 + dy, 3, 2, WS0);
+    75→    } else {
+    76→      p(c, 30, 18 + dy, 3, 9, WD); p(c, 28, 18 + dy, 3, 9, WD);
+    77→      p(c, 12, 18 + dy, 3, 9, WD); p(c, 10, 18 + dy, 3, 9, WD);
+    78→      p(c, 30, 25 + dy, 3, 2, WS0); p(c, 10, 25 + dy, 3, 2, WS0);
+    79→    }
+    80→    if (bob) p(c, 20, 20, 1, 1, WS0);   // метка отладки (не используется)
+    81→  }
+    82→
+    83→  /** Волк со спины (идёт на север): хвост к зрителю. */
+    84→  function wolfUp(c, frame) {
+    85→    var dy = frame === 1 ? 1 : 0;
+    86→    // корпус
+    87→    p(c, 14, 12 + dy, 20, 10, W1);
+    88→    p(c, 15, 11 + dy, 18, 2, W2);
+    89→    p(c, 15, 21 + dy, 18, 1, WD);
+    90→    // голова (видна сзади, выше и дальше)
+    91→    p(c, 19, 4 + dy, 10, 8, W1);
+    92→    p(c, 20, 3 + dy, 8, 2, W2);
+    93→    p(c, 19, 2 + dy, 3, 4, W1); p(c, 26, 2 + dy, 3, 4, W1);
+    94→    p(c, 20, 3 + dy, 1, 2, WD); p(c, 27, 3 + dy, 1, 2, WD);
+    95→    // хвост — к зрителю, пушистый
+    96→    p(c, 20, 21 + dy, 8, 6, W1);
+    97→    p(c, 22, 26 + dy, 4, 2, W2);
+    98→    // ноги
+    99→    if (frame === 0) {
+   100→      p(c, 13, 22 + dy, 3, 5, WD); p(c, 32, 22 + dy, 3, 5, WD);
+   101→      p(c, 17, 22 + dy, 3, 4, WD); p(c, 28, 22 + dy, 3, 4, WD);
+   102→    } else {
+   103→      p(c, 14, 22 + dy, 3, 5, WD); p(c, 31, 22 + dy, 3, 5, WD);
+   104→      p(c, 18, 22 + dy, 3, 4, WD); p(c, 27, 22 + dy, 3, 4, WD);
+   105→    }
+   106→  }
+   107→
+   108→  /** Волк мордой к зрителю (идёт на юг): видны оба глаза. */
+   109→  function wolfDown(c, frame) {
+   110→    var dy = frame === 1 ? 1 : 0;
+   111→    // корпус-грудь
+   112→    p(c, 15, 13 + dy, 18, 9, W1);
+   113→    p(c, 17, 12 + dy, 14, 2, W2);
+   114→    p(c, 16, 20 + dy, 16, 2, WD);
+   115→    // голова крупная, анфас
+   116→    p(c, 17, 2 + dy, 14, 11, W1);
+   117→    p(c, 18, 1 + dy, 12, 2, W2);
+   118→    p(c, 16, 0 + dy, 3, 4, W1); p(c, 29, 0 + dy, 3, 4, W1);
+   119→    p(c, 17, 1 + dy, 1, 2, WD); p(c, 30, 1 + dy, 1, 2, WD);
+   120→    // морда и нос
+   121→    p(c, 21, 9 + dy, 6, 4, WD);
+   122→    p(c, 23, 10 + dy, 2, 2, '#1a1c20');
+   123→    // пара светящихся глаз
+   124→    p(c, 20, 5 + dy, 2, 2, EYE);
+   125→    p(c, 26, 5 + dy, 2, 2, EYE);
+   126→    // ноги
+   127→    if (frame === 0) {
+   128→      p(c, 16, 22 + dy, 3, 5, WD); p(c, 29, 22 + dy, 3, 5, WD);
+   129→      p(c, 20, 22 + dy, 3, 4, WD); p(c, 25, 22 + dy, 3, 4, WD);
+   130→    } else {
+   131→      p(c, 17, 22 + dy, 3, 5, WD); p(c, 28, 22 + dy, 3, 5, WD);
+   132→      p(c, 21, 22 + dy, 3, 4, WD); p(c, 24, 22 + dy, 3, 4, WD);
+   133→    }
+   134→  }
+   135→
+   136→  /**
+   137→   * Общий отрисовщик: 4 стороны (N/S/E/W через dir&2), 2 кадра бега.
+   138→   * Запад — зеркало востока.
+   139→   */
+   140→  function wolfDraw(c, w, h, frame, dir) {
+   141→    var d4 = (dir === undefined) ? 2 : ((dir | 0) & 2);   // 0 N, 2 E, 4 S, 6 W
+   142→    if (d4 === 6) {
+   143→      c.save();
+   144→      c.translate(w, 0);
+   145→      c.scale(-1, 1);
+   146→      wolfSide(c, frame, false);
+   147→      c.restore();
+   148→    } else if (d4 === 2) {
+   149→      wolfSide(c, frame, false);
+   150→    } else if (d4 === 0) {
+   151→      wolfUp(c, frame);
+   152→    } else {
+   153→      wolfDown(c, frame);
+   154→    }
+   155→  }
+   156→
+   157→  /**
+   158→   * Ночная подсветка глаз: рисуется ПОСЛЕ основного спрайта
+   159→   * (Gfx вызывает e.render(ctx, sx, sy, zoom)).
+   160→   */
+   161→  function makeWolfRender(e) {
+   162→    return function (ctx, sx, sy, zoom) {
+   163→      try {
+   164→        if (!AI || !AI.isNight()) return;
+   165→        var t = performance.now() / 850;
+   166→        var glow = 0.5 + 0.3 * Math.sin(t + e.x * 3 + e.y * 5);
+   167→        var a = Math.round(glow * 100) / 100;
+   168→        var d4 = (e.dir || 0) & 2;
+   169→        var hx = 0, hy = -13;
+   170→        if (d4 === 2) { hx = 9; hy = -12; }
+   171→        else if (d4 === 6) { hx = -9; hy = -12; }
+   172→        else if (d4 === 4) { hy = -14; }
+   173→        else { return; }   // со спины глаз не видно
+   174→        var s = Math.max(1.5, 2.4 * zoom * (e.scale || 1));
+   175→        var cxp = sx + hx * zoom * (e.scale || 1);
+   176→        var cyp = sy + hy * zoom * (e.scale || 1);
+   177→        // мягкое свечение
+   178→        if (ctx.createRadialGradient) {
+   179→          var g = ctx.createRadialGradient(cxp, cyp, 0, cxp, cyp, s * 2.5);
+   180→          g.addColorStop(0, 'rgba(255,215,94,' + (a * 0.5) + ')');
+   181→          g.addColorStop(1, 'rgba(255,215,94,0)');
+   182→          ctx.fillStyle = g;
+   183→          ctx.fillRect(cxp - s * 2.5, cyp - s * 2.5, s * 5, s * 5);
+   184→        }
+   185→        ctx.fillStyle = 'rgba(255,225,120,' + a + ')';
+   186→        if (d4 === 4) {
+   187→          // анфас — два глаза
+   188→          ctx.fillRect(cxp - s * 1.6, cyp - s / 2, s, s);
+   189→          ctx.fillRect(cxp + s * 0.8, cyp - s / 2, s, s);
+   190→        } else {
+   191→          // профиль — один
+   192→          ctx.fillRect(cxp - s / 2, cyp - s / 2, s, s);
+   193→        }
+   194→      } catch (err) { /* рендер глаз не должен ронять кадр */ }
+   195→    };
+   196→  }
+   197→
+   198→  // ================================================================ создание
+   199→
+   200→  function mkPack(R, cx, cy) {
+   201→    var pack = {
+   202→      id: WS.World.newId('pack'),
+   203→      members: [],
+   204→      alpha: null,
+   205→      territory: { x: cx, y: cy, r: TERRITORY_R },
+   206→      mode: 'patrol',            // 'den' | 'patrol' | 'hunt'
+   207→      target: null,              // сущность игрока или точка {x, y}
+   208→      aggroT: 0,                 // месть игроку, сек
+   209→      panicT: 0,                 // паника (убит вожак), сек
+   210→      panicPt: null,
+   211→      huntPt: null,              // район охоты на окраине посёлка
+   212→      huntT: 0,                   // сколько уже топтались у окраины
+   213→      retarget: 0,
+   214→      interestT: 0,              // время «расследования» точки
+   215→      howlDelay: 0,
+   216→      lastHowl: -999
+   217→    };
+   218→    packs.push(pack);
+   219→    return pack;
+   220→  }
+   221→
+   222→  function mkWolf(R, pack, x, y, isAlpha) {
+   223→    var e = WS.World.addEnt({
+   224→      kind: 'wolf',
+   225→      x: x, y: y,
+   226→      dir: R.int(0, 7),
+   227→      hp: isAlpha ? 60 : 45,
+   228→      maxHp: isAlpha ? 60 : 45,
+   229→      speed: isAlpha ? 2.9 : 2.8,
+   230→      dmg: isAlpha ? 16 : 12,
+   231→      atkSpd: 1.1,
+   232→      sprName: 'wolf',
+   233→      sprFrame: 0,
+   234→      animFrames: 2,
+   235→      shadowR: 0.5,
+   236→      scale: isAlpha ? 1.18 : 1,
+   237→      state: 'idle', stateT: 0,
+   238→      atkCd: 0, lungeT: 0,
+   239→      sight: 9,
+   240→      brain: { hears: true, noInside: true },
+   241→      pack: pack,
+   242→      alpha: !!isAlpha
+   243→    });
+   244→    e.render = makeWolfRender(e);
+   245→    if (pack) {
+   246→      pack.members.push(e);
+   247→      if (isAlpha || !pack.alpha) pack.alpha = e;
+   248→    }
+   249→    return e;
+   250→  }
+   251→
+   252→  // ================================================================ спавн
+   253→
+   254→  /** 3–5 стай по 3–6 волков в лесу (y < 80), подальше от посёлка. */
+   255→  function spawnAll() {
+   256→    var G = WS.G;
+   257→    if (!G) return;
+   258→    var R = WS.RNG.mk((G.seed ^ 0x0B1D) >>> 0);   // детерминизм от сида
+   259→    var n = R.int(3, 5);
+   260→    var spawned = 0;
+   261→    for (var i = 0; i < n; i++) {
+   262→      var spot = AI.findSpot(R, {
+   263→        y0: 8, y1: 74,           // лес
+   264→        minVillageD: 42,         // подальше от посёлка
+   265→        needTree: true,
+   266→        tries: 90
+   267→      });
+   268→      if (!spot) continue;
+   269→      var pack = mkPack(R, spot.x, spot.y);
+   270→      var size = R.int(3, 6);
+   271→      for (var j = 0; j < size; j++) {
+   272→        mkWolf(R, pack,
+   273→          spot.x + R.range(-2.5, 2.5),
+   274→          spot.y + R.range(-2, 2),
+   275→          j === 0);
+   276→        spawned++;
+   277→      }
+   278→    }
+   279→    WS.log('[AI] волков:', spawned, 'стай:', packs.length);
+   280→  }
+   281→
+   282→  // ================================================================ контролёр стаи
+   283→
+   284→  var packAcc = 0;
+   285→
+   286→  function packTick(dt) {
+   287→    var G = WS.G;
+   288→    if (!G || !G.running || G.dead) return;
+   289→    packAcc += dt;
+   290→    if (packAcc < PACK_TICK) return;
+   291→    var pdt = packAcc;
+   292→    packAcc = 0;
+   293→    var night = AI.isNight();
+   294→    for (var i = packs.length - 1; i >= 0; i--) {
+   295→      var pack = packs[i];
+   296→      // чистка мёртвых из состава
+   297→      var alive = [];
+   298→      for (var m = 0; m < pack.members.length; m++) {
+   299→        if (!pack.members[m].dead) alive.push(pack.members[m]);
+   300→      }
+   301→      pack.members = alive;
+   302→      if (!pack.members.length) { packs.splice(i, 1); continue; }
+   303→      if (!pack.alpha || pack.alpha.dead) pack.alpha = pack.members[0];
+   304→
+   305→      // таймеры стаи
+   306→      if (pack.panicT > 0) pack.panicT -= pdt;
+   307→      if (pack.aggroT > 0) pack.aggroT -= pdt;
+   308→      if (pack.howlDelay > 0) {
+   309→        pack.howlDelay -= pdt;
+   310→        if (pack.howlDelay <= 0) howl(pack);
+   311→      }
+   312→      pack.retarget -= pdt;
+   313→
+   314→      // смена режима: ночь/день (в полярную ночь охота не прекращается)
+   315→      if (night && pack.mode !== 'hunt') {
+   316→        pack.mode = 'hunt';
+   317→        pack.huntPt = pickOutskirts();
+   318→        pack.huntT = 0;
+   319→        pack.retarget = 0;
+   320→        pack.howlDelay = RUNTIME_RANGE(0.5, 5);   // разнобой воя
+   321→      } else if (!night && pack.mode === 'hunt' && !AI.isPolarNight()) {
+   322→        pack.mode = 'patrol';
+   323→        pack.target = null;
+   324→      }
+   325→
+   326→      // выбор цели
+   327→      if (pack.retarget <= 0) {
+   328→        pack.retarget = 1.2;
+   329→        pickTarget(pack, night);
+   330→      }
+   331→
+   332→      // «выветривание» точки интереса (запах/шум)
+   333→      if (pack.interestT > 0) {
+   334→        pack.interestT -= pdt;
+   335→        if (pack.interestT <= 0 && pack.target && !pack.target.kind) {
+   336→          pack.target = null;
+   337→        }
+   338→      }
+   339→
+   340→      // обход окраины: постояли в одном районе — сменить
+   341→      if (night && pack.mode === 'hunt' && !pack.target) {
+   342→        var c = packCenter(pack);
+   343→        if (WS.M.dist(c.x, c.y, pack.huntPt.x, pack.huntPt.y) < 10) {
+   344→          pack.huntT += pdt;
+   345→          if (pack.huntT > 30) {
+   346→            pack.huntPt = pickOutskirts();
+   347→            pack.huntT = 0;
+   348→          }
+   349→        }
+   350→      }
+   351→
+   352→      // повторный вой в затяжной охоте — чтобы игрок не расслаблялся
+   353→      if (night && pack.mode === 'hunt' && AI.now() - pack.lastHowl > 50) {
+   354→        if (Math.random() < 0.05) howl(pack, true);
+   355→      }
+   356→    }
+   357→  }
+   358→
+   359→  function RUNTIME_RANGE(a, b) { return a + Math.random() * (b - a); }
+   360→
+   361→  /** Окраина посёлка (для ночной охоты). */
+   362→  function pickOutskirts() {
+   363→    return {
+   364→      x: 55 + Math.random() * 110,    // x 55..165
+   365→      y: AI.consts.VILLAGE_Y0 + 2 + Math.random() * 8   // y 82..90
+   366→    };
+   367→  }
+   368→
+   369→  /**
+   370→   * Приоритет цели ночной охоты:
+   371→   * месть > запах крови > шум > спящий игрок > игрок с мясом > нет.
+   372→   * Днём: месть > близкий шум > нет.
+   373→   */
+   374→  function pickTarget(pack, night) {
+   375→    var p = AI.player();
+   376→    if (pack.panicT > 0) { pack.target = null; return; }
+   377→    // 1. месть: стаю тронули — помнят обидчика
+   378→    if (pack.aggroT > 0 && p && p.hp > 0) { pack.target = p; return; }
+   379→    if (!night) {
+   380→      // днём сами на людей не охотятся, но шум рядом проверят
+   381→      var al = freshestAlert(pack);
+   382→      if (al && WS.M.dist(al.x, al.y, pack.alpha.x, pack.alpha.y) < 16) {
+   383→        pack.target = { x: al.x, y: al.y };
+   384→        pack.interestT = 10;
+   385→        return;
+   386→      }
+   387→      pack.target = null;
+   388→      return;
+   389→    }
+   390→    // 2. запах крови (память 60 сек)
+   391→    var c = packCenter(pack);
+   392→    var sm = AI.smell.nearest(c.x, c.y, SMELL_RANGE);
+   393→    if (sm) {
+   394→      pack.target = { x: sm.x, y: sm.y };
+   395→      pack.interestT = 20;
+   396→      return;
+   397→    }
+   398→    // 3. недавний шум (выстрел, крик) — ночью идут проверить издалека
+   399→    var noise = freshestAlert(pack);
+   400→    if (noise && AI.now() - noise.t < 8) {
+   401→      pack.target = { x: noise.x, y: noise.y };
+   402→      pack.interestT = 12;
+   403→      return;
+   404→    }
+   405→    if (!p || p.hp <= 0) { pack.target = null; return; }
+   406→    // 4. спящий игрок — лёгкая добыча, чуют издалека
+   407→    if (p.sleeping && WS.M.dist(c.x, c.y, p.x, p.y) < 28) {
+   408→      pack.target = p;
+   409→      return;
+   410→    }
+   411→    // 5. запах мяса в инвентаре игрока
+   412→    if (playerHasMeat(p) && WS.M.dist(c.x, c.y, p.x, p.y) < 16) {
+   413→      pack.target = p;
+   414→      return;
+   415→    }
+   416→    pack.target = null;
+   417→  }
+   418→
+   419→  /** Самый свежий alertTo среди первых членов стаи. */
+   420→  function freshestAlert(pack) {
+   421→    var best = null;
+   422→    var n = Math.min(pack.members.length, 4);
+   423→    for (var i = 0; i < n; i++) {
+   424→      var a = pack.members[i].alertTo;
+   425→      if (a && (!best || a.t > best.t)) best = a;
+   426→    }
+   427→    return best;
+   428→  }
+   429→
+   430→  /** Есть ли у игрока мясо/рыба (запах приманивает ночью). */
+   431→  function playerHasMeat(p) {
+   432→    if (!p || !p.inv) return false;
+   433→    for (var i = 0; i < p.inv.length; i++) {
+   434→      var it = p.inv[i];
+   435→      if (!it) continue;
+   436→      var id = String(it.id || '');
+   437→      if (id.indexOf('meat') >= 0 || id.indexOf('fish') >= 0 ||
+   438→          id.indexOf('carcass') >= 0) return true;
+   439→    }
+   440→    return false;
+   441→  }
+   442→
+   443→  function packCenter(pack) {
+   444→    var x = 0, y = 0, n = 0;
+   445→    for (var i = 0; i < pack.members.length; i++) {
+   446→      var m = pack.members[i];
+   447→      if (m.dead) continue;
+   448→      x += m.x; y += m.y; n++;
+   449→    }
+   450→    if (!n) return { x: pack.territory.x, y: pack.territory.y };
+   451→    return { x: x / n, y: y / n };
+   452→  }
+   453→
+   454→  /** Вой: сигнал игроку и всей стае. */
+   455→  function howl(pack, quiet) {
+   456→    var a = pack.alpha || pack.members[0];
+   457→    if (!a) return;
+   458→    var p = AI.player();
+   459→    var d = p ? WS.M.dist(a.x, a.y, p.x, p.y) : 999;
+   460→    if (d > 60) return;   // слишком далеко — не озвучиваем
+   461→    AI.snd('howl', a.x, a.y, quiet ? 0.6 : 1);
+   462→    if (d < 55) AI.msg('Вы слышите волчий вой...', '#a9b6c9');
+   463→    pack.lastHowl = AI.now();
+   464→  }
+   465→
+   466→  // ================================================================ поведение волка
+   467→
+   468→  function spdBase(e, night) {
+   469→    return e.speed * (night ? NIGHT_SPD : 1);
+   470→  }
+   471→
+   472→  /** Сколько сородичей стоят к цели ближе, чем я (очерёдность атаки). */
+   473→  function countCloser(pack, e, tgt) {
+   474→    var myD = WS.M.dist(e.x, e.y, tgt.x, tgt.y);
+   475→    var n = 0;
+   476→    for (var i = 0; i < pack.members.length; i++) {
+   477→      var m = pack.members[i];
+   478→      if (m === e || m.dead) continue;
+   479→      if (WS.M.dist(m.x, m.y, tgt.x, tgt.y) < myD - 0.3) n++;
+   480→    }
+   481→    return n;
+   482→  }
+   483→
+   484→  /** Своя позиция в кольце окружения (медленно вращающемся). */
+   485→  function orbitSlot(e, pack, cx, cy, rx, ry) {
+   486→    var members = (pack && pack.members) || [e];
+   487→    var idx = members.indexOf(e);
+   488→    if (idx < 0) idx = 0;
+   489→    var n = Math.max(1, members.length);
+   490→    var a = (idx / n) * Math.PI * 2 + AI.now() * 0.22;
+   491→    return {
+   492→      x: cx + Math.cos(a) * rx,
+   493→      y: cy + Math.sin(a) * ry
+   494→    };
+   495→  }
+   496→
+   497→  /** Мгновенный сдвиг (отскок после укуса) с проверкой проходимости. */
+   498→  function displaceAway(e, tx, ty, tiles) {
+   499→    var dx = e.x - tx, dy = e.y - ty;
+   500→    var d = Math.sqrt(dx * dx + dy * dy) || 1;
+   501→    var ux = dx / d, uy = dy / d;
+   502→    for (var k = 1; k >= 0.25; k -= 0.25) {
+   503→      var nx = e.x + ux * tiles * k;
+   504→      var ny = e.y + uy * tiles * k;
+   505→      if (AI.passable(nx, ny, e)) { e.x = nx; e.y = ny; return; }
+   506→    }
+   507→  }
+   508→
+   509→  /** Укус игрока. */
+   510→  function bite(e) {
+   511→    e.atkCd = 1 / (e.atkSpd || 1.1);
+   512→    e.lungeT = 0;
+   513→    AI.damagePlayer(e.dmg, 'bite', e);
+   514→    displaceAway(e, WS.G.player.x, WS.G.player.y, 0.9);   // отпрыгнул
+   515→  }
+   516→
+   517→  function updateWolf(e, dt, R) {
+   518→    var p = AI.player();
+   519→    var night = AI.isNight();
+   520→    var pack = e.pack;
+   521→    e.moving = false;
+   522→
+   523→    // --- 1. паника стаи (убит вожак): 30 секунд хаотичного бегства
+   524→    if (pack && pack.panicT > 0) {
+   525→      if (!e.panicTo) {
+   526→        var a = Math.random() * Math.PI * 2;
+   527→        var rr = 14 + Math.random() * 12;
+   528→        e.panicTo = {
+   529→          x: WS.M.clamp(pack.panicPt ? pack.panicPt.x + Math.cos(a) * rr : e.x, 3, 216),
+   530→          y: WS.M.clamp(pack.panicPt ? pack.panicPt.y + Math.sin(a) * rr : e.y, 3, 216)
+   531→        };
+   532→      }
+   533→      AI.moveTowards(e, e.panicTo.x, e.panicTo.y, spdBase(e, night) * 1.2, dt);
+   534→      e.state = 'flee';
+   535→      AI.anim(e, dt, 9);
+   536→      return;
+   537→    }
+   538→    e.panicTo = null;
+   539→
+   540→    // --- 2. огонь: волк не работает рядом с пламенем
+   541→    var fire = AI.fireNear(e.x, e.y, FEAR_FIRE_R);
+   542→    if (fire) {
+   543→      AI.moveAway(e, fire.x, fire.y, spdBase(e, night) * 1.25, dt);
+   544→      e.state = 'flee'; e.stateT = 0; e.fleeT = 3;
+   545→      AI.anim(e, dt, 10);
+   546→      return;
+   547→    }
+   548→
+   549→    // --- 3. тяжело ранен — бегство с поля боя
+   550→    if (e.hp <= e.maxHp * 0.3 && e.state !== 'flee') {
+   551→      e.state = 'flee';
+   552→      e.stateT = 0;
+   553→      e.fleeT = 6 + R.f() * 5;
+   554→      var th = (e.threat && AI.now() - (e.threatT || 0) < 25) ? e.threat : null;
+   555→      e.fleeFrom = th ? { x: th.x, y: th.y } : { x: e.x + R.range(-8, 8), y: e.y + R.range(-8, 8) };
+   556→      if (R.chance(0.6)) AI.snd('growl', e.x, e.y, 0.5);
+   557→    }
+   558→    if (e.state === 'flee') {
+   559→      e.fleeT -= dt;
+   560→      if (e.fleeFrom) {
+   561→        AI.moveAway(e, e.fleeFrom.x, e.fleeFrom.y, spdBase(e, night) * 1.15, dt);
+   562→      } else {
+   563→        AI.wanderInArea(e, e.x, e.y, 6, dt, spdBase(e, night));
+   564→      }
+   565→      AI.anim(e, dt, 9);
+   566→      if (e.fleeT <= 0) { e.state = 'idle'; e.stateT = 0; e.fleeFrom = null; }
+   567→      return;
+   568→    }
+   569→
+   570→    var tgt = pack ? pack.target : null;
+   571→    var isPrey = !!(tgt && tgt.kind === 'player' && !tgt.dead && tgt.hp > 0);
+   572→
+   573→    // --- 4. охота (ночь или месть)
+   574→    if (pack && (pack.mode === 'hunt' || pack.aggroT > 0)) {
+   575→      if (!tgt) {
+   576→        // цели нет — проулка у окраин посёлка
+   577→        var hp2 = pack.huntPt || pack.territory;
+   578→        AI.wanderInArea(e, hp2.x, hp2.y, 10, dt, spdBase(e, night) * 0.7);
+   579→        e.state = 'wander';
+   580→        AI.anim(e, dt, 6);
+   581→        return;
+   582→      }
+   583→      var tx = tgt.x, ty = tgt.y;
+   584→      var dT = WS.M.dist(e.x, e.y, tx, ty);
+   585→      var spd = spdBase(e, night);
+   586→
+   587→      if (isPrey) {
+   588→        // игрок спрятался в доме: стая кружит вокруг здания
+   589→        var bld = WS.World.isInside(tx, ty);
+   590→        if (bld) {
+   591→          var bx = bld.x + bld.w / 2, by = bld.y + bld.h / 2;
+   592→          var rr2 = Math.max(bld.w, bld.h) / 2 + 2.5;
+   593→          var slot = orbitSlot(e, pack, bx, by, rr2, rr2 * 0.8);
+   594→          AI.moveTowards(e, slot.x, slot.y, spd * 0.8, dt);
+   595→          e.state = 'hunt';
+   596→          if (R.f() < dt * 0.06) AI.snd('growl', e.x, e.y, 0.35);
+   597→          AI.anim(e, dt, 6);
+   598→          return;
+   599→        }
+   600→        // фонарь игрока: 50% отпор — волк держит дистанцию
+   601→        var lamp = AI.lampNear(tx, ty, 3);
+   602→        var closer = countCloser(pack, e, tgt);
+   603→        var slot2 = orbitSlot(e, pack, tx, ty, ATTACK_RING_X, ATTACK_RING_Y);
+   604→        if (lamp && dT < 3.6 && R.chance(0.5)) {
+   605→          AI.moveTowards(e, slot2.x, slot2.y, spd, dt);
+   606→          e.state = 'hunt';
+   607→          AI.anim(e, dt, 7);
+   608→          return;
+   609→        }
+   610→        // дисциплина атаки: у цели не больше двух волков
+   611→        if (closer >= 2 && dT < 2.8) {
+   612→          AI.moveTowards(e, slot2.x, slot2.y, spd * 0.9, dt);
+   613→          e.state = 'hunt';
+   614→          AI.anim(e, dt, 7);
+   615→          return;
+   616→        }
+   617→        // рывок перед укусом (скорость x1.6 на 0.5 с)
+   618→        if (dT < 3.4 && dT > 1.2 && e.atkCd <= 0 && e.lungeT <= 0) {
+   619→          e.lungeT = 0.5;
+   620→          if (R.chance(0.5)) AI.snd('growl', e.x, e.y, 0.6);
+   621→        }
+   622→        if (e.lungeT > 0) spd *= 1.6;
+   623→        AI.moveTowards(e, tx, ty, spd, dt);
+   624→        if (dT < 1.2 && e.atkCd <= 0) bite(e);
+   625→        e.state = dT < 5 ? 'attack' : 'hunt';
+   626→      } else {
+   627→        // точка интереса: запах, шум — идут посмотреть
+   628→        AI.moveTowards(e, tx, ty, spd * 0.9, dt);
+   629→        e.state = 'hunt';
+   630→      }
+   631→      AI.anim(e, dt, 8);
+   632→      return;
+   633→    }
+   634→
+   635→    // --- 5. дневное поведение: патруль территории / настороженность
+   636→    if (p && p.hp > 0) {
+   637→      var dP = WS.M.dist(e.x, e.y, p.x, p.y);
+   638→      if (dP <= DAY_IGNORE) {
+   639→        var threatened = e.threat && AI.now() - (e.threatT || 0) < 12;
+   640→        if (dP < DAY_DEFEND || threatened) {
+   641→          // защита территории: короткая атака, отстают, если игрок ушёл
+   642→          AI.moveTowards(e, p.x, p.y, spdBase(e, night), dt);
+   643→          if (dP < 1.2 && e.atkCd <= 0) bite(e);
+   644→          e.state = 'attack';
+   645→          if (R.f() < dt * 0.04) AI.snd('growl', e.x, e.y, 0.45);
+   646→        } else {
+   647→          // «провожают» по дуге, не приближаясь
+   648→          var slot3 = orbitSlot(e, pack || { members: [e] }, p.x, p.y, 8, 6);
+   649→          AI.moveTowards(e, slot3.x, slot3.y, spdBase(e, night) * 0.8, dt);
+   650→          e.state = 'alert';
+   651→          if (R.f() < dt * 0.03) AI.snd('growl', e.x, e.y, 0.3);
+   652→        }
+   653→        AI.anim(e, dt, 6);
+   654→        return;
+   655→      }
+   656→    }
+   657→    // спокойный патруль своей территории
+   658→    var ter = pack ? pack.territory : { x: e.x, y: e.y, r: 12 };
+   659→    AI.wanderInArea(e, ter.x, ter.y, ter.r || TERRITORY_R, dt, spdBase(e, night) * 0.5);
+   660→    e.state = 'wander';
+   661→    AI.anim(e, dt, 5);
+   662→  }
+   663→
+   664→  // ================================================================ события
+   665→
+   666→  /** Убийство волка: паника стаи или месть. */
+   667→  function onEntKill(d) {
+   668→    if (!d || !d.ent || d.ent.kind !== 'wolf') return;
+   669→    var e = d.ent;
+   670→    var pack = e.pack;
+   671→    if (!pack) return;
+   672→    var i = pack.members.indexOf(e);
+   673→    if (i >= 0) pack.members.splice(i, 1);
+   674→    if (pack.alpha === e) {
+   675→      // вожак пал — стая в панике 30 секунд
+   676→      pack.panicT = 30;
+   677→      pack.panicPt = { x: (d.by && d.by.x) || e.x, y: (d.by && d.by.y) || e.y };
+   678→      pack.target = null;
+   679→      pack.mode = 'patrol';
+   680→      pack.aggroT = 0;
+   681→      for (var m = 0; m < pack.members.length; m++) {
+   682→        pack.members[m].panicTo = null;   // направление выберут в тике
+   683→      }
+   684→      AI.snd('howl', e.x, e.y, 0.9);   // скорбный вой над вожаком
+   685→    } else if (d.by && (d.by.kind === 'player' || d.by.id === 'player')) {
+   686→      // месть: стая помнит обидчика 45 секунд
+   687→      pack.aggroT = 45;
+   688→      pack.target = d.by;
+   689→    }
+   690→  }
+   691→
+   692→  /** Сущность убрали из мира (смерть/десериализация) — чистим состав. */
+   693→  function onEntRemove(d) {
+   694→    if (!d || !d.ent || d.ent.kind !== 'wolf') return;
+   695→    var e = d.ent;
+   696→    for (var i = packs.length - 1; i >= 0; i--) {
+   697→      var pack = packs[i];
+   698→      var j = pack.members.indexOf(e);
+   699→      if (j >= 0) {
+   700→        pack.members.splice(j, 1);
+   701→        if (pack.alpha === e && pack.members.length) pack.alpha = pack.members[0];
+   702→        if (!pack.members.length) packs.splice(i, 1);
+   703→      }
+   704→    }
+   705→  }
+   706→
+   707→  /** Ночь: стаи поднимаются с воем. */
+   708→  function onNightFall() {
+   709→    for (var i = 0; i < packs.length; i++) {
+   710→      packs[i].mode = 'hunt';
+   711→      packs[i].huntPt = pickOutskirts();
+   712→      packs[i].huntT = 0;
+   713→      packs[i].howlDelay = RUNTIME_RANGE(0.4, 6);   // эхо по лесу
+   714→    }
+   715→  }
+   716→
+   717→  /** Рассвет: охота сворачивается (кроме полярной ночи). */
+   718→  function onDayDawn() {
+   719→    if (AI.isPolarNight()) return;   // солнце не встанет — охота продолжается
+   720→    for (var i = 0; i < packs.length; i++) {
+   721→      packs[i].mode = 'patrol';
+   722→      packs[i].target = null;
+   723→    }
+   724→  }
+   725→
+   726→  // ================================================================ API модуля
+   727→
+   728→  WS.def('Wolf', {
+   729→    spawnAll: spawnAll,
+   730→    reset: function () {
+   731→      packs = [];
+   732→      packAcc = 0;
+   733→    },
+   734→    packs: function () { return packs; },
+   735→    count: function () {
+   736→      var n = 0;
+   737→      for (var i = 0; i < packs.length; i++) n += packs[i].members.length;
+   738→      return n;
+   739→    },
+   740→    /** Отладка/сюжет: заставить все стаи охотиться на игрока. */
+   741→    huntPlayer: function (sec) {
+   742→      for (var i = 0; i < packs.length; i++) {
+   743→        packs[i].aggroT = sec || 60;
+   744→        var p = AI.player();
+   745→        if (p) packs[i].target = p;
+   746→      }
+   747→    }
+   748→  });
+   749→
+   750→  // ================================================================ загрузка
+   751→
+   752→  WS.boot(function initWolfAI() {
+   753→    AI = WS.AI;   // алиас (модуль ai.js загружен раньше)
+   754→
+   755→    // спрайт: 4 стороны (dir&2), 2 кадра бега
+   756→    WS.Spr.def('wolf', { w: 48, h: 28, draw: wolfDraw });
+   757→
+   758→    // регистрация поведения волка в фреймворке
+   759→    AI.register('wolf', updateWolf);
+   760→
+   761→    // контролёр стаи — частота 2.5 Гц, отдельным тиком
+   762→    WS.tick(50, packTick, 'ai:wolf:packs');
+   763→
+   764→    // события
+   765→    WS.Ev.on('ent:kill', onEntKill);
+   766→    WS.Ev.on('ent:remove', onEntRemove);
+   767→    WS.Ev.on('night:fall', onNightFall);
+   768→    WS.Ev.on('day:dawn', onDayDawn);
+   769→  }, 'ai:wolf:init');
+   770→})();
+   771→

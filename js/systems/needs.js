@@ -698,10 +698,22 @@
   //  от переохлаждения (ставит WS.Temp), грипп осложняет простуду.
   // ====================================================================
 
-  /** Назначить болезнь (замена текущей, если тяжелее). */
+  /** Назначить болезнь (замена текущей, если тяжелее).
+   *  ЕДИНАЯ СТРУКТУРА с health.js: {id, t, fired, compT, tea} — раньше здесь
+   *  создавался усечённый {id, t}, тик здоровья падал на sk.fired[0] и
+   *  ВЫКИДЫВАЛСЯ из игры навсегда (диагноз: «tick health failed» раз за прогон).
+   *  Также идёт алиас id: needs «food_poisoning» ↔ health «food_poison». */
   function makeSick(id, tMin) {
     var p = P();
-    var def = SICK_DEF[id];
+    if (id === 'food_poisoning') id = 'food_poison';
+    var def = SICK_DEF[id] || SICK_DEF['food_poisoning'];
+    // есть канонический движок болезней — пусть ставит он (структура верная)
+    if (WS.Health && WS.Health.infectDisease) {
+      try {
+        var r = WS.Health.infectDisease(id);
+        if (r) return true;
+      } catch (e) { /* ниже — свой запасной путь */ }
+    }
     if (!p || !def) return false;
     var t = (tMin !== undefined) ? tMin : def.dur;
     // уже болен тем же — продлеваем
@@ -714,9 +726,9 @@
       var cur = SICK_DEF[p.sick.id];
       if (cur && def.hpH && (cur.hpH || 0) > (def.hpH || 0)) return false;
     }
-    p.sick = { id: id, t: t };
+    p.sick = { id: id, t: t, fired: {}, compT: 0, tea: false };
     toast('Вы заболеваете: ' + def.name, 'bad');
-    if (id === 'food_poisoning') {
+    if (id === 'food_poison') {
       toast('Похоже, еда была скверной...', 'warn');
     }
     try { WS.Ev.emit('player:sick', { id: id }); } catch (e) { /* пусто */ }

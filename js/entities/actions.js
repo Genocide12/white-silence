@@ -1159,11 +1159,14 @@
 
       var m = mouse();
 
-      // ЛКМ: удар/выстрел/кулаки
-      if (m.leftP) onPrimary(p);
+      // ЛКМ: удар/выстрел/кулака — ЕСЛИ клик не съеден быстрым действием
+      // world_ux.js (обыск/дверь/подбор по наведению)
+      if (m.leftP && !(WS.WorldUX && WS.WorldUX.consumedClick &&
+                       WS.WorldUX.consumedClick())) onPrimary(p);
 
-      // ПКМ или E: взаимодействие
-      if (m.rightP || WS.Input.hit('interact')) doInteract(p);
+      // E: взаимодействие (ПКМ теперь открывает меню всех действий —
+      // js/ui/world_ux.js)
+      if (WS.Input.hit('interact')) doInteract(p);
 
       // F: факел/фонарь
       if (WS.Input.hit('lightSrc')) toggleLight();

@@ -1,0 +1,1180 @@
+     1→/* ====================================================================
+     2→   panels.css — БЕЛОЕ БЕЗМОЛВИЕ (модуль D2): стили окон игрока —
+     3→   инвентарь, ремесло, контейнер, пауза; общие элементы (ячейки, чипы,
+     4→   полоски, подсказки). Палитра и базовые классы — css/base.css.
+     5→   ==================================================================== */
+     6→
+     7→/* --------------------------------------------------------------------
+     8→   1. ЭКРАНЫ И ПОДЛОЖКИ
+     9→   Каждый экран — .scr (полноэкранный flex-контейнер в #ui-root),
+    10→   внутри .scr-backdrop (затемнение, клик = закрыть) и .ws-panel (окно).
+    11→   -------------------------------------------------------------------- */
+    12→
+    13→.scr {
+    14→  position: fixed;
+    15→  left: 0; top: 0;
+    16→  width: 100%; height: 100%;
+    17→  display: flex;
+    18→  align-items: center;
+    19→  justify-content: center;
+    20→  z-index: 40;
+    21→  animation: scr-fade 0.14s ease-out;
+    22→}
+    23→
+    24→.scr-inventory,
+    25→.scr-craft { z-index: 50; }
+    26→.scr-pause { z-index: 60; }
+    27→
+    28→@keyframes scr-fade {
+    29→  from { opacity: 0; }
+    30→  to { opacity: 1; }
+    31→}
+    32→
+    33→@keyframes scr-pop {
+    34→  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+    35→  to { opacity: 1; transform: translateY(0) scale(1); }
+    36→}
+    37→
+    38→.scr-backdrop {
+    39→  position: absolute;
+    40→  left: 0; top: 0;
+    41→  width: 100%; height: 100%;
+    42→  background: rgba(4, 6, 10, 0.55);
+    43→}
+    44→
+    45→.scr-pause .pause-backdrop { background: rgba(3, 4, 8, 0.72); }
+    46→
+    47→.scr > .ws-panel {
+    48→  position: relative;
+    49→  z-index: 1;
+    50→  animation: scr-pop 0.16s ease-out;
+    51→}
+    52→
+    53→/* --------------------------------------------------------------------
+    54→   2. ШАПКА ОКНА (общая)
+    55→   -------------------------------------------------------------------- */
+    56→
+    57→.scr-head {
+    58→  display: flex;
+    59→  align-items: baseline;
+    60→  gap: 14px;
+    61→  padding: 12px 16px 10px;
+    62→  border-bottom: 1px solid var(--line);
+    63→  background: linear-gradient(180deg, rgba(216, 164, 92, 0.05), rgba(0, 0, 0, 0));
+    64→}
+    65→
+    66→.scr-head .ws-title { font-size: 15px; }
+    67→
+    68→.scr-sub {
+    69→  font-size: 12px;
+    70→  color: var(--ink-dim);
+    71→  letter-spacing: 0.02em;
+    72→  flex: 1;
+    73→  overflow: hidden;
+    74→  text-overflow: ellipsis;
+    75→  white-space: nowrap;
+    76→}
+    77→
+    78→.scr-close {
+    79→  width: 28px; height: 28px;
+    80→  line-height: 26px;
+    81→  text-align: center;
+    82→  background: transparent;
+    83→  border: 1px solid transparent;
+    84→  border-radius: 3px;
+    85→  color: var(--ink-dim);
+    86→  font-size: 18px;
+    87→  font-family: inherit;
+    88→  cursor: pointer;
+    89→  transition: color 0.12s, border-color 0.12s, background 0.12s;
+    90→  align-self: center;
+    91→}
+    92→
+    93→.scr-close:hover {
+    94→  color: var(--ink);
+    95→  border-color: var(--line);
+    96→  background: rgba(44, 58, 78, 0.35);
+    97→}
+    98→
+    99→/* заголовки колонок */
+   100→.pane-title {
+   101→  font-size: 11px;
+   102→  text-transform: uppercase;
+   103→  letter-spacing: 0.12em;
+   104→  color: var(--ink-dim);
+   105→  padding: 2px 2px 8px;
+   106→  border-bottom: 1px solid rgba(44, 58, 78, 0.6);
+   107→  margin-bottom: 8px;
+   108→  display: flex;
+   109→  align-items: baseline;
+   110→  justify-content: space-between;
+   111→  gap: 8px;
+   112→}
+   113→
+   114→/* --------------------------------------------------------------------
+   115→   3. ИНВЕНТАРЬ
+   116→   -------------------------------------------------------------------- */
+   117→
+   118→.inv-box {
+   119→  width: min(1020px, 96vw);
+   120→  max-height: 92vh;
+   121→  display: flex;
+   122→  flex-direction: column;
+   123→}
+   124→
+   125→.inv-layout {
+   126→  display: grid;
+   127→  grid-template-columns: 196px minmax(0, 1fr) 296px;
+   128→  gap: 14px;
+   129→  padding: 12px 16px;
+   130→  min-height: 380px;
+   131→  max-height: calc(92vh - 132px);
+   132→}
+   133→
+   134→/* --- левая колонка: экипировка --- */
+   135→
+   136→.inv-left {
+   137→  display: flex;
+   138→  flex-direction: column;
+   139→  min-width: 0;
+   140→}
+   141→
+   142→.eq-list {
+   143→  display: flex;
+   144→  flex-direction: column;
+   145→  gap: 6px;
+   146→}
+   147→
+   148→.eq-slot {
+   149→  border: 1px solid var(--line);
+   150→  border-radius: 3px;
+   151→  background: linear-gradient(180deg, rgba(22, 30, 43, 0.6), rgba(14, 19, 28, 0.6));
+   152→  padding: 6px 8px;
+   153→  min-height: 44px;
+   154→  cursor: pointer;
+   155→  transition: border-color 0.12s, background 0.12s;
+   156→}
+   157→
+   158→.eq-slot:hover { border-color: #3d5068; }
+   159→
+   160→.eq-slot.sel {
+   161→  border-color: var(--accent);
+   162→  background: rgba(216, 164, 92, 0.08);
+   163→  box-shadow: inset 0 0 0 1px rgba(216, 164, 92, 0.35);
+   164→}
+   165→
+   166→.eq-slot.empty { opacity: 0.75; }
+   167→
+   168→.eq-label {
+   169→  display: block;
+   170→  font-size: 10px;
+   171→  text-transform: uppercase;
+   172→  letter-spacing: 0.1em;
+   173→  color: var(--ink-dim);
+   174→  margin-bottom: 3px;
+   175→}
+   176→
+   177→.eq-body {
+   178→  display: flex;
+   179→  align-items: center;
+   180→  gap: 8px;
+   181→  min-height: 26px;
+   182→}
+   183→
+   184→.eq-body .eq-ico {
+   185→  width: 24px; height: 24px;
+   186→  flex: 0 0 auto;
+   187→  image-rendering: pixelated;
+   188→}
+   189→
+   190→.eq-name {
+   191→  font-size: 13px;
+   192→  color: var(--ink);
+   193→  overflow: hidden;
+   194→  text-overflow: ellipsis;
+   195→  white-space: nowrap;
+   196→}
+   197→
+   198→.eq-hint {
+   199→  font-size: 11px;
+   200→  color: #5d6a7d;
+   201→  font-style: italic;
+   202→}
+   203→
+   204→.eq-cond {
+   205→  display: block;
+   206→  width: 40px;
+   207→  height: 4px;
+   208→  margin-left: auto;
+   209→  background: #0d1219;
+   210→  border-radius: 2px;
+   211→  overflow: hidden;
+   212→  flex: 0 0 auto;
+   213→}
+   214→
+   215→.eq-cond i {
+   216→  display: block;
+   217→  height: 100%;
+   218→  background: linear-gradient(90deg, var(--warn), var(--ok));
+   219→  border-radius: 2px;
+   220→}
+   221→
+   222→.eq-sum {
+   223→  margin-top: 10px;
+   224→  padding-top: 8px;
+   225→  border-top: 1px dashed rgba(44, 58, 78, 0.7);
+   226→  font-size: 11px;
+   227→  color: var(--ink-dim);
+   228→  letter-spacing: 0.03em;
+   229→}
+   230→
+   231→/* --- центральная колонка: сетка предметов --- */
+   232→
+   233→.inv-mid {
+   234→  display: flex;
+   235→  flex-direction: column;
+   236→  min-width: 0;
+   237→}
+   238→
+   239→.inv-toolbar {
+   240→  display: flex;
+   241→  flex-wrap: wrap;
+   242→  gap: 6px;
+   243→  margin-bottom: 8px;
+   244→}
+   245→
+   246→.chip {
+   247→  display: inline-block;
+   248→  background: linear-gradient(180deg, #1c2635, #141b27);
+   249→  border: 1px solid #2c3a4e;
+   250→  color: var(--ink-dim);
+   251→  font-family: inherit;
+   252→  font-size: 12px;
+   253→  padding: 4px 10px;
+   254→  border-radius: 3px;
+   255→  cursor: pointer;
+   256→  letter-spacing: 0.02em;
+   257→  transition: color 0.12s, border-color 0.12s, background 0.12s;
+   258→}
+   259→
+   260→.chip:hover { color: var(--ink); border-color: #3d5068; }
+   261→
+   262→.chip.on {
+   263→  color: #f4e6c8;
+   264→  border-color: var(--accent2);
+   265→  background: linear-gradient(180deg, #6e561e, #4e3a12);
+   266→}
+   267→
+   268→/* сетка ячеек (инвентарь, контейнер) */
+   269→.items-grid {
+   270→  display: grid;
+   271→  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+   272→  grid-auto-rows: 58px;
+   273→  gap: 6px;
+   274→  align-content: start;
+   275→  padding: 2px;
+   276→  overflow-y: auto;
+   277→  flex: 1;
+   278→  min-height: 120px;
+   279→}
+   280→
+   281→.cont-grid { grid-auto-rows: 56px; }
+   282→
+   283→/* ячейка предмета */
+   284→.inv-slot {
+   285→  position: relative;
+   286→  border: 1px solid var(--line);
+   287→  border-radius: 3px;
+   288→  background: linear-gradient(180deg, rgba(30, 40, 54, 0.7), rgba(16, 22, 32, 0.7));
+   289→  display: flex;
+   290→  align-items: center;
+   291→  justify-content: center;
+   292→  cursor: pointer;
+   293→  transition: border-color 0.1s, transform 0.06s, background 0.1s;
+   294→}
+   295→
+   296→.inv-slot:hover {
+   297→  border-color: #4a6285;
+   298→  background: rgba(38, 52, 72, 0.8);
+   299→}
+   300→
+   301→.inv-slot:active { transform: translateY(1px); }
+   302→
+   303→.inv-slot.sel {
+   304→  border-color: var(--accent);
+   305→  box-shadow: inset 0 0 0 1px rgba(216, 164, 92, 0.4);
+   306→  background: rgba(216, 164, 92, 0.1);
+   307→}
+   308→
+   309→/* иконка категории внутри ячейки */
+   310→.inv-slot .slot-ico {
+   311→  width: 36px; height: 36px;
+   312→  image-rendering: pixelated;
+   313→  opacity: 0.95;
+   314→}
+   315→
+   316→/* свежесть еды: цветная рамка зелёная -> жёлтая -> красная */
+   317→.inv-slot.fresh-ok { border-color: rgba(126, 163, 106, 0.55); }
+   318→.inv-slot.fresh-mid { border-color: rgba(196, 147, 63, 0.75); }
+   319→.inv-slot.fresh-bad { border-color: rgba(176, 72, 63, 0.85); }
+   320→
+   321→.inv-slot.fresh-ok:hover { border-color: var(--ok); }
+   322→.inv-slot.fresh-mid:hover { border-color: var(--warn); }
+   323→.inv-slot.fresh-bad:hover { border-color: var(--bad); }
+   324→
+   325→.inv-slot.spoiled .slot-ico { opacity: 0.55; }
+   326→
+   327→/* количество в стопке */
+   328→.slot-count {
+   329→  position: absolute;
+   330→  right: 3px; bottom: 2px;
+   331→  font-size: 11px;
+   332→  color: #d8dee9;
+   333→  text-shadow: 0 1px 2px #000, 0 0 3px #000;
+   334→  font-weight: bold;
+   335→}
+   336→
+   337→/* мини-полоска износа */
+   338→.slot-cond {
+   339→  position: absolute;
+   340→  left: 4px; right: 4px; bottom: 3px;
+   341→  height: 3px;
+   342→  background: rgba(8, 12, 18, 0.85);
+   343→  border-radius: 2px;
+   344→  overflow: hidden;
+   345→}
+   346→
+   347→.slot-cond i {
+   348→  display: block;
+   349→  height: 100%;
+   350→  background: linear-gradient(90deg, var(--bad), var(--warn), var(--ok));
+   351→  border-radius: 2px;
+   352→}
+   353→
+   354→.inv-slot.spoiled .slot-count { bottom: 7px; }
+   355→
+   356→/* метка гнили (правый верхний угол) */
+   357→.slot-rot {
+   358→  position: absolute;
+   359→  right: 1px; top: 1px;
+   360→  width: 16px; height: 16px;
+   361→  image-rendering: pixelated;
+   362→  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+   363→}
+   364→
+   365→.grid-empty {
+   366→  grid-column: 1 / -1;
+   367→  text-align: center;
+   368→  color: #5d6a7d;
+   369→  font-style: italic;
+   370→  font-size: 13px;
+   371→  padding: 26px 8px;
+   372→  user-select: none;
+   373→}
+   374→
+   375→/* --- правая колонка: деталь предмета --- */
+   376→
+   377→.inv-right {
+   378→  display: flex;
+   379→  flex-direction: column;
+   380→  min-width: 0;
+   381→  border-left: 1px solid rgba(44, 58, 78, 0.55);
+   382→  padding-left: 14px;
+   383→}
+   384→
+   385→.detail-body {
+   386→  flex: 1;
+   387→  overflow-y: auto;
+   388→  min-height: 0;
+   389→  padding-right: 4px;
+   390→}
+   391→
+   392→.d-empty {
+   393→  color: #5d6a7d;
+   394→  font-style: italic;
+   395→  font-size: 12px;
+   396→  text-align: center;
+   397→  padding: 22px 6px;
+   398→}
+   399→
+   400→.d-main {
+   401→  display: flex;
+   402→  flex-direction: column;
+   403→  gap: 8px;
+   404→}
+   405→
+   406→.d-ico {
+   407→  position: relative;
+   408→  width: 64px; height: 64px;
+   409→  border: 2px solid var(--line);
+   410→  border-radius: 4px;
+   411→  background: rgba(10, 14, 21, 0.6);
+   412→  display: flex;
+   413→  align-items: center;
+   414→  justify-content: center;
+   415→  align-self: center;
+   416→}
+   417→
+   418→.d-ico .slot-ico {
+   419→  width: 48px; height: 48px;
+   420→  image-rendering: pixelated;
+   421→}
+   422→
+   423→.d-ico.fresh-ok { border-color: var(--ok); }
+   424→.d-ico.fresh-mid { border-color: var(--warn); }
+   425→.d-ico.fresh-bad { border-color: var(--bad); }
+   426→
+   427→.d-ico .slot-rot {
+   428→  width: 22px; height: 22px;
+   429→}
+   430→
+   431→.d-name {
+   432→  font-size: 16px;
+   433→  color: var(--ink);
+   434→  text-align: center;
+   435→  line-height: 1.25;
+   436→}
+   437→
+   438→.d-cat {
+   439→  font-size: 11px;
+   440→  text-transform: uppercase;
+   441→  letter-spacing: 0.12em;
+   442→  color: var(--accent);
+   443→  text-align: center;
+   444→}
+   445→
+   446→.d-desc {
+   447→  font-size: 12px;
+   448→  font-style: italic;
+   449→  color: var(--ink-dim);
+   450→  line-height: 1.4;
+   451→}
+   452→
+   453→.d-stats {
+   454→  border-top: 1px solid rgba(44, 58, 78, 0.55);
+   455→  padding-top: 6px;
+   456→}
+   457→
+   458→.d-row {
+   459→  font-size: 12px;
+   460→  color: #9db0c8;
+   461→  padding: 2px 0;
+   462→  line-height: 1.35;
+   463→}
+   464→
+   465→.d-row.dim { color: #6a7688; font-style: italic; }
+   466→
+   467→/* полоски свежести и износа */
+   468→.d-bar {
+   469→  position: relative;
+   470→  height: 14px;
+   471→  background: #0d1219;
+   472→  border: 1px solid rgba(44, 58, 78, 0.7);
+   473→  border-radius: 3px;
+   474→  overflow: hidden;
+   475→}
+   476→
+   477→.d-bar-fill {
+   478→  position: absolute;
+   479→  left: 0; top: 0; bottom: 0;
+   480→  background: var(--ok);
+   481→  transition: width 0.25s ease-out;
+   482→}
+   483→
+   484→.d-bar.fresh-ok .d-bar-fill { background: var(--ok); }
+   485→.d-bar.fresh-mid .d-bar-fill { background: var(--warn); }
+   486→.d-bar.fresh-bad .d-bar-fill { background: var(--bad); }
+   487→.d-bar.cond-bar .d-bar-fill { background: linear-gradient(90deg, var(--bad), var(--warn), var(--ok)); }
+   488→
+   489→.d-bar-label {
+   490→  position: relative;
+   491→  display: block;
+   492→  font-size: 10px;
+   493→  line-height: 12px;
+   494→  text-align: center;
+   495→  color: #e2e8f0;
+   496→  text-shadow: 0 1px 2px #000;
+   497→  letter-spacing: 0.03em;
+   498→}
+   499→
+   500→/* кнопки действий */
+   501→.d-actions {
+   502→  display: flex;
+   503→  flex-wrap: wrap;
+   504→  gap: 6px;
+   505→  border-top: 1px solid rgba(44, 58, 78, 0.55);
+   506→  padding-top: 10px;
+   507→}
+   508→
+   509→.d-btn {
+   510→  font-size: 13px;
+   511→  padding: 6px 12px;
+   512→}
+   513→
+   514→.d-hint {
+   515→  font-size: 10px;
+   516→  color: #5d6a7d;
+   517→  text-align: center;
+   518→  line-height: 1.5;
+   519→}
+   520→
+   521→/* --- подвал: вес --- */
+   522→
+   523→.inv-foot {
+   524→  display: flex;
+   525→  align-items: center;
+   526→  gap: 14px;
+   527→  padding: 10px 16px;
+   528→  border-top: 1px solid var(--line);
+   529→  background: rgba(10, 14, 21, 0.5);
+   530→}
+   531→
+   532→.weight-bar {
+   533→  position: relative;
+   534→  flex: 1;
+   535→  height: 16px;
+   536→  background: #0d1219;
+   537→  border: 1px solid rgba(44, 58, 78, 0.7);
+   538→  border-radius: 3px;
+   539→  overflow: hidden;
+   540→}
+   541→
+   542→.wb-fill {
+   543→  height: 100%;
+   544→  background: var(--ok);
+   545→  transition: width 0.3s ease-out;
+   546→}
+   547→
+   548→.wb-fill.wb-ok { background: linear-gradient(90deg, #5c7f4c, var(--ok)); }
+   549→.wb-fill.wb-over { background: linear-gradient(90deg, #96702e, var(--warn)); }
+   550→.wb-fill.wb-crit { background: linear-gradient(90deg, #7c322b, var(--bad)); }
+   551→
+   552→.wb-text {
+   553→  position: absolute;
+   554→  inset: 0;
+   555→  text-align: center;
+   556→  font-size: 11px;
+   557→  line-height: 15px;
+   558→  color: #e2e8f0;
+   559→  text-shadow: 0 1px 2px #000;
+   560→  letter-spacing: 0.03em;
+   561→}
+   562→
+   563→.inv-count {
+   564→  font-size: 11px;
+   565→  color: var(--ink-dim);
+   566→  white-space: nowrap;
+   567→}
+   568→
+   569→/* --------------------------------------------------------------------
+   570→   4. РЕМЕСЛО
+   571→   -------------------------------------------------------------------- */
+   572→
+   573→.craft-box {
+   574→  width: min(1060px, 96vw);
+   575→  max-height: 92vh;
+   576→  display: flex;
+   577→  flex-direction: column;
+   578→}
+   579→
+   580→.craft-layout {
+   581→  display: grid;
+   582→  grid-template-columns: 168px minmax(0, 1fr) 316px;
+   583→  gap: 14px;
+   584→  padding: 12px 16px;
+   585→  min-height: 400px;
+   586→  max-height: calc(92vh - 132px);
+   587→}
+   588→
+   589→/* --- категории --- */
+   590→
+   591→.craft-cats {
+   592→  display: flex;
+   593→  flex-direction: column;
+   594→  min-width: 0;
+   595→}
+   596→
+   597→.cat-list {
+   598→  display: flex;
+   599→  flex-direction: column;
+   600→  gap: 4px;
+   601→}
+   602→
+   603→.cat-btn {
+   604→  display: flex;
+   605→  align-items: center;
+   606→  justify-content: space-between;
+   607→  gap: 8px;
+   608→  width: 100%;
+   609→  background: transparent;
+   610→  border: 1px solid transparent;
+   611→  border-radius: 3px;
+   612→  color: var(--ink-dim);
+   613→  font-family: inherit;
+   614→  font-size: 13px;
+   615→  padding: 8px 10px;
+   616→  cursor: pointer;
+   617→  text-align: left;
+   618→  transition: color 0.12s, border-color 0.12s, background 0.12s;
+   619→}
+   620→
+   621→.cat-btn:hover { color: var(--ink); background: rgba(44, 58, 78, 0.25); }
+   622→
+   623→.cat-btn.on {
+   624→  color: #f4e6c8;
+   625→  border-color: var(--accent2);
+   626→  background: linear-gradient(180deg, rgba(110, 86, 30, 0.35), rgba(78, 58, 18, 0.35));
+   627→}
+   628→
+   629→.cat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+   630→
+   631→.cat-cnt {
+   632→  font-size: 11px;
+   633→  color: #5d6a7d;
+   634→  flex: 0 0 auto;
+   635→}
+   636→
+   637→.cat-cnt.has { color: var(--ok); }
+   638→
+   639→/* --- центр: поиск + список --- */
+   640→
+   641→.craft-mid {
+   642→  display: flex;
+   643→  flex-direction: column;
+   644→  min-width: 0;
+   645→}
+   646→
+   647→.craft-toolbar {
+   648→  display: flex;
+   649→  align-items: center;
+   650→  gap: 12px;
+   651→  margin-bottom: 8px;
+   652→  flex-wrap: wrap;
+   653→}
+   654→
+   655→.craft-search { flex: 1; min-width: 140px; }
+   656→
+   657→.craft-search-input {
+   658→  width: 100%;
+   659→  background: #0d1219;
+   660→  border: 1px solid var(--line);
+   661→  border-radius: 3px;
+   662→  color: var(--ink);
+   663→  font-family: inherit;
+   664→  font-size: 13px;
+   665→  padding: 6px 10px;
+   666→  outline: none;
+   667→  transition: border-color 0.12s;
+   668→}
+   669→
+   670→.craft-search-input:focus { border-color: var(--accent2); }
+   671→
+   672→.craft-chk {
+   673→  display: flex;
+   674→  align-items: center;
+   675→  gap: 6px;
+   676→  font-size: 12px;
+   677→  color: var(--ink-dim);
+   678→  cursor: pointer;
+   679→  user-select: none;
+   680→  white-space: nowrap;
+   681→}
+   682→
+   683→.craft-chk input { accent-color: var(--accent2); cursor: pointer; }
+   684→
+   685→.craft-chk:hover span { color: var(--ink); }
+   686→
+   687→.craft-list {
+   688→  flex: 1;
+   689→  overflow-y: auto;
+   690→  min-height: 0;
+   691→  display: flex;
+   692→  flex-direction: column;
+   693→  gap: 4px;
+   694→  padding-right: 4px;
+   695→}
+   696→
+   697→.recipe-row {
+   698→  display: flex;
+   699→  align-items: center;
+   700→  gap: 10px;
+   701→  border: 1px solid var(--line);
+   702→  border-radius: 3px;
+   703→  background: linear-gradient(180deg, rgba(30, 40, 54, 0.55), rgba(16, 22, 32, 0.55));
+   704→  padding: 6px 10px;
+   705→  cursor: pointer;
+   706→  transition: border-color 0.1s, background 0.1s;
+   707→}
+   708→
+   709→.recipe-row:hover { border-color: #4a6285; background: rgba(38, 52, 72, 0.7); }
+   710→
+   711→.recipe-row.sel {
+   712→  border-color: var(--accent);
+   713→  background: rgba(216, 164, 92, 0.1);
+   714→  box-shadow: inset 0 0 0 1px rgba(216, 164, 92, 0.3);
+   715→}
+   716→
+   717→.recipe-row.unavail { opacity: 0.5; }
+   718→.recipe-row.unavail:hover { opacity: 0.75; }
+   719→
+   720→.r-ico {
+   721→  width: 28px; height: 28px;
+   722→  flex: 0 0 auto;
+   723→  image-rendering: pixelated;
+   724→}
+   725→
+   726→.recipe-row.unavail .r-ico { filter: grayscale(0.8); }
+   727→
+   728→.r-body { flex: 1; min-width: 0; }
+   729→
+   730→.r-name {
+   731→  font-size: 13px;
+   732→  color: var(--ink);
+   733→  display: flex;
+   734→  align-items: baseline;
+   735→  gap: 8px;
+   736→  overflow: hidden;
+   737→  white-space: nowrap;
+   738→  text-overflow: ellipsis;
+   739→}
+   740→
+   741→.r-name > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+   742→
+   743→.r-new {
+   744→  font-size: 9px;
+   745→  text-transform: uppercase;
+   746→  letter-spacing: 0.08em;
+   747→  color: var(--cold);
+   748→  border: 1px solid rgba(126, 163, 196, 0.5);
+   749→  border-radius: 2px;
+   750→  padding: 0 4px;
+   751→  flex: 0 0 auto;
+   752→}
+   753→
+   754→.r-times {
+   755→  font-size: 10px;
+   756→  color: #5d6a7d;
+   757→  flex: 0 0 auto;
+   758→}
+   759→
+   760→.r-meta {
+   761→  font-size: 11px;
+   762→  color: var(--ink-dim);
+   763→  margin-top: 1px;
+   764→  overflow: hidden;
+   765→  white-space: nowrap;
+   766→  text-overflow: ellipsis;
+   767→}
+   768→
+   769→.recipe-row.unavail .r-meta::after { content: ''; }
+   770→
+   771→/* --- правая колонка: рецепт --- */
+   772→
+   773→.craft-right {
+   774→  display: flex;
+   775→  flex-direction: column;
+   776→  min-width: 0;
+   777→  border-left: 1px solid rgba(44, 58, 78, 0.55);
+   778→  padding-left: 14px;
+   779→}
+   780→
+   781→.recipe-detail {
+   782→  flex: 1;
+   783→  overflow-y: auto;
+   784→  min-height: 0;
+   785→  padding-right: 4px;
+   786→}
+   787→
+   788→.d-section { margin-bottom: 4px; }
+   789→
+   790→.d-sec-title {
+   791→  font-size: 10px;
+   792→  text-transform: uppercase;
+   793→  letter-spacing: 0.12em;
+   794→  color: var(--ink-dim);
+   795→  border-bottom: 1px dashed rgba(44, 58, 78, 0.6);
+   796→  padding-bottom: 3px;
+   797→  margin: 8px 0 5px;
+   798→}
+   799→
+   800→.ing-row {
+   801→  display: flex;
+   802→  align-items: center;
+   803→  gap: 8px;
+   804→  padding: 2px 0;
+   805→  font-size: 12px;
+   806→}
+   807→
+   808→.ing-ico {
+   809→  width: 20px; height: 20px;
+   810→  flex: 0 0 auto;
+   811→  image-rendering: pixelated;
+   812→}
+   813→
+   814→.ing-name {
+   815→  color: #9db0c8;
+   816→  flex: 1;
+   817→  min-width: 0;
+   818→  overflow: hidden;
+   819→  text-overflow: ellipsis;
+   820→  white-space: nowrap;
+   821→  line-height: 1.3;
+   822→}
+   823→
+   824→.ing-have {
+   825→  font-size: 11px;
+   826→  color: var(--ink-dim);
+   827→  flex: 0 0 auto;
+   828→}
+   829→
+   830→.ing-have.miss { color: var(--bad); font-weight: bold; }
+   831→
+   832→.ing-row.miss .ing-name { color: #c08a82; }
+   833→.ing-row.miss .ing-ico { filter: grayscale(0.5); opacity: 0.8; }
+   834→
+   835→.ing-row.risk .ing-name { color: var(--warn); }
+   836→
+   837→.craft-go { width: 100%; margin-top: 8px; font-size: 15px; }
+   838→
+   839→/* --- подвал: прогресс работы --- */
+   840→
+   841→.craft-foot {
+   842→  display: flex;
+   843→  align-items: center;
+   844→  gap: 12px;
+   845→  padding: 10px 16px;
+   846→  border-top: 1px solid var(--line);
+   847→  background: rgba(10, 14, 21, 0.5);
+   848→}
+   849→
+   850→.progress {
+   851→  position: relative;
+   852→  flex: 1;
+   853→  height: 18px;
+   854→  background: #0d1219;
+   855→  border: 1px solid rgba(44, 58, 78, 0.7);
+   856→  border-radius: 3px;
+   857→  overflow: hidden;
+   858→}
+   859→
+   860→.progress-fill {
+   861→  height: 100%;
+   862→  width: 0;
+   863→  background: linear-gradient(90deg, #8a6224, var(--accent));
+   864→  box-shadow: 0 0 8px rgba(216, 164, 92, 0.4);
+   865→  transition: width 0.22s linear;
+   866→}
+   867→
+   868→.progress-label {
+   869→  position: absolute;
+   870→  inset: 0;
+   871→  text-align: center;
+   872→  font-size: 11px;
+   873→  line-height: 17px;
+   874→  color: #f4e6c8;
+   875→  text-shadow: 0 1px 2px #000;
+   876→  white-space: nowrap;
+   877→  overflow: hidden;
+   878→  text-overflow: ellipsis;
+   879→}
+   880→
+   881→.progress-cancel { flex: 0 0 auto; font-size: 12px; padding: 5px 12px; }
+   882→
+   883→/* --------------------------------------------------------------------
+   884→   5. КОНТЕЙНЕР
+   885→   -------------------------------------------------------------------- */
+   886→
+   887→.cont-box {
+   888→  width: min(920px, 96vw);
+   889→  max-height: 90vh;
+   890→  display: flex;
+   891→  flex-direction: column;
+   892→}
+   893→
+   894→.cont-layout {
+   895→  display: grid;
+   896→  grid-template-columns: 1fr 1fr;
+   897→  gap: 16px;
+   898→  padding: 12px 16px;
+   899→  min-height: 340px;
+   900→  max-height: calc(90vh - 120px);
+   901→}
+   902→
+   903→.cont-side {
+   904→  display: flex;
+   905→  flex-direction: column;
+   906→  min-width: 0;
+   907→}
+   908→
+   909→.cont-left { border-right: 1px solid rgba(44, 58, 78, 0.55); padding-right: 16px; }
+   910→.cont-right { padding-left: 2px; }
+   911→
+   912→.cont-w {
+   913→  font-size: 11px;
+   914→  color: var(--ink-dim);
+   915→  letter-spacing: 0.02em;
+   916→  white-space: nowrap;
+   917→}
+   918→
+   919→.cont-w.over { color: var(--warn); }
+   920→.cont-w.crit { color: var(--bad); }
+   921→
+   922→.cont-btns {
+   923→  display: flex;
+   924→  gap: 8px;
+   925→  padding-top: 10px;
+   926→  margin-top: 8px;
+   927→  border-top: 1px dashed rgba(44, 58, 78, 0.6);
+   928→  flex-wrap: wrap;
+   929→}
+   930→
+   931→.cont-btns .d-btn { flex: 1; font-size: 12px; padding: 6px 8px; min-width: 90px; }
+   932→
+   933→/* --------------------------------------------------------------------
+   934→   6. ПАУЗА
+   935→   -------------------------------------------------------------------- */
+   936→
+   937→.pause-box {
+   938→  width: min(400px, 92vw);
+   939→  padding: 22px 26px 20px;
+   940→  display: flex;
+   941→  flex-direction: column;
+   942→  gap: 10px;
+   943→}
+   944→
+   945→.pause-title {
+   946→  font-family: 'PT Serif', Georgia, serif;
+   947→  font-size: 24px;
+   948→  letter-spacing: 0.18em;
+   949→  text-transform: uppercase;
+   950→  text-align: center;
+   951→  color: var(--accent);
+   952→  text-shadow: 0 2px 12px rgba(216, 164, 92, 0.25);
+   953→  padding-bottom: 2px;
+   954→}
+   955→
+   956→.pause-info {
+   957→  text-align: center;
+   958→  font-size: 12px;
+   959→  color: var(--ink-dim);
+   960→  letter-spacing: 0.04em;
+   961→  padding-bottom: 8px;
+   962→  border-bottom: 1px solid rgba(44, 58, 78, 0.6);
+   963→}
+   964→
+   965→.pause-btns {
+   966→  display: flex;
+   967→  flex-direction: column;
+   968→  gap: 8px;
+   969→}
+   970→
+   971→.pause-btn {
+   972→  width: 100%;
+   973→  font-size: 16px;
+   974→  letter-spacing: 0.06em;
+   975→}
+   976→
+   977→.pause-settings {
+   978→  border-top: 1px dashed rgba(44, 58, 78, 0.7);
+   979→  padding-top: 10px;
+   980→  display: flex;
+   981→  flex-direction: column;
+   982→  gap: 12px;
+   983→}
+   984→
+   985→.set-row {
+   986→  display: flex;
+   987→  align-items: center;
+   988→  gap: 10px;
+   989→}
+   990→
+   991→.set-label {
+   992→  font-size: 12px;
+   993→  color: var(--ink-dim);
+   994→  flex: 0 0 108px;
+   995→  letter-spacing: 0.03em;
+   996→}
+   997→
+   998→.set-value {
+   999→  font-size: 12px;
+  1000→  color: var(--ink);
+  1001→  flex: 0 0 44px;
+  1002→  text-align: right;
+  1003→}
+  1004→
+  1005→.set-volume {
+  1006→  flex: 1;
+  1007→  accent-color: var(--accent2);
+  1008→  cursor: pointer;
+  1009→}
+  1010→
+  1011→.speed-btns {
+  1012→  display: flex;
+  1013→  gap: 6px;
+  1014→  flex: 1;
+  1015→}
+  1016→
+  1017→.chip-speed { flex: 1; text-align: center; padding: 5px 6px; }
+  1018→
+  1019→/* --------------------------------------------------------------------
+  1020→   7. ТУЛТИПЫ (расширение .ws-tooltip из base.css)
+  1021→   -------------------------------------------------------------------- */
+  1022→
+  1023→.ws-tooltip {
+  1024→  border-radius: 3px;
+  1025→  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  1026→  line-height: 1.35;
+  1027→}
+  1028→
+  1029→.ws-tooltip .tt-count {
+  1030→  color: var(--ink-dim);
+  1031→  font-weight: normal;
+  1032→  font-size: 12px;
+  1033→}
+  1034→
+  1035→.ws-tooltip .tt-cat {
+  1036→  display: flex;
+  1037→  align-items: center;
+  1038→  gap: 6px;
+  1039→  font-size: 11px;
+  1040→  text-transform: uppercase;
+  1041→  letter-spacing: 0.1em;
+  1042→  color: var(--accent);
+  1043→  margin-top: 5px;
+  1044→  padding-top: 5px;
+  1045→  border-top: 1px solid rgba(44, 58, 78, 0.5);
+  1046→}
+  1047→
+  1048→.ws-tooltip .tt-cat img {
+  1049→  width: 16px; height: 16px;
+  1050→  image-rendering: pixelated;
+  1051→}
+  1052→
+  1053→.ws-tooltip .tt-stats {
+  1054→  margin-top: 4px;
+  1055→  display: flex;
+  1056→  flex-direction: column;
+  1057→  gap: 1px;
+  1058→}
+  1059→
+  1060→.ws-tooltip .tt-fresh { margin-top: 5px; font-size: 12px; font-weight: bold; }
+  1061→.ws-tooltip .tt-fresh-ok { color: var(--ok); }
+  1062→.ws-tooltip .tt-fresh-mid { color: var(--warn); }
+  1063→.ws-tooltip .tt-fresh-bad { color: var(--bad); }
+  1064→
+  1065→.ws-tooltip .tt-cond {
+  1066→  margin-top: 4px;
+  1067→  font-size: 12px;
+  1068→  color: #9db0c8;
+  1069→}
+  1070→
+  1071→.ws-tooltip .tt-w {
+  1072→  margin-top: 4px;
+  1073→  font-size: 11px;
+  1074→  color: var(--ink-dim);
+  1075→  font-style: italic;
+  1076→}
+  1077→
+  1078→.no-ico {
+  1079→  display: inline-block;
+  1080→  width: 24px; height: 24px;
+  1081→  border: 1px dashed rgba(139, 149, 165, 0.4);
+  1082→  border-radius: 3px;
+  1083→}
+  1084→
+  1085→/* --------------------------------------------------------------------
+  1086→   8. ПРОКРУТКА ВНУТРИ ОКОН
+  1087→   -------------------------------------------------------------------- */
+  1088→
+  1089→.scroll-y { overflow-y: auto; }
+  1090→
+  1091→.scroll-y::-webkit-scrollbar { width: 8px; }
+  1092→.scroll-y::-webkit-scrollbar-track { background: rgba(13, 18, 25, 0.6); border-radius: 4px; }
+  1093→.scroll-y::-webkit-scrollbar-thumb {
+  1094→  background: rgba(44, 58, 78, 0.9);
+  1095→  border-radius: 4px;
+  1096→}
+  1097→.scroll-y::-webkit-scrollbar-thumb:hover { background: #3d5068; }
+  1098→
+  1099→/* --------------------------------------------------------------------
+  1100→   9. АДАПТИВ (узкие окна)
+  1101→   -------------------------------------------------------------------- */
+  1102→
+  1103→@media (max-width: 960px) {
+  1104→  .inv-layout {
+  1105→    grid-template-columns: 168px minmax(0, 1fr);
+  1106→    grid-template-rows: minmax(0, 1fr) auto;
+  1107→  }
+  1108→
+  1109→  .inv-right {
+  1110→    grid-column: 1 / -1;
+  1111→    grid-row: 2;
+  1112→    border-left: none;
+  1113→    border-top: 1px solid rgba(44, 58, 78, 0.55);
+  1114→    padding-left: 0;
+  1115→    padding-top: 10px;
+  1116→  }
+  1117→
+  1118→  .detail-body { max-height: 200px; }
+  1119→
+  1120→  .craft-layout {
+  1121→    grid-template-columns: 140px minmax(0, 1fr);
+  1122→  }
+  1123→
+  1124→  .craft-right {
+  1125→    grid-column: 1 / -1;
+  1126→    border-left: none;
+  1127→    border-top: 1px solid rgba(44, 58, 78, 0.55);
+  1128→    padding-left: 0;
+  1129→    padding-top: 10px;
+  1130→  }
+  1131→
+  1132→  .recipe-detail { max-height: 240px; }
+  1133→}
+  1134→
+  1135→@media (max-width: 700px) {
+  1136→  .inv-layout {
+  1137→    grid-template-columns: minmax(0, 1fr);
+  1138→  }
+  1139→
+  1140→  .inv-left { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  1141→  .eq-list { flex-direction: row; flex-wrap: wrap; }
+  1142→  .eq-slot { min-width: 130px; }
+  1143→  .eq-sum { display: none; }
+  1144→
+  1145→  .craft-layout {
+  1146→    grid-template-columns: minmax(0, 1fr);
+  1147→  }
+  1148→
+  1149→  .cat-list { flex-direction: row; flex-wrap: wrap; }
+  1150→  .cat-btn { width: auto; }
+  1151→
+  1152→  .cont-layout { grid-template-columns: minmax(0, 1fr); }
+  1153→  .cont-left { border-right: none; padding-right: 0; }
+  1154→  .cont-left .cont-grid { max-height: 180px; }
+  1155→}
+  1156→
+  1157→/* --------------------------------------------------------------------
+  1158→   10. МЕЛКИЕ ПРАВКИ ЧИТАЕМОСТИ
+  1159→   -------------------------------------------------------------------- */
+  1160→
+  1161→.ws-btn.d-btn {
+  1162→  text-transform: none;
+  1163→  letter-spacing: 0.02em;
+  1164→}
+  1165→
+  1166→.d-btn.primary { font-weight: bold; }
+  1167→
+  1168→.d-btn:disabled {
+  1169→  opacity: 0.4;
+  1170→  filter: grayscale(0.6);
+  1171→  cursor: default;
+  1172→}
+  1173→
+  1174→.scr-head .ws-title,
+  1175→.pane-title,
+  1176→.cat-btn,
+  1177→.r-name {
+  1178→  user-select: none;
+  1179→}
+  1180→

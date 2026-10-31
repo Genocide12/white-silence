@@ -8,15 +8,16 @@
   var el = null;
 
   var CREDITS = [
-    { role: 'Мир и генерация', who: 'studioigor pipeline · агенты' },
-    { role: 'Системы выживания', who: 'studioigor pipeline · агенты' },
-    { role: 'ИИ зверей и людей', who: 'studioigor pipeline · агенты' },
-    { role: 'Интерфейс', who: 'studioigor pipeline · агенты' },
-    { role: 'Тексты, записки, радио', who: 'studioigor pipeline · агенты' },
+    { role: 'Автор игры', who: 'DirtyG/' },
+    { role: 'Мир и генерация', who: 'процедурная генерация · агентная разработка' },
+    { role: 'Системы выживания', who: 'агентная разработка' },
+    { role: 'ИИ зверей и людей', who: 'агентная разработка' },
+    { role: 'Интерфейс', who: 'агентная разработка' },
+    { role: 'Тексты, записки, радио', who: 'агентная разработка' },
     { role: 'Спрайты и анимация', who: 'процедурная кисть · 300+ спрайтов' },
     { role: 'Звук и музыка', who: 'Web Audio · синтез без файлов' },
     { role: 'Идея и требования', who: 'заказчик' },
-    { role: 'Пайплайн', who: 'studioigor-skill' }
+    { role: 'Спасение и доводка', who: 'agent pipeline' }
   ];
 
   var ABOUT = [

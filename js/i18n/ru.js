@@ -45,6 +45,9 @@
     'ui.pause.hint': 'Пробел — продолжить · Esc — окна',
     'ui.speed.hint': 'Пробел — пауза и скорость времени',
     'ui.ship.left': 'до парохода',
+    'ui.day.one': 'день', 'ui.day.few': 'дня', 'ui.day.many': 'дней',
+    'msg.i18n.switched': 'Язык: русский · F9 — English',
+    'ui.dialog.leave': 'Уйти',
     'ui.year': '1917 года',
 
     // названия экранов (горячие клавиши D2/D3)
@@ -811,7 +814,7 @@
     'item.coat_fur_bear.desc': 'Шкура шатуна на плечах.',
     'item.coat_fur_wolf.name': 'Тулуп (волчий)',
     'item.coat_fur_wolf.desc': 'Серое тепло.',
-    'item.coat_cloth.name': 'Шинель',
+    'item.coat_cloth.name': 'Пальто суконное',
     'item.coat_cloth.desc': 'Солдатское сукно.',
     'item.wool_coat.name': 'Шерстяное пальто',
     'item.wool_coat.desc': 'Городское, не для метели.',
@@ -1255,8 +1258,28 @@
   WS.boot(function initRuLocale() {
     WS.Data = WS.Data || {};
     WS.Data.locales = WS.Data.locales || {};
-    WS.Data.locales.ru = RU;
-    WS.log('I18N: русский словарь — ' + size('ru') + ' ключей');
+    // СЛИЯНИЕ, А НЕ ПОДМЕНА: файлы данных (items_*.js, notes.js, gazette.js)
+    // вливают свои ключи в ru-словарь по boot/game:start. Раньше присвоение
+    // целиком затирало их — 184 ключа терялись, и 133 предмета показывались
+    // с английскими именами («Needle sewing», «Trap wolf»…). Аудит локализации.
+    var cur = WS.Data.locales.ru;
+    if (cur && cur !== RU) {
+      for (var k in RU) {
+        if (Object.prototype.hasOwnProperty.call(RU, k)) cur[k] = RU[k];
+      }
+      WS.Data.locales.ru = cur;
+      // и в живой словарь движка, если он уже построен
+      try {
+        if (WS.I18N && WS.I18N._dict && WS.I18N._dict.ru) {
+          for (var k2 in RU) {
+            if (Object.prototype.hasOwnProperty.call(RU, k2)) WS.I18N._dict.ru[k2] = RU[k2];
+          }
+        }
+      } catch (e) { /* движок сам пересоберёт */ }
+    } else {
+      WS.Data.locales.ru = RU;
+    }
+    WS.log('I18N: русский словарь — ' + size('ru') + ' ключей (слияние)');
   }, 'i18n:ru');
 
   WS.def('I18N', {

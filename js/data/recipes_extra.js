@@ -104,7 +104,7 @@
       tools: ['knife'], station: null, time: 60, skill: { id: 'forage', lv: 1 },
       desc: 'Верш для проруби' }),
     R({ id: 'bait_meat', out: [{ id: 'bait_meat', n: 1 }], cat: 'survival',
-      req: [{ id: 'meat_raw', n: 1 }, { id: 'blood_pool_item', n: 0 }],
+      req: [{ id: 'meat_raw', n: 1 }],
       tools: [], station: null, time: 10, skill: { id: 'track', lv: 1 },
       desc: 'Приманка из свежатины' }),
 
@@ -214,6 +214,15 @@
         if (WS.Data.recipes[k].id === RECIPES[i].id) { exists = true; break; }
       }
       if (!exists) WS.Data.recipes.push(RECIPES[i]);
+    }
+    // ПЕРЕСОБРАТЬ ИНДЕКС: recipes.js строит recipesById ДО нас — 34 рецепта
+    // оставались вне индекса, и WS.Craft.craft() отвечал «нет такого рецепта»
+    // (аудит крафта: knuckles_lead, torch_make, splint_field… были мертвы).
+    WS.Data.recipesById = WS.Data.recipesById || {};
+    for (var i2 = 0; i2 < WS.Data.recipes.length; i2++) {
+      if (WS.Data.recipes[i2] && WS.Data.recipes[i2].id) {
+        WS.Data.recipesById[WS.Data.recipes[i2].id] = WS.Data.recipes[i2];
+      }
     }
   }, 'recipes:extra');
 })();
