@@ -163,27 +163,33 @@
   var searching = null;
 
   function trySearchGround() {
-    if (searching) return;
-    var p = WS.G.player;
     var m = WS.Input.mouse();
-    var tx = m.tx, ty = m.ty;
+    return searchGroundAt(m.tx, m.ty);
+  }
+
+  /** Поиск под снегом в указанной точке (бот-автопилот ищет под собой). */
+  function searchGroundAt(tx, ty) {
+    if (searching) return false;
+    var p = WS.G.player;
+    if (!p) return false;
     // рядом с игроком?
-    if (WS.M.dist(p.x, p.y, tx, ty) > 2.5) {
+    if (WS.M.dist(p.x, p.y, tx + 0.5, ty + 0.5) > 2.5) {
       toast('Слишком далеко.', 'warn');
-      return;
+      return false;
     }
     var t = WS.World.tileAt(tx, ty);
     if (t !== WS.World.T.GRASS && t !== WS.World.T.GRASS2 && t !== WS.World.T.SNOW && t !== WS.World.T.SNOW_DEEP) {
       toast('Здесь искать нечего.', 'warn');
-      return;
+      return false;
     }
     if (WS.World.isInside(tx, ty)) {
       toast('Это не лес.', 'warn');
-      return;
+      return false;
     }
     searching = { t: 0, dur: 5, tx: tx, ty: ty };
     toast('Искать под снегом...', 'info');
     WS.Ev.emit('noise', { x: p.x, y: p.y, r: 4 });
+    return true;
   }
 
   var GROUND_FINDS = [
@@ -303,6 +309,94 @@
     return false;
   }
 
+  // ================================================================ РУБКА ВЕТОК (возобновляемое топливо)
+  // Деревья не исчезают: с каждого раз в сутки можно нарубить бревно и
+  // лапника. Без этого к Д25 посёлок вычищен и герой замерзает без дров
+  // (структурная дыра баланса, найдена роем агентов).
+
+  var TREE_SPRS = { tree_pine: 1, tree_pine_small: 1, tree_birch: 1 };
+
+  function isTree(o) {
+    return !!(o && TREE_SPRS[String(o.sprName || '')]);
+  }
+
+  function treeAt(tx, ty) {
+    var objs = WS.World.objsAt(tx, ty);
+    for (var i = 0; i < objs.length; i++) if (isTree(objs[i])) return objs[i];
+    return null;
+  }
+
+  var chopping = null;   // {t, dur, o, day, sndT}
+
+  function tryChopTree(o) {
+    if (!o || !isTree(o)) return false;
+    var p = WS.G.player;
+    if (!p) return false;
+    if (WS.M.dist(p.x, p.y, o.x, o.y) > 2.2) {
+      toast('Подойдите к дереву.', 'warn');
+      return true;                       // клик обработан
+    }
+    if (chopping) { toast('Руки заняты', 'warn'); return true; }
+    var hasAxe = WS.Inv && WS.Inv.count ? WS.Inv.count('axe') : 0;
+    var day = WS.Time ? WS.Time.day() : 0;
+    if (o._chopDay === day) {
+      toast('С этого дерева сегодня нарублено — ищите следующее.', 'warn');
+      return true;
+    }
+    if (hasAxe) {
+      chopping = { t: 0, dur: 20, o: o, day: day, sndT: 0, axe: true };
+      toast('Рубим ветки и валежник…', 'info');
+      WS.Ev.emit('noise', { x: o.x, y: o.y, r: 10 });   // волки слышат топор
+    } else {
+      // БЕЗ ТОПОРА: ломать сухие сучья руками — дольше, без брёвен,
+      // но лапник и береста тоже горят (выживание без топора возможно)
+      chopping = { t: 0, dur: 45, o: o, day: day, sndT: 0, axe: false };
+      toast('Ломаю сухые сучья руками — без топора только лапник…', 'info');
+      WS.Ev.emit('noise', { x: o.x, y: o.y, r: 6 });
+    }
+    return true;
+  }
+
+  function updateChop(dt) {
+    if (!chopping) return;
+    var o = chopping.o;
+    if (WS.World.objects.indexOf(o) < 0) { chopping = null; return; }
+    chopping.t += dt;
+    chopping.sndT -= dt;
+    if (chopping.sndT <= 0) {
+      chopping.sndT = 2.2;
+      WS.Snd.play('chop', { x: o.x, y: o.y, vol: chopping.axe ? 0.5 : 0.25 });
+      WS.Ev.emit('noise', { x: o.x, y: o.y, r: chopping.axe ? 10 : 6 });
+      WS.Fx.burst('snow', o.x, o.y - 0.5, 3);
+    }
+    if (chopping.t < chopping.dur) return;
+    var day = chopping.day;
+    var withAxe = chopping.axe;
+    chopping = null;
+    var p = WS.G.player;
+    if (!p) return;
+    p.needs.fatigue = Math.max(0, (p.needs.fatigue || 0) - (withAxe ? 8 : 12));
+    o._chopDay = day;                                   // раз в сутки с дерева
+    if (withAxe) {
+      var logs = 1 + (Math.random() < 0.35 ? 1 : 0);
+      var got = WS.Inv.give('log', logs);
+      var lap = 1 + (Math.random() < 0.5 ? 1 : 0);
+      WS.Inv.give('pine_branch', lap);
+      toast('Нарублено: бревно ×' + got + ', еловая лапка ×' + lap + '.', 'good');
+      try { WS.Ev.emit('tree:chopped', { o: o, logs: got }); } catch (e) { /* пусто */ }
+    } else {
+      var lap2 = 2 + (Math.random() < 0.5 ? 1 : 0);
+      WS.Inv.give('pine_branch', lap2);
+      WS.Inv.give('birch_bark', 1);
+      toast('Наломано: еловая лапка ×' + lap2 + ', береста ×1.', 'good');
+      try { WS.Ev.emit('tree:chopped', { o: o, logs: 0 }); } catch (e) { /* пусто */ }
+    }
+    WS.Snd.play('pickup');
+    if (WS.Skills && WS.Skills.addXp) WS.Skills.addXp('axe', withAxe ? 4 : 1);
+  }
+
+  function isChopping() { return !!chopping; }
+
   // ================================================================ ТИК И СОБЫТИЯ
   WS.boot(function initForage() {
     defItems();
@@ -312,10 +406,11 @@
       var R = d && d.R ? d.R : WS.RNG.mk(999);
       spawnWorld(R);
     });
-    // поиск под снегом
+    // поиск под снегом + рубка
     WS.tick(42, function forageTick(dt) {
       if (!WS.G || !WS.G.running || !WS.G.player) return;
       updateSearch(dt);
+      updateChop(dt);
     }, 'forage:search');
     // контекстное действие: ПКМ по растениям — СБОР; Alt+ПКМ по снегу — ПОИСК
     WS.Ev.on('mouse:down', function (m) {
@@ -328,9 +423,14 @@
 
   WS.def('Forage', {
     trySearchGround: trySearchGround,
+    searchGroundAt: searchGroundAt,
     tryHarvest: tryHarvest,
     plantAt: plantAt,
     meltSnow: meltSnow,
+    tryChopTree: tryChopTree,
+    treeAt: treeAt,
+    isTree: isTree,
+    isChopping: isChopping,
     isSearching: function () { return !!searching; },
     progress: function () { return searching ? searching.t / searching.dur : 0; },
     PLANTS: PLANTS

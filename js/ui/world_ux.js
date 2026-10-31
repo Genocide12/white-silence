@@ -180,11 +180,14 @@
   }
 
   function quickActionLabel(o) {
+    var isTreeObj = false;
+    try { isTreeObj = WS.Forage && WS.Forage.isTree && WS.Forage.isTree(o); } catch (e) { /* пусто */ }
     if (o.door) return o.open ? 'ЛКМ — закрыть · ПКМ — все действия' : 'ЛКМ — открыть · ПКМ — все действия';
     if (o.container) return 'ЛКМ — обыскать · ПКМ — все действия';
     if (o.heat) return 'ПКМ — растопить / все действия';
     if (String(o.sprName || '').indexOf('bed') === 0) return 'Z — лечь спать · ПКМ — все действия';
     if (o.forage) return 'ЛКМ — собрать · ПКМ — все действия';
+    if (isTreeObj) return 'ЛКМ — нарубить веток · ПКМ — все действия';
     if (o.drop) return 'ЛКМ — подобрать · ПКМ — все действия';
     return 'ЛКМ — осмотреть';
   }
@@ -342,6 +345,13 @@
       try { WS.Forage.tryHarvest(o); } catch (e) { /* пусто */ }
       return true;
     }
+    // дерево — нарубить веток (нужен топор; дрова = жизнь)
+    var isTreeQ = false;
+    try { isTreeQ = WS.Forage && WS.Forage.isTree && WS.Forage.isTree(o); } catch (e) { /* пусто */ }
+    if (isTreeQ) {
+      try { WS.Forage.tryChopTree(o); } catch (e) { /* пусто */ }
+      return true;
+    }
     // прочее — осмотр (и клик съеден, чтобы не махать кулаками в печь)
     try {
       WS.Ui && WS.Ui.toast && WS.Ui.toast(o.name || 'Ничего особенного', 'info');
@@ -403,6 +413,14 @@
       if (o.forage) {
         items.push({ label: 'Собрать', hint: nameOfItem(o.forage.item), disabled: !reach, fn: function () {
           try { WS.Forage.tryHarvest(o); } catch (e) { /* пусто */ }
+        } });
+      }
+      // дерево — возобновляемое топливо (бревно + лапник, раз в сутки)
+      var isTreeM = false;
+      try { isTreeM = WS.Forage && WS.Forage.isTree && WS.Forage.isTree(o); } catch (e) { /* пусто */ }
+      if (isTreeM) {
+        items.push({ label: 'Нарубить веток', hint: 'топором — бревно · руками — лапник', disabled: !reach, fn: function () {
+          try { WS.Forage.tryChopTree(o); } catch (e) { /* пусто */ }
         } });
       }
       items.push({ label: 'Осмотреть', disabled: !reach, fn: function () {

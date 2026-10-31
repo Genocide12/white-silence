@@ -49,11 +49,15 @@ const run = async () => {
           out.bad.push(id + ':' + (e && e.message));
         }
         if (!rec.station) out.stationless++; else out.needStation++;
-        // очистить инвентарь для следующего рецепта
-        const p = WS.G.player;
-        for (let i = p.inv.length - 1; i >= 0; i--) {
-          try { WS.Inv.drop(i, 99); } catch (e) { /* пусто */ }
-        }
+        // очистить инвентарь напрямую: drop() спавнит объекты мира,
+        // и за 284 рецепта посёлок тонет в тысячах выброшенных предметов
+        // (рендер захлёбывается — Chromium крэшится). Чистим без спавна.
+        try {
+          const p = WS.G.player;
+          p.inv.length = 0;
+          p.invWeight = 0;
+          // экипированное не трогаем — предметы в слотах не мешают крафту
+        } catch (eClr) { /* пусто */ }
       }
       return out;
     });
