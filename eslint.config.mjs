@@ -45,9 +45,9 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   },
 }, {
   ignores: [
-    "node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills",
-    // Старая игра «Белое Безмолвие» (чистый JS без зависимостей) и её скрипты — не часть Next-проекта
-    "js/**", "css/**", "scripts/**", "index.html", "tool-results/**", ".studioigor/**",
+    "node_modules/**", ".next/**", ".next-ghpages/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills",
+    // Архив оригинальной игры «Белое Безмолвие» (ES5, чистый JS, свой линтер) — не часть Next-проекта
+    "legacy/**", "tool-results/**",
     ".backups/**", ".zscripts/**", "mini-services/**", "tests/**", "download/**", "upload/**",
   ]
 }];
