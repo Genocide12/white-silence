@@ -642,6 +642,22 @@
         e.state = dT < 5 ? 'attack' : 'hunt';
       } else {
         // точка интереса: запах, шум — идут посмотреть
+        // ЧУТЬЁ У ЦЕЛИ: дед стоит на точке (мясо в кармане/шум) — стая его
+        // видит и переключается на добычу. Раньше волки топтались у точки,
+        // «рассматривали» деда и уходили — охота не начиналась никогда.
+        if (p && p.hp > 0 && !WS.World.isInside(p.x, p.y) &&
+            WS.M.dist(e.x, e.y, p.x, p.y) < 6.5) {
+          pack.aggroT = Math.max(pack.aggroT, 14);   // месть-таймер без обиды
+          pack.target = p;
+          tx = p.x; ty = p.y;
+          var dP2 = WS.M.dist(e.x, e.y, tx, ty);
+          if (dP2 < 1.2 && e.atkCd <= 0) bite(e);
+          else AI.moveTowards(e, tx, ty, spd, dt);
+          e.state = 'attack';
+          AI.anim(e, dt, 8);
+          if (R.f() < dt * 0.3) AI.snd('growl', e.x, e.y, 0.6);
+          return;
+        }
         AI.moveTowards(e, tx, ty, spd * 0.9, dt);
         e.state = 'hunt';
       }

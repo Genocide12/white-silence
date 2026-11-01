@@ -183,16 +183,47 @@
       }
     }
 
+    // МЯГКАЯ КРОМКА РОМБА: подсветка верхних рёбер + тень нижних —
+    // плоский снег получает объём (главная поверхность кадра)
+    function diamondShaded(c, colTop, colEdge, colLow) {
+      diamond(c, colTop, 0, 0, 0);
+      // верхние рёбра: светлый блик вдоль двух верхних граней
+      c.fillStyle = colEdge;
+      for (var y = 0; y < 16; y++) {
+        var wd = (y + 1) * 4;
+        if (y < 4) { c.fillRect(32 - wd / 2, y, 2, 1); c.fillRect(32 + wd / 2 - 2, y, 2, 1); }
+      }
+      // нижняя кромка: холодная тень — снег «вспухает» над тайлом
+      c.fillStyle = colLow;
+      c.fillRect(30, 30, 4, 2);
+      c.fillRect(26, 28, 3, 1); c.fillRect(35, 28, 3, 1);
+    }
+
     def('T' + T.SNOW, { w: 64, h: 32, variants: 5, draw: function (c, w, h, f, d, v) {
-      diamond(c, v === 1 ? pal.snow2 : pal.snow1, 0, 0, 0);
+      diamondShaded(c, v === 1 ? pal.snow2 : pal.snow1,
+        'rgba(255,255,255,0.55)', 'rgba(120,140,170,0.28)');
       if (v === 2) { c.fillStyle = pal.snow3; c.fillRect(24, 10, 10, 4); c.fillRect(40, 20, 8, 3); }
       if (v === 3) { c.fillStyle = pal.snowShadow; c.fillRect(30, 14, 6, 2); c.fillRect(44, 8, 5, 2); }
       if (v === 4) { c.fillStyle = pal.snow2; c.fillRect(18, 18, 12, 4); }
+      // снежная рябь: короткие голубоватые штрихи — «волны» наста
+      if (v === 2 || v === 4) {
+        c.fillStyle = 'rgba(159,176,196,0.32)';
+        c.fillRect(22, 14, 6, 1); c.fillRect(36, 20, 5, 1); c.fillRect(28, 24, 4, 1);
+      }
+      if (v === 3) {
+        c.fillStyle = 'rgba(255,255,255,0.4)';
+        c.fillRect(26, 10, 4, 1); c.fillRect(38, 16, 4, 1);
+      }
+      // редкие сверкающие крупинки
+      if (v === 0) { c.fillStyle = 'rgba(255,255,255,0.75)'; c.fillRect(30, 12, 1, 1); c.fillRect(40, 22, 1, 1); c.fillRect(24, 20, 1, 1); }
     }});
     def('T' + T.SNOW_DEEP, { w: 64, h: 40, draw: function (c, w, h) {
       diamond(c, pal.snow2, 0, 0, 0);
       c.fillStyle = pal.snowShadow; c.fillRect(20, 12, 24, 6);
       c.fillStyle = pal.snow1; c.fillRect(22, 10, 20, 4);
+      // гребень сугроба: блик сверху, тень снизу — пушистый нанос
+      c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(24, 9, 16, 1);
+      c.fillStyle = 'rgba(120,140,170,0.3)'; c.fillRect(22, 16, 20, 2);
     }});
     def('T' + T.GRASS, { w: 64, h: 32, variants: 5, draw: function (c, w, h, f, d, v) {
       diamond(c, '#979d90', 0, 0, 0);      // зимняя сухая трава, выбеленная инеем

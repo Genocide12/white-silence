@@ -286,7 +286,16 @@
     delay(800, function () {
       ok('listBundled: колбэк вызван, исключения нет', bCalled && !bThrew);
       ok('listBundled: вернул массив', Array.isArray(bArr));
-      ok('listBundled: recordings/ пуст в тестовой среде → [] (404 обработан)', Array.isArray(bArr) && bArr.length === 0, { n: Array.isArray(bArr) ? bArr.length : -1 });
+      // recordings/ поставляется с игрой (рой агентов): плёнок ≥ 3
+      ok('listBundled: bundled-плёнки из recordings/ читаются (≥3)',
+         Array.isArray(bArr) && bArr.length >= 3, { n: Array.isArray(bArr) ? bArr.length : -1 });
+      if (Array.isArray(bArr) && bArr.length) {
+        var okMeta = bArr[0].file && bArr[0].name;
+        for (var bi = 0; bi < bArr.length; bi++) {
+          if (!bArr[bi].file || !bArr[bi].name || !bArr[bi].result) { okMeta = false; break; }
+        }
+        ok('listBundled: у плёнок есть file/name/result (index.json валиден)', okMeta);
+      }
       ok('loadBundled: несуществующий файл → колбэк с null, без исключения', lCalled && !lThrew && lRes === null);
       idV = WS.Replay.saveLocal(recV, 'Победный забег');
       ok('saveLocal: «Победный забег» сохранена', typeof idV === 'string' && idV.length > 1);
@@ -318,6 +327,13 @@
       var op = WS.Ui.opened();
       ok('стек Ui: «cinema» открыт через реестр (push в стек)', op.indexOf('cinema') >= 0, { stack: op });
       ok('класс .ws-modal повешен на панель кинозала', !!root && root.classList.contains('ws-modal'));
+      // РЕГРЕССИЯ z-index: кинозал открывается ИЗ главного меню (.menu-wrap,
+      // z-index 200) и обязан стоять НАД ним, иначе все клики съедает меню
+      var zCin = root ? parseInt(getComputedStyle(root).zIndex, 10) : 0;
+      var menuEl = document.querySelector('.menu-wrap');
+      var zMenu = menuEl ? parseInt(getComputedStyle(menuEl).zIndex, 10) : 0;
+      ok('z-index: кинозал (z=' + zCin + ') выше главного меню (z=' + zMenu + ')',
+         zCin > 200 && zCin > zMenu, { zCin: zCin, zMenu: zMenu });
       ok('кнопки управления плеером: −/+/⏸/⟲ в топбаре',
          !!(q('.cn-topbar [data-act="slower"]') && q('.cn-topbar [data-act="faster"]') &&
             q('.cn-topbar [data-act="pause"]') && q('.cn-topbar [data-act="restart"]')));
