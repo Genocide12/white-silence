@@ -1162,6 +1162,7 @@
         var bt = t.ent;
         var gone = !bt || bt.dead || bt.hp <= 0 || WS.World.ents.indexOf(bt) < 0;
         if (gone) {
+          D._huntFails = 0;                       // добыча взята — охота работает
           var gift = giftNear(t.gx || 0, t.gy || 0);
           if (gift && !gift.looted && WS.World.objects.indexOf(gift) >= 0) {
             // В ОЧЕРЕДЬ, а не в план: план затирается следующей угрозой
@@ -1242,6 +1243,7 @@
               t.waitT = (t.waitT || 0) + 1;
               if (t.waitT > 3) {
                 bt._demoSkipUntil = absMin() + 45;
+                D._huntFails = (D._huntFails || 0) + 1;   // охота не вышла — лут придёт следующим планом
                 log('🐉 ' + bt.kind + ' за препятствием — не достать. Займусь делами, он сам уйдёт.', 'warn');
               }
               return t.waitT <= 3;
@@ -2016,7 +2018,13 @@
         if (torchFuelMissing() > 0 && day >= (isRushS ? 3 : 12) &&
             absMin() - (D._lastBanishPlanMin || -9999) > banishCd &&
             (fuelHuntLoose || !nextLootTarget(1).length)) {
-          var beastF = beastNear(isRushS ? 60 : 45, { prey: isRushS });
+          // СЧЁТЧИК НЕУДАЧ: сорванные погони (зверь за лесом, стая не
+          // приходит — сид-лотерея) копятся и с возрастом дна всё сильнее
+          // вытесняют охоту лутом: порог растёт от 4 до ~20 к Д50.
+          // (плейтест: «не пробиться, пропускаю» ×20 подряд, 0 изгнаний
+          // к Д35 — бот неделями топтался у опушки вместо домов)
+          var huntOk = (D._huntFails || 0) < 4 + Math.floor(day / 3);
+          var beastF = huntOk ? beastNear(isRushS ? 60 : 45, { prey: isRushS }) : null;
           if (beastF) {
             D._lastBanishPlanMin = absMin();
             var bfn = { wolf: 'волк', bear: 'медведь-шатун', bandit: 'бандит',
