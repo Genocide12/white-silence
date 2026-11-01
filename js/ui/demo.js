@@ -1847,7 +1847,7 @@
         var so = objsS[si];
         if (so && so.sprName === 'crazy_gift' && !so.looted &&
             !(so._demoSkipUntil && so._demoSkipUntil > absMin()) &&
-            dist(p.x, p.y, so.x, so.y) < 55 && D.gifts.indexOf(so) < 0) {
+            dist(p.x, p.y, so.x, so.y) < 130 && D.gifts.indexOf(so) < 0) {
           D.gifts.push(so);
         }
       }
