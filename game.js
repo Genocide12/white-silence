@@ -360,9 +360,10 @@ function updateParticles(dt) {
     var p = particles[i];
     p.t += dt;
     if (p.t >= p.life) { particles.splice(i, 1); continue; }
+    // статичные виды (arc/ring/shock) без скорости — не трогаем координаты
     p.vy += (p.grav || 0) * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
+    p.x += (p.vx || 0) * dt;
+    p.y += (p.vy || 0) * dt;
   }
   for (var j = floaters.length - 1; j >= 0; j--) {
     var f = floaters[j];
@@ -377,17 +378,65 @@ function drawParticles() {
   for (var i = 0; i < particles.length; i++) {
     var p = particles[i];
     var a = 1 - p.t / p.life;
-    ctx.globalAlpha = a;
-    ctx.fillStyle = p.col;
     if (p.kind === 'confetti') {
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.col;
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.t * 9);
       ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
       ctx.restore();
-    } else {
+    } else if (p.kind === 'arc') {
+      // ЛОДОШКА: след удара — клин удара + яркий росчерк кромки
+      var aw = a;
+      ctx.globalAlpha = 0.34 * aw;
+      var agrd = ctx.createRadialGradient(p.x, p.y, p.r * 0.3, p.x, p.y, p.r);
+      agrd.addColorStop(0, 'rgba(255,255,255,0)');
+      agrd.addColorStop(0.7, p.col);
+      agrd.addColorStop(1, 'rgba(255,255,255,' + (0.5 * aw) + ')');
+      ctx.fillStyle = agrd;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * a + 0.5, 0, TAU);
+      ctx.moveTo(p.x, p.y);
+      ctx.arc(p.x, p.y, p.r * (0.55 + 0.45 * (1 - aw)), p.ang - p.arc, p.ang + p.arc);
+      ctx.closePath();
+      ctx.fill();
+      // яркая кромка росчерка
+      ctx.globalAlpha = aw;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3.4 * aw + 0.6;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * (0.55 + 0.45 * (1 - aw)), p.ang - p.arc * 0.92, p.ang + p.arc * 0.92);
+      ctx.stroke();
+    } else if (p.kind === 'ring' || p.kind === 'shock') {
+      // РАСХОДЯЩЕЕСЯ КОЛЬЦО: балалайка/вантуз/бомба (ring), шокволны (shock)
+      var rr = lerp(p.r0, p.r1, 1 - a * a);
+      var thick = p.kind === 'shock' ? 10 * a + 2 : 5 * a + 1.2;
+      ctx.globalAlpha = (p.kind === 'shock' ? 0.85 : 0.95) * a;
+      ctx.strokeStyle = p.col;
+      ctx.lineWidth = thick;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rr, 0, TAU);
+      ctx.stroke();
+      if (p.kind === 'shock') {
+        // вторая волна — читается как удар оземь
+        ctx.globalAlpha = 0.4 * a;
+        ctx.lineWidth = thick * 0.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rr * 0.82, 0, TAU);
+        ctx.stroke();
+      }
+    } else if (p.kind === 'steam') {
+      // ПАР САМОВАРА: тает и поднимается
+      ctx.globalAlpha = 0.5 * a;
+      ctx.fillStyle = p.col;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - p.t * 26, (p.size || 5) * (1.4 - 0.4 * a), 0, TAU);
+      ctx.fill();
+    } else {
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.col;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, (p.size || 3) * a + 0.5, 0, TAU);
       ctx.fill();
     }
   }
@@ -1284,7 +1333,8 @@ function killEnemy(e) {
     // БОЛЬШОЙ ГРИБ со старшего: сытный, гаснет медленно
     G.pickups.push({ kind: 'bigshroom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 11, life: 20 });
   }
-  if (Math.random() < 0.04 || e.boss) {
+  // ХИЛКА: редкая — беречь её надо (с боссов и то не всегда)
+  if (Math.random() < 0.012 || (e.boss && Math.random() < 0.5)) {
     G.pickups.push({ kind: 'heart', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 9 });
   }
   if (e.elite || e.boss) {
@@ -1498,7 +1548,9 @@ var ENEMY_TYPES = {
 var nextEntId = 1;
 
 function minuteMul() {
-  return 1 + (G.t / 60) * 0.10;    // +10% силы каждую минуту
+  var mins = G.t / 60;
+  // прогрессивный рост: после 5-й минуты лес звереет быстрее
+  return 1 + mins * 0.14 + (mins > 5 ? (mins - 5) * 0.11 : 0);
 }
 
 function spawnEnemy(type, x, y, elite, silent) {
@@ -1508,8 +1560,8 @@ function spawnEnemy(type, x, y, elite, silent) {
     id: nextEntId++,
     type: type, x: x, y: y,
     vx: 0, vy: 0,
-    hp: Math.round(d.hp * m * (elite ? 3.5 : 1)),
-    dmg: d.dmg * (0.75 + 0.25 * m) * (elite ? 1.6 : 1),
+    hp: Math.round(d.hp * m * (elite ? 4.5 : 1)),
+    dmg: d.dmg * (0.8 + 0.3 * m) * (elite ? 1.6 : 1),
     speed: d.speed * rnd(0.92, 1.08),
     r: d.r * (elite ? 1.5 : 1),
     col: d.col, mass: d.mass, elite: !!elite,
@@ -1770,7 +1822,8 @@ var BOSSES = [
 function spawnBoss(idx) {
   var loop = Math.floor(idx / BOSSES.length);          // виток очереди (бесконечка)
   var b = BOSSES[idx % BOSSES.length];
-  var scale = 1 + loop * 1.1 + (G.mode === 'endless' ? G.t / 240 : 0);  // каждый виток злее
+  // сила старшего растёт и от витка очереди, и от прожитой ночи
+  var scale = (1 + loop * 1.1) * (0.9 + G.t / 300);
   var p = G.player;
   var a = rnd(0, TAU);
   var R = Math.max(VW, VH) / SCALE * 0.55;
@@ -2122,18 +2175,18 @@ function updateDirector(dt) {
   // обычный ритм спавна
   if (G.bossAlive) return;   // во время босса обычный спавн тише
   G.spawnAcc += dt;
-  var rate = 0.75 - Math.min(0.5, G.t / 60 * 0.05);   // от 0.75с до 0.25с между пачками
-  if (G.siege) rate *= 0.5;                            // осада: вдвое плотнее
+  var rate = 0.7 - Math.min(0.52, G.t / 60 * 0.055);  // от 0.70с до ~0.18с между пачками
+  if (G.siege) rate *= 0.45;                           // осада: вдвое плотнее
   if (G.spawnAcc >= rate) {
     G.spawnAcc = 0;
-    var cap = G.siege ? 170 : 130;
-    if (G.mode === 'endless') cap = Math.min(230, 130 + Math.floor(G.t / 45));
+    var cap = G.siege ? 190 : 140;
+    if (G.mode === 'endless') cap = Math.min(240, 140 + Math.floor(G.t / 40));
     if (G.enemies.length < cap) {
       var pool = composition(G.t);
-      var batch = Math.min(13, 1 + Math.floor(G.t / 70));
-      if (G.siege) batch += 2;
+      var batch = Math.min(16, 1 + Math.floor(G.t / 50));
+      if (G.siege) batch += 4;
       for (var b = 0; b < batch; b++) {
-        var elite = Math.random() < 0.012 + G.t / 16000;
+        var elite = Math.random() < 0.02 + G.t / 9000;  // к 10-й минуте ~9% элиты
         spawnAtRing(pick(pool), elite);
       }
     }
@@ -2354,7 +2407,16 @@ function applyCard(card) {
     if (Object.keys(p.weapons).length >= 6) unlockAch('maxed');
   }
   else if (card.kind === 'up-weapon') p.weapons[card.id].lv++;
-  else if (card.kind === 'passive') p.passives[card.id] = pasLv(card.id) + 1;
+  else if (card.kind === 'passive') {
+    p.passives[card.id] = pasLv(card.id) + 1;
+    // Крепкий Организм: +30 МАКС. ХП сразу (и подлечить на столько же)
+    if (card.id === 'hp') {
+      p.maxHp += 30;
+      p.hp = Math.min(p.maxHp, p.hp + 30);
+      floatText(p.x, p.y - 34, '+30 макс. ХП', '#7bffb0', 16);
+      spawnSpark(p.x, p.y, 10, '#7bffb0');
+    }
+  }
   else if (card.kind === 'evo') {
     p.evolved[card.id] = true;
     AU.evo();
@@ -2712,6 +2774,7 @@ function render() {
     drawPickups();
     drawCrowMarks();
     drawEntities();
+    drawWeaponFx();
     drawBullets();
     drawParticles();
   }
@@ -2859,6 +2922,199 @@ function drawEntities() {
     if (e === G.player) drawPlayer(e);
     else drawEnemy(e);
   }
+}
+
+// ════════════════════════════ ВИЗУАЛ ОРУЖИЙ ДЕДА ═════════════════════════
+// Оружия должно быть ВИДНО: орбиты, спрайты, кольца. Рисуем каждый кадр.
+
+function drawWeaponFx() {
+  var p = G.player;
+  if (!p) return;
+
+  // ГРИБНАЯ АУРА: пульсирующее споровое поле
+  if (p.weapons.aura) {
+    var aw = p.weapons.aura;
+    var ar = 92 + 16 * aw.lv + (p.evolved.aura ? 55 : 0);
+    var puls = 0.5 + Math.sin(G.t * 4) * 0.12;
+    var ag = ctx.createRadialGradient(p.x, p.y, ar * 0.3, p.x, p.y, ar);
+    ag.addColorStop(0, 'rgba(177,107,255,0)');
+    ag.addColorStop(0.75, 'rgba(177,107,255,' + (0.10 + 0.06 * puls) + ')');
+    ag.addColorStop(1, 'rgba(255,122,217,' + (0.22 + 0.1 * puls) + ')');
+    ctx.fillStyle = ag;
+    ctx.beginPath(); ctx.arc(p.x, p.y, ar, 0, TAU); ctx.fill();
+    // споры-точки по кромке
+    ctx.fillStyle = 'rgba(255,122,217,0.65)';
+    for (var si = 0; si < 10; si++) {
+      var sa = G.t * 0.7 + si * TAU / 10;
+      ctx.beginPath();
+      ctx.arc(p.x + Math.cos(sa) * (ar - 6), p.y + Math.sin(sa) * (ar - 6), 2, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  // КОТ БАРСИК(И): орбитальные коты
+  if (p.weapons.cat) {
+    var cw = p.weapons.cat;
+    var cr = 74 + 12 * cw.lv + (p.evolved.cat ? 14 : 0);
+    var cats = (cw.lv >= 3 ? 2 : 1) + (p.evolved.cat ? 1 : 0);
+    for (var ci = 0; ci < cats; ci++) {
+      var ca = p.catOrb + ci * (TAU / cats);
+      var cx = p.x + Math.cos(ca) * cr;
+      var cy = p.y + Math.sin(ca) * cr;
+      drawCat(cx, cy, ca, p.evolved.cat);
+    }
+  }
+
+  // ТОПОР(Ы): тяжёлая орбита
+  if (p.weapons.axe) {
+    var axw = p.weapons.axe;
+    var axr = 100 + 16 * axw.lv + (p.evolved.axe ? 34 : 0);
+    var axes = (axw.lv >= 3 ? 2 : 1) + (p.evolved.axe ? 1 : 0);
+    for (var xi = 0; xi < axes; xi++) {
+      var xa = p.axeOrb + xi * (TAU / axes);
+      drawAxe(p.x + Math.cos(xa) * axr, p.y + Math.sin(xa) * axr, xa + p.axeOrb * 2);
+    }
+  }
+
+  // КЛЮШКА(И): вращающийся луч
+  if (p.weapons.klushka) {
+    var klw = p.weapons.klushka;
+    var klR = 96 + 14 * klw.lv + (p.evolved.klushka ? 30 : 0);
+    var klN = p.evolved.klushka ? 2 : 1;
+    for (var ki = 0; ki < klN; ki++) {
+      var kA = p.klushA + ki * Math.PI;
+      // след лопасти
+      ctx.globalAlpha = 0.25;
+      ctx.strokeStyle = '#9dd6ff';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, klR * 0.8, kA - 0.75, kA - 0.1);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      // сама клюшка: рукоять от деда + крюк на конце
+      var kx1 = p.x + Math.cos(kA) * klR * 0.45, ky1 = p.y + Math.sin(kA) * klR * 0.45;
+      var kx2 = p.x + Math.cos(kA) * klR, ky2 = p.y + Math.sin(kA) * klR;
+      ctx.strokeStyle = '#c98f5a';
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(kx1, ky1); ctx.lineTo(kx2, ky2); ctx.stroke();
+      // крюк клюшки
+      ctx.strokeStyle = '#e8dfc8';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(kx2 - Math.cos(kA) * 8, ky2 - Math.sin(kA) * 8, 9, kA + 0.5, kA + 2.4);
+      ctx.stroke();
+      // искорка на кончике
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(kx2, ky2, 2.4, 0, TAU); ctx.fill();
+    }
+  }
+
+  // САМОВАР: за спиной деда, носик смотрит по прицелу, идёт пар
+  if (p.weapons.samovar) {
+    var smA = p.aimT > 0 ? p.moveA : (p.face > 0 ? 0 : Math.PI);
+    ctx.save();
+    ctx.translate(p.x - p.face * 16, p.y - 14);
+    // корпус
+    ctx.fillStyle = '#d9a441';
+    ctx.beginPath(); ctx.ellipse(0, 0, 9, 11, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#f4c960';
+    ctx.beginPath(); ctx.ellipse(0, -2, 7, 8, 0, 0, TAU); ctx.fill();
+    // ножки и ручки
+    ctx.strokeStyle = '#8a6a2a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-4, 10); ctx.lineTo(-6, 14);
+    ctx.moveTo(4, 10); ctx.lineTo(6, 14);
+    ctx.stroke();
+    // крышечка
+    ctx.fillStyle = '#8a6a2a';
+    ctx.beginPath(); ctx.ellipse(0, -11, 4, 2.4, 0, 0, TAU); ctx.fill();
+    // носик по направлению пара
+    ctx.strokeStyle = '#d9a441';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(smA) * 4, Math.sin(smA) * 4 - 2);
+    ctx.lineTo(Math.cos(smA) * 14, Math.sin(smA) * 14 - 4);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** Кот Барсик: рыжий, с хвостом-маятником; легенда — с сиянием. */
+function drawCat(x, y, ang, legend) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang + Math.PI / 2);   // мордой по ходу орбиты
+  if (legend) {
+    ctx.shadowColor = '#ffd76e';
+    ctx.shadowBlur = 12;
+  }
+  // хвост-маятник
+  ctx.strokeStyle = '#e8944a';
+  ctx.lineWidth = 3.4;
+  ctx.beginPath();
+  ctx.moveTo(-8, 6);
+  ctx.quadraticCurveTo(-16, Math.sin(G.t * 8) * 6 + 4, -20, Math.sin(G.t * 8) * 9);
+  ctx.stroke();
+  // тело
+  ctx.fillStyle = '#e8944a';
+  ctx.beginPath(); ctx.ellipse(0, 0, 10, 8, 0, 0, TAU); ctx.fill();
+  // голова
+  ctx.beginPath(); ctx.arc(0, -7, 6, 0, TAU); ctx.fill();
+  // уши
+  ctx.beginPath();
+  ctx.moveTo(-5, -10); ctx.lineTo(-7, -16); ctx.lineTo(-1, -11);
+  ctx.moveTo(5, -10); ctx.lineTo(7, -16); ctx.lineTo(1, -11);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  // морда: глазки и усики
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath(); ctx.arc(-2, -8, 1.2, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(2, -8, 1.2, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-4, -5); ctx.lineTo(-9, -4);
+  ctx.moveTo(4, -5); ctx.lineTo(9, -4);
+  ctx.stroke();
+  // когти блеснули
+  if (Math.random() < 0.06) {
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(4, 2); ctx.lineTo(11, -2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Топор: вращается, лезвие блестит. */
+function drawAxe(x, y, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  // рукоять
+  ctx.strokeStyle = '#8a6a2a';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(0, -12); ctx.stroke();
+  // лезвие
+  ctx.fillStyle = '#cfd8e8';
+  ctx.beginPath();
+  ctx.moveTo(0, -12);
+  ctx.lineTo(11, -16);
+  ctx.lineTo(12, -6);
+  ctx.lineTo(0, -4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(2, -13); ctx.lineTo(10, -14.4); ctx.stroke();
+  // обух
+  ctx.fillStyle = '#6a7a8a';
+  ctx.fillRect(-4, -13, 4, 8);
+  ctx.restore();
 }
 
 function drawEnemy(e) {
