@@ -170,6 +170,150 @@ var AU = {
   grunt: function () {   // дед крякает
     this.tone(110, 0.09, 'sawtooth', 0.12, 80);
   },
+
+  // ─── БЛИП-РЕЧЬ: слоговые голоса (дед, боссы) — всё синтезом ───
+
+  _cds: {},
+  canSay: function (key, cd) {
+    var now = performance.now() / 1000;
+    if (this._cds[key] && now - this._cds[key] < cd) return false;
+    this._cds[key] = now;
+    return true;
+  },
+
+  /** Ноты-слоги: [{f, d, s(слайд), v(объём)}] — планируются точно по таймлайну. */
+  voice: function (notes, opts) {
+    if (!this.ctx || this.muted) return;
+    opts = opts || {};
+    try {
+      var t = this.ctx.currentTime + 0.02;
+      var self = this;
+      for (var i = 0; i < notes.length; i++) {
+        var n = notes[i];
+        var dur = n.d || 0.09;
+        var o = self.ctx.createOscillator();
+        var g = self.ctx.createGain();
+        var f = self.ctx.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = opts.cut || 900;
+        o.type = opts.type || 'sawtooth';
+        o.frequency.setValueAtTime(n.f, t);
+        if (n.s) o.frequency.exponentialRampToValueAtTime(Math.max(30, n.s), t + dur);
+        // вибрато — дрожание живого голоса
+        if (opts.vib) {
+          var lfo = self.ctx.createOscillator();
+          var lg = self.ctx.createGain();
+          lfo.frequency.value = opts.vibHz || 6.5;
+          lg.gain.value = opts.vib;
+          lfo.connect(lg); lg.connect(o.frequency);
+          lfo.start(t); lfo.stop(t + dur + 0.03);
+        }
+        var v = (n.v != null ? n.v : (opts.vol || 0.12));
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + 0.018);
+        g.gain.setValueAtTime(v * 0.9, t + dur * 0.75);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.connect(f); f.connect(g); g.connect(self.master);
+        o.start(t); o.stop(t + dur + 0.04);
+        t += dur + (opts.gap != null ? opts.gap : 0.035);
+      }
+    } catch (e) { /* молча */ }
+  },
+
+  /** Голос деда: скрипучий, фраза разбирается на слоги-блипы. */
+  dedTalk: function (phrase, mood, force) {
+    if (!force && !this.canSay('ded', mood === 'pain' ? 2.5 : 4)) return false;
+    if (force) this.canSay('ded', 0.6);   // даже важное — не чаше раза в 0.6с
+    if (!this.ctx || this.muted) return true;   // звука нет — текст всё равно покажем
+    var base = mood === 'pain' ? 145 : (mood === 'exc' ? 118 : 98);
+    var words = phrase.split(' ');
+    var notes = [];
+    var f = base;
+    for (var wi = 0; wi < words.length && notes.length < 12; wi++) {
+      var syl = Math.max(1, Math.min(3, Math.ceil(words[wi].length / 3)));
+      for (var si = 0; si < syl && notes.length < 12; si++) {
+        notes.push({
+          f: f, d: mood === 'sad' ? 0.16 : 0.085,
+          s: f * (si === syl - 1 ? (mood === 'pain' ? 0.78 : 0.9) : 1.05)
+        });
+        f *= 1.02;
+      }
+      f = base * (1 + 0.05 * ((wi + 1) / words.length));
+    }
+    if (notes.length) {
+      var last = notes[notes.length - 1];
+      last.s = base * (mood === 'exc' ? 1.15 : 0.72);   // интонация конца фразы
+      last.d += mood === 'sad' ? 0.25 : 0.06;
+    }
+    this.voice(notes, {
+      type: 'sawtooth',
+      cut: mood === 'pain' ? 700 : 520,
+      vib: 5, vol: mood === 'sad' ? 0.13 : 0.11,
+      gap: mood === 'sad' ? 0.09 : 0.035
+    });
+    return true;
+  },
+
+  /** Голоса старших леса: у каждого свой характер. kind: 'spawn'|'attack'|'die'. */
+  bossVoice: function (id, kind) {
+    if (!this.ctx || this.muted) return;
+    if (!this.canSay('bv_' + id + '_' + kind, kind === 'spawn' ? 6 : (kind === 'die' ? 4 : 2.2))) return;
+    var N = {
+      alpha: {    // ВОЖАК: вой в туман
+        spawn: [{ f: 320, d: 0.4, s: 400 }, { f: 400, d: 0.9, s: 200 }],
+        attack: [{ f: 380, d: 0.25, s: 260 }],
+        base: 320, opt: { type: 'sine', cut: 1500, vib: 5, vol: 0.14 }
+      },
+      shisha: {   // МЕДВЕДЬ-ШАТУН: утробное «ЭР-Р-Р»
+        spawn: [{ f: 58, d: 0.9, s: 44, v: 0.22 }, { f: 46, d: 0.6, s: 38, v: 0.18 }],
+        attack: [{ f: 64, d: 0.4, s: 40, v: 0.2 }],
+        base: 58, opt: { type: 'sawtooth', cut: 300, vol: 0.2 }
+      },
+      glavar: {   // АТАМАН: хриплый смешок «ХЕ-ХЕ-ХЕ»
+        spawn: [{ f: 200, d: 0.13, s: 160 }, { f: 185, d: 0.13, s: 150 }, { f: 170, d: 0.2, s: 130 }],
+        attack: [{ f: 190, d: 0.12, s: 155 }, { f: 175, d: 0.16, s: 135 }],
+        base: 190, opt: { type: 'sawtooth', cut: 700, vol: 0.13 }
+      },
+      hozyain: {  // ХОЗЯИН ТРАКТА: паровозный гудок «ТУ-У-У»
+        spawn: [{ f: 150, d: 0.45, s: 146 }, { f: 150, d: 0.6, s: 142 }],
+        attack: [{ f: 150, d: 0.3, s: 140 }],
+        base: 150, opt: { type: 'square', cut: 800, vol: 0.15 }
+      },
+      metelica: { // ВЕДЬМА МЕТЕЛИ: хохот «ХА-ХА-ХА-ХА»
+        spawn: [{ f: 640, d: 0.14, s: 700 }, { f: 700, d: 0.14, s: 640 }, { f: 620, d: 0.14, s: 690 }, { f: 690, d: 0.22, s: 520 }],
+        attack: [{ f: 660, d: 0.12, s: 720 }, { f: 720, d: 0.18, s: 560 }],
+        base: 640, opt: { type: 'sine', cut: 2500, vol: 0.12 }
+      },
+      leshiy: {   // ЛЕШИЙ: басовитое «ХО-ХО-ХО» со скрипом
+        spawn: [{ f: 105, d: 0.22, s: 88 }, { f: 98, d: 0.22, s: 82 }, { f: 92, d: 0.3, s: 70 }],
+        attack: [{ f: 100, d: 0.18, s: 78 }],
+        base: 100, opt: { type: 'sawtooth', cut: 400, vib: 6, vol: 0.17 }
+      }
+    }[id];
+    if (!N) return;
+    if (kind === 'die') {
+      // агония: глиссандо вниз от базы голоса
+      this.voice([{ f: N.base * 1.2, d: 0.55, s: N.base * 0.35, v: (N.opt.vol || 0.13) * 1.2 }], N.opt);
+      this.noise(0.5, 0.12, 600);
+      return;
+    }
+    this.voice(N[kind] || N.attack, N.opt);
+    if (id === 'shisha') this.noise(0.45, 0.12, 320);   // рык медведя — с утробным гулом
+  },
+
+  // ─── прикольные звуки ───
+  meow: function () {   // кот Барсик: «МЯУ» — глиссандо вверх и вниз
+    if (!this.canSay('meow', 3)) return;
+    this.voice([{ f: 460, d: 0.16, s: 760 }, { f: 760, d: 0.22, s: 380 }], { type: 'sine', vol: 0.09, cut: 2400, gap: 0 });
+  },
+  whistle: function () {   // самовар: свистит паром
+    if (!this.canSay('whistle', 7)) return;
+    this.voice([{ f: 1750, d: 0.5, s: 2100 }, { f: 2100, d: 0.45, s: 1800 }], { type: 'sine', vol: 0.05, cut: 5000, vib: 9, vibHz: 11 });
+  },
+  whoosh: function () {   // тапок-самолёт: «вжух»
+    this.voice([{ f: 820, d: 0.14, s: 240, v: 0.06 }], { type: 'sine', cut: 2000, gap: 0 });
+    this.noise(0.1, 0.05, 1400);
+  },
   windNode: null,
   startWind: function () {   // фоновый ветер: петля шума через фильтр
     if (!this.ctx || this.windNode || this.muted) return;
@@ -347,13 +491,15 @@ function spawnSnowPuff(x, y, n) {
   }
 }
 
-function floatText(x, y, txt, col, size) {
+function floatText(x, y, txt, col, size, life) {
   floaters.push({
     x: x + rnd(-8, 8), y: y, txt: txt,
     col: col || '#fff', size: size || 15,
-    t: 0, life: 0.85, vy: -66
+    t: 0, life: life || 0.85, vy: -66
   });
 }
+
+/** Дед подал голос: блип-речь + фраза над головой. */
 
 function updateParticles(dt) {
   for (var i = particles.length - 1; i >= 0; i--) {
@@ -976,6 +1122,7 @@ function fireWeapons(dt) {
       var st = nearestEnemy(p.x, p.y, 500);
       if (st) {
         sl.cd = 2.4 * cdMul();
+        AU.whoosh();   // тапок полетел — «вжух»
         var a = angTo(p.x, p.y, st.x, st.y);
         var n = (sl.lv >= 2 || p.evolved.slipper) ? 2 : 1;
         var dmg = (16 + 8 * sl.lv) * dmgMul() * (p.evolved.slipper ? 1.6 : 1);
@@ -1036,6 +1183,7 @@ function fireWeapons(dt) {
         if (dist2(cx, cy, en.x, en.y) < (24 + en.r) * (24 + en.r)) {
           en.catCd = 0.45;
           hurtEnemy(en, cdmg, cx, cy, 130);
+          AU.meow();   // Барсик работает — и говорит об этом
         }
       }
     }
@@ -1174,6 +1322,7 @@ function fireWeapons(dt) {
     sm.cd = (sm.cd || 0) - dt;
     if (sm.cd <= 0) {
       sm.cd = 0.22;
+      if (Math.random() < 0.04) AU.whistle();   // самовар изредка свистит паром
       var smA = p.aimT > 0 ? p.moveA : (p.face > 0 ? 0 : Math.PI);
       var smLen = 120 + 26 * sm.lv + (p.evolved.samovar ? 60 : 0);
       var smW = 34 + 7 * sm.lv;
@@ -1342,6 +1491,7 @@ function killEnemy(e) {
   }
   if (e.boss) {
     AU.roar();
+    AU.bossVoice(e.boss, 'die');
     announce('БОСС ИЗГНАН!\n🍄 +ополчение грибов', 2200, true);
     G.bossAlive = null;   // флаг снят — обычный спавн возобновляется
     dedEvent('bosskill');
@@ -1376,6 +1526,7 @@ function hurtPlayer(dmg, srcX, srcY) {
   CAM.kick(0.45);
   hitstop = Math.max(hitstop, 0.05);
   AU.hurt();
+  if (Math.random() < 0.35) dedEvent('hurt');
   floatText(p.x, p.y - 26, '-' + dmg, '#ff5b6e', 18);
   spawnSpark(p.x, p.y, 10, '#ff5b6e');
   // отброс деда
@@ -1842,8 +1993,10 @@ function spawnBoss(idx) {
   e.chargeA = 0;
   G.bossAlive = e;
   AU.roar();
+  AU.bossVoice(b.id, 'spawn');
   CAM.kick(0.8);
-  announce('⚠ ' + b.name + ' ⚠\n' + b.taunt + (loop ? ' (виток ' + (loop + 1) + ')' : ''), 2600);
+  announce('⚠ ' + b.name + ' ⚠\n' + b.taunt + (loop ? ' (виток ' + (loop + 1) + ')' : ''), 2600, true);
+  setTimeout(function () { if (G.state === 'play') dedEvent('boss'); }, 1200);
   return e;
 }
 
@@ -1867,7 +2020,7 @@ function updateBoss(e, dt, ux, uy, dd) {
       if (e.stateT <= 0) {
         e.state = 'dash';
         e.stateT = 0.6;
-        AU.roar();
+        AU.bossVoice('alpha', 'attack');
       }
     } else if (e.state === 'dash') {
       e.x += Math.cos(e.chargeA) * e.speed * 4.2 * dt;
@@ -1896,7 +2049,7 @@ function updateBoss(e, dt, ux, uy, dd) {
         // удар оземь: расходящееся кольцо
         particles.push({ kind: 'shock', x: e.x, y: e.y, t: 0, life: 0.55, r0: 30, r1: 330, col: '#6ecbff' });
         CAM.kick(0.6);
-        AU.roar();
+        AU.bossVoice('shisha', 'attack');
         e.shockT = 0;    // кольцо проверит дед при расширении
         e.shockX = e.x; e.shockY = e.y;
       }
@@ -1950,7 +2103,7 @@ function updateBoss(e, dt, ux, uy, dd) {
       }
     } else if (e.state === 'tele') {
       e.x += rnd(-3, 3); e.y += rnd(-3, 3);
-      if (e.stateT <= 0) { e.state = 'dash'; e.stateT = 0.85; AU.roar(); }
+      if (e.stateT <= 0) { e.state = 'dash'; e.stateT = 0.85; AU.bossVoice('hozyain', 'attack'); }
     } else if (e.state === 'dash') {
       e.x += Math.cos(e.chargeA) * e.speed * 5 * dt;
       e.y += Math.sin(e.chargeA) * e.speed * 5 * dt;
@@ -1988,6 +2141,7 @@ function updateBoss(e, dt, ux, uy, dd) {
       // снежный вихрь
       particles.push({ kind: 'shock', x: e.x, y: e.y, t: 0, life: 0.5, r0: 24, r1: 260, col: '#b39bff' });
       AU.howl();
+      AU.bossVoice('metelica', 'attack');
       e.vortexT = 0; e.vortexX = e.x; e.vortexY = e.y;
       // из метели — полёвки
       for (var mv = 0; mv < 4; mv++) spawnAtRing('mouse');
@@ -2016,7 +2170,7 @@ function updateBoss(e, dt, ux, uy, dd) {
         e.stateT = 3.4;
         particles.push({ kind: 'shock', x: e.x, y: e.y, t: 0, life: 0.55, r0: 30, r1: 360, col: '#9dffe0' });
         CAM.kick(0.6);
-        AU.roar();
+        AU.bossVoice('leshiy', 'attack');
         e.shockT = 0;
         e.shockX = e.x; e.shockY = e.y;
       }
@@ -2261,10 +2415,11 @@ function updatePickups(dt) {
         unlockAch('gold');
         dedEvent('gold');
       } else if (it.kind === 'heart') {
-        p.hp = Math.min(p.maxHp, p.hp + 25);
-        floatText(p.x, p.y - 30, '+25 🫀', '#7bffb0', 17);
-        AU.pop();
-      } else if (it.kind === 'gift') {
+      p.hp = Math.min(p.maxHp, p.hp + 25);
+      floatText(p.x, p.y - 30, '+25 🫀', '#7bffb0', 17);
+      AU.pop();
+      if (Math.random() < 0.6) dedEvent('heart');
+    } else if (it.kind === 'gift') {
         openGift();
       }
     }
@@ -2467,7 +2622,7 @@ function openLevelUp() {
   AU.levelup();
   $$('lu-lvl').textContent = G.level;
   renderCards(pickCards(3));
-  if (Math.random() < 0.5) dedSay();
+  if (Math.random() < 0.5) dedEvent('levelup');
   $$('levelup').classList.remove('hidden');
 }
 
@@ -2552,7 +2707,23 @@ var DED_EVENTS = {
   lowhp: ['«Тулуп порван… но дед цел!»', '«Рано меня хоронить, лес!»'],
   gold: ['«Знал, что обманка. А всё равно взял»', '«Жадность — она грибная»'],
   dawn: ['«Скоро самовар… держись, дед»'],
-  endless5: ['«Рассвет не пришёл. Значит, работаем»']
+  endless5: ['«Рассвет не пришёл. Значит, работаем»'],
+  // v3.2: озвученные события (блип-речь + фраза)
+  start: ['«Ну, с Богом, Манька…»', '«Идём. Ночь-то длинная…»'],
+  hurt: ['«Ай-яй!»', '«Ох, зараза!»', '«Батюшки!»', '«Ты чего?!»'],
+  heart: ['«Жив-жив!»', '«Ещё сто лет!»', '«То-то же!»'],
+  zap: ['«Хлопай ушами!»', '«БА-БАХ, милые!»'],
+  boss: ['«Ох, тыж-ж…»', '«Здравствуй, милай…»', '«Серьёзный, зараза…»'],
+  levelup: ['«Во, брат!»', '«Силен ещё!»', '«Ух ты ж!»'],
+  win: ['«РАССВЕТ! Дожили!»', '«Живой, Манька!»'],
+  death: ['«Манька… прости…»', '«Грибы… всё… грибы…»']
+};
+
+// интонация голоса по событию
+var DED_MOODS = {
+  hurt: 'pain', lowhp: 'pain', death: 'sad',
+  win: 'exc', bosskill: 'exc', zap: 'exc', levelup: 'exc', heart: 'exc',
+  start: 'norm', boss: 'norm', gold: 'norm', dawn: 'norm', firstkill: 'norm', endless5: 'norm'
 };
 
 var dedSayT = 0;
@@ -2560,15 +2731,24 @@ function dedSay(force) {
   if (!force && dedSayT > G.t) return;
   dedSayT = G.t + 14;
   var p = G.player;
-  if (p) floatText(p.x, p.y - 44, pick(DED_LINES), '#aab7cc', 14);
+  if (!p) return;
+  var line = pick(DED_LINES);
+  // бормотание — тихонько, себе под нос: голос без текста над головой
+  AU.dedTalk(line, 'norm');
+  floatText(p.x, p.y - 44, line, '#aab7cc', 14, 2.2);
 }
 
-/** Событийная реплика (без задержки, важное событие). */
+/** Событийная реплика (важное событие): голос + фраза, без задержки бормотания. */
 function dedEvent(type) {
   var lines = DED_EVENTS[type];
   if (!lines) return;
   var p = G.player;
-  if (p) floatText(p.x, p.y - 44, pick(lines), '#ffd76e', 16);
+  if (!p) return;
+  var line = pick(lines);
+  var mood = DED_MOODS[type] || 'norm';
+  // антиспам голоса: если движок занят — реплику не показываем (кроме смерти/победы)
+  if (!AU.dedTalk(line, mood, type === 'death' || type === 'win' || type === 'boss')) return;
+  floatText(p.x, p.y - 44, line, mood === 'pain' ? '#ff9d76' : '#ffd76e', 16, 2.2);
   dedSayT = Math.max(dedSayT, G.t + 8);
 }
 
@@ -2732,6 +2912,7 @@ function tryZap() {
   hitstop = Math.max(hitstop, 0.1);
   announce('🍄 ГРИБНОЙ ЗАЛП! 🍄', 1500, true);
   floatText(p.x, p.y - 40, 'БА-БАХ!', '#ffd76e', 26);
+  dedEvent('zap');
   particles.push({ kind: 'shock', x: p.x, y: p.y, t: 0, life: 0.6, r0: 20, r1: 340, col: '#b16bff' });
   spawnConfetti(p.x, p.y, 70, 1.6);
   var dmg = (55 + 14 * pasLv('shroom')) * dmgMul();
@@ -3706,7 +3887,7 @@ function startRun(mode) {
   } else {
     announce('БЕСКОНЕЧНАЯ НОЧЬ\nрассвета не будет. сколько вытерпишь?', 3000);
   }
-  dedSay(true);
+  dedEvent('start');
 }
 
 function endRun(winFlag) {
@@ -3720,11 +3901,13 @@ function endRun(winFlag) {
   if (winFlag) {
     AU.win();
     AU.stopWind();
+    dedEvent('win');
     spawnConfetti(G.player.x, G.player.y, 120, 2);
     unlockAch('winner');
   } else {
     AU.death();
     AU.stopWind();
+    dedEvent('death');
     CAM.kick(1);
   }
 
@@ -3953,6 +4136,7 @@ window.DED = {
   hurtPlayer: hurtPlayer, tryZap: tryZap, gainXp: gainXp,
   announce: announce, rerollCards: rerollCards, spawnAtRing: spawnAtRing,
   spawnEnemy: spawnEnemy, unlockAch: unlockAch, getAchs: getAchs,
+  dedEvent: dedEvent, dedSay: dedSay,
   WEAPONS: WEAPONS, PASSIVES: PASSIVES, EVOS: EVOS, ENEMY_TYPES: ENEMY_TYPES,
   BOSSES: BOSSES,
   RUN_TIME: RUN_TIME, BOSS_TIMES: BOSS_TIMES, SIEGE_TIME: SIEGE_TIME
