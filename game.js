@@ -94,8 +94,46 @@ var AU = {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
       this.master.gain.value = this.vol;
-      this.master.connect(this.ctx.destination);
+      // мастер-цепь: громкость → компрессор (не даёт пикам перегрузить
+      // колонки, склеивает удары в плотную стену) → выход
+      var comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -18; comp.knee.value = 14;
+      comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.18;
+      comp.connect(this.ctx.destination);
+      this.master.connect(comp);
+      this._initFx();
     } catch (e) { /* без звука тоже можно */ }
+  },
+
+  // шина эффектов: реверберация — свёртка с собственным импульсом
+  // (затухающий шум 2.2с), всё через посылы send()
+  fx: null,
+  _initFx: function () {
+    if (this.fx || !this.ctx) return;
+    try {
+      var c = this.ctx;
+      var len = Math.floor(c.sampleRate * 2.2);
+      var ir = c.createBuffer(2, len, c.sampleRate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = ir.getChannelData(ch);
+        for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+      }
+      var conv = c.createConvolver();
+      conv.buffer = ir;
+      var rg = c.createGain();
+      rg.gain.value = 0.9;
+      conv.connect(rg); rg.connect(this.master);
+      this.fx = { revIn: conv };
+    } catch (e) { this.fx = null; }
+  },
+  // посыл в реверб: node → [amt] → конвольвер
+  send: function (node, amt) {
+    if (!this.fx) return;
+    try {
+      var g = this.ctx.createGain();
+      g.gain.value = amt;
+      node.connect(g); g.connect(this.fx.revIn);
+    } catch (e) { /* пусто */ }
   },
 
   tone: function (freq, dur, type, vol, slide) {
@@ -134,81 +172,221 @@ var AU = {
     } catch (e) { /* пусто */ }
   },
 
-  slap: function () {   // ЛОДОШКА: хлёсткий «ХЛЯСЬ» — щелчок кнута + шлепок + бас-панч
-    this.noise(0.05, 0.34, 5200);            // сухой щелчок
-    this.noise(0.11, 0.26, 1500);            // мясистый шлепок
-    this.tone(230, 0.06, 'square', 0.17, 80);// тело удара
-    this.tone(88, 0.16, 'sine', 0.3, 40);    // бас-панч в грудь
+  // ── ПРИМИТИВЫ v4.0 ────────────────────────────────────────────────
+  // осциллятор с атакой, спадом, случайной расстройкой ±6% (живой звук)
+  // и опциональным посылом в реверб; dest — куда подключиться
+  osc2: function (type, f0, f1, dur, vol, wet, dest) {
+    if (!this.ctx || this.muted) return;
+    try {
+      var t = this.ctx.currentTime;
+      var rp = 0.94 + Math.random() * 0.12;
+      var o = this.ctx.createOscillator();
+      var g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(Math.max(20, f0 * rp), t);
+      if (f1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * rp), t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.014, dur * 0.3));
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g);
+      g.connect(dest || this.master);
+      if (wet) this.send(g, wet);
+      o.start(t); o.stop(t + dur + 0.03);
+    } catch (e) { /* пусто */ }
   },
-  pop: function () { this.tone(520, 0.05, 'sine', 0.09, 700); this.noise(0.02, 0.04, 4000); },
-  gem: function () {   // приз: звонкая ледяная капель
-    this.tone(1318, 0.07, 'sine', 0.11, 1760);
-    this.tone(1975, 0.09, 'sine', 0.05, 2093);
+  // шумовой удар: белый шум → фильтр с развёрткой частоты → огибающая
+  burstN: function (dur, vol, ftype, f0, f1, q, wet, dest) {
+    if (!this.ctx || this.muted) return;
+    try {
+      var t = this.ctx.currentTime;
+      var n = Math.max(64, Math.floor(this.ctx.sampleRate * dur));
+      var buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      var src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      var f = this.ctx.createBiquadFilter();
+      f.type = ftype || 'bandpass';
+      f.Q.value = q || 1;
+      f.frequency.setValueAtTime(f0, t);
+      if (f1) f.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+      var g = this.ctx.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(f); f.connect(g);
+      g.connect(dest || this.master);
+      if (wet) this.send(g, wet);
+      src.start(t);
+    } catch (e) { /* пусто */ }
   },
-  hurt: function () {   // деду прилетело: глухой удар в торс + дребезг санных полозьев
-    this.tone(120, 0.2, 'sawtooth', 0.24, 52);
-    this.tone(56, 0.28, 'sine', 0.32, 34);
-    this.noise(0.09, 0.18, 520);
-    this.tone(310, 0.1, 'square', 0.06, 290); // дребезг
-  },
-  kill: function () {    // изгнание: сочный «БАМ» + хруст + хвостик
-    this.tone(260, 0.1, 'square', 0.16, 95);
-    this.tone(64, 0.2, 'sine', 0.3, 36);
-    this.noise(0.12, 0.18, 1700);             // хруст
-    this.noise(0.05, 0.1, 5200);              // искра
-  },
-  levelup: function () {   // фанфара: До-Ми-Соль-До + блеск
-    var self = this;
-    var seq = [[523, 0, 0.13], [659, 90, 0.13], [784, 180, 0.13], [1046, 270, 0.22]];
-    seq.forEach(function (n) {
-      setTimeout(function () {
-        self.tone(n[0], n[2] + 0.04, 'triangle', n[2]);
-        self.tone(n[0] * 2, n[2], 'sine', n[2] * 0.3);   // блеск сверху
-      }, n[1]);
-    });
-    setTimeout(function () { self.noise(0.3, 0.05, 6000); }, 270);  // вспышка
-  },
-  zap: function () {
-    this.tone(80, 0.7, 'sawtooth', 0.3, 900);
-    this.noise(0.5, 0.25, 4000);
-  },
-  roar: function () { this.tone(70, 0.8, 'sawtooth', 0.3, 40); this.noise(0.7, 0.2, 500); },
-  gift: function () {
-    this.tone(392, 0.1, 'sine', 0.14);
-    var self = this;
-    setTimeout(function () { self.tone(523, 0.1, 'sine', 0.14); }, 80);
-    setTimeout(function () { self.tone(659, 0.1, 'sine', 0.14); }, 160);
-    setTimeout(function () { self.tone(784, 0.24, 'sine', 0.18); }, 240);
-  },
-  death: function () { this.tone(220, 0.5, 'sawtooth', 0.2, 55); },
-  win: function () {
-    var notes = [392, 523, 659, 784, 1046];
-    var self = this;
-    notes.forEach(function (n, i) {
-      setTimeout(function () { self.tone(n, 0.3, 'square', 0.13); }, i * 130);
-    });
-  },
-  evo: function () {
-    var self = this;
-    [261, 329, 392, 523, 659, 784].forEach(function (n, i) {
-      setTimeout(function () { self.tone(n, 0.25, 'triangle', 0.15); }, i * 70);
-    });
-  },
-  // --- атмосфера 1917 ---
-  howl: function () {   // волчий вой: две скользящие ноты в туман
-    this.tone(340, 1.4, 'sine', 0.12, 250);
-    var self = this;
-    setTimeout(function () { self.tone(300, 1.1, 'sine', 0.1, 210); }, 500);
-  },
-  bell: function () {    // колокол: тяжёлый удар с долгим хвостом
-    this.tone(140, 2.2, 'sine', 0.25, 130);
-    this.tone(281, 1.4, 'sine', 0.1, 270);
-  },
-  grunt: function () {   // дед крякает
-    this.tone(110, 0.09, 'sawtooth', 0.12, 80);
+  // FM-колокольчик: несущая + модулятор ×2.76, яркость гаснет со временем
+  fmT: function (fc, dur, vol, wet) {
+    if (!this.ctx || this.muted) return;
+    try {
+      var t = this.ctx.currentTime;
+      var car = this.ctx.createOscillator(); car.frequency.value = fc;
+      var mod = this.ctx.createOscillator(); mod.frequency.value = fc * 2.76;
+      var mg = this.ctx.createGain();
+      mg.gain.setValueAtTime(fc * 2.2, t);
+      mg.gain.exponentialRampToValueAtTime(1, t + dur * 0.5);
+      var g = this.ctx.createGain();
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      mod.connect(mg); mg.connect(car.frequency);
+      car.connect(g); g.connect(this.master);
+      if (wet) this.send(g, wet);
+      car.start(t); mod.start(t);
+      car.stop(t + dur + 0.02); mod.stop(t + dur + 0.02);
+    } catch (e) { /* пусто */ }
   },
 
-  // ─── БЛИП-РЕЧЬ: слоговые голоса (дед, боссы) — всё синтезом ───
+  // ── ЭФФЕКТЫ v4.0 ──────────────────────────────────────────────────
+  slap: function () {   // ХЛЯСЬ: щелчок кнута → мясистый шлепок → бас-панч
+    this.burstN(0.028, 0.5, 'bandpass', 4200, 900, 2);     // сухой щелчок кнута
+    this.burstN(0.1, 0.3, 'lowpass', 1400, 500, 0.7);      // мясистый шлепок
+    this.osc2('triangle', 200, 70, 0.07, 0.2);             // тело удара
+    this.osc2('sine', 90, 42, 0.16, 0.5, 0.15);            // бас-панч с хвостом в лес
+  },
+  pop: function () {    // короткий «пок» пузыря
+    this.osc2('sine', 560, 760, 0.05, 0.12);
+    this.burstN(0.025, 0.06, 'highpass', 3000, 5200, 1);
+  },
+  gem: function () {    // приз: ледяная капель — два FM-стаканчика
+    this.fmT(1319, 0.28, 0.12, 0.35);
+    var self = this;
+    setTimeout(function () { self.fmT(1760, 0.4, 0.1, 0.45); }, 70);
+  },
+  hurt: function () {   // в торс: глухой удар + дребезг + тонкий звон в ушах
+    this.osc2('sawtooth', 130, 48, 0.2, 0.26);
+    this.osc2('sine', 58, 30, 0.3, 0.42);
+    this.burstN(0.09, 0.16, 'lowpass', 700, 300, 0.7);
+    this.osc2('sine', 2900, 2800, 0.35, 0.02);
+  },
+  kill: function () {   // изгнание: саб-падение + хруст + искра
+    this.osc2('sine', 170, 38, 0.24, 0.5, 0.2);
+    this.osc2('square', 300, 100, 0.08, 0.12);
+    this.burstN(0.14, 0.24, 'bandpass', 1500, 600, 1.6);   // хруст
+    this.burstN(0.05, 0.1, 'highpass', 4500, 7200, 1);     // искра
+  },
+  levelup: function () {   // фанфара До-Ми-Соль-До + тарелка
+    var self = this;
+    [[523, 0], [659, 80], [784, 160], [1046, 240]].forEach(function (n) {
+      setTimeout(function () {
+        self.osc2('triangle', n[0], 0, 0.28, 0.16, 0.3);
+        self.osc2('sine', n[0] * 2, 0, 0.2, 0.06, 0.3);
+      }, n[1]);
+    });
+    setTimeout(function () { self.burstN(0.5, 0.08, 'highpass', 6000, 3000, 0.7, 0.6); }, 240);
+  },
+  zap: function () {    // грибной залп: гул + треск разрядов + саб-удар
+    this.osc2('sawtooth', 55, 420, 0.8, 0.22, 0.3);
+    this.osc2('sine', 120, 34, 0.6, 0.4);
+    var self = this;
+    for (var i = 0; i < 7; i++) {
+      (function (i) {
+        setTimeout(function () {
+          self.burstN(0.03, 0.16, 'highpass', 3500, 6500, 1);
+        }, 60 + i * 90 + Math.random() * 40);
+      })(i);
+    }
+  },
+  roar: function () {   // рык старшего: три расстроенные пилы + саб + реверб
+    var self = this;
+    [52, 53.5, 106].forEach(function (f) {
+      self.osc2('sawtooth', f, f * 0.7, 1.1, 0.16, 0.5);
+    });
+    this.osc2('square', 70, 44, 0.9, 0.13);
+    this.burstN(0.9, 0.14, 'lowpass', 900, 250, 0.7, 0.4);
+    this.osc2('sine', 48, 30, 1.2, 0.4);
+  },
+  gift: function () {   // подарок: пентатоника вверх + блеск
+    var self = this;
+    [392, 494, 587, 784].forEach(function (f, i) {
+      setTimeout(function () { self.osc2('sine', f, 0, 0.18, 0.13, 0.25); }, i * 75);
+    });
+    setTimeout(function () { self.fmT(1568, 0.5, 0.07, 0.5); }, 300);
+  },
+  death: function () {  // гибель: нисходящий стон + далёкий колокол
+    this.osc2('sawtooth', 220, 48, 1.1, 0.2, 0.5);
+    this.osc2('sine', 110, 30, 1.4, 0.3);
+    var self = this;
+    setTimeout(function () { self.bell(); }, 700);
+  },
+  win: function () {    // РАССВЕТ: мажорный марш + тарелельный всплеск
+    var self = this;
+    var seq = [[392, 0], [392, 150], [523, 300], [659, 450], [784, 600], [1046, 780]];
+    seq.forEach(function (n) {
+      setTimeout(function () {
+        self.osc2('triangle', n[0], 0, 0.34, 0.15, 0.4);
+        self.osc2('sine', n[0] / 2, 0, 0.34, 0.08, 0.3);
+      }, n[1]);
+    });
+    setTimeout(function () { self.burstN(0.8, 0.09, 'highpass', 6000, 2500, 0.7, 0.7); }, 780);
+    setTimeout(function () { self.burstN(0.8, 0.07, 'highpass', 5000, 2200, 0.7, 0.7); }, 950);
+  },
+  evo: function () {    // эволюция оружия: арпеджио + шиммер
+    var self = this;
+    [262, 330, 392, 523, 660, 784].forEach(function (f, i) {
+      setTimeout(function () { self.osc2('triangle', f, 0, 0.26, 0.13, 0.35); }, i * 70);
+    });
+    setTimeout(function () { self.fmT(2093, 0.6, 0.06, 0.6); }, 420);
+  },
+  howl: function () {   // волчий вой: глайды с длинным реверб-хвостом
+    this.osc2('sine', 330, 250, 1.5, 0.09, 0.9);
+    var self = this;
+    setTimeout(function () { self.osc2('sine', 294, 216, 1.2, 0.07, 0.9); }, 600);
+  },
+  bell: function () {   // колокол: удар + негармоничные партиалы, хвост в лес
+    var self = this;
+    this.osc2('sine', 132, 128, 2.6, 0.22, 0.9);
+    [[158, 1.8, 0.08], [205, 1.4, 0.05], [264, 1.0, 0.04]].forEach(function (p) {
+      self.osc2('sine', p[0], p[0] * 0.98, p[1], p[2], 0.8);
+    });
+  },
+  grunt: function () { this.osc2('sawtooth', 110, 72, 0.1, 0.13); },
+  heartbeat: function () {   // сердце раненого деда: тук-тук
+    this.osc2('sine', 58, 40, 0.14, 0.5);
+    var self = this;
+    setTimeout(function () { self.osc2('sine', 52, 36, 0.12, 0.38); }, 170);
+  },
+  gust: function () {   // порыв ветра в деревьях
+    this.burstN(1.4, 0.07, 'bandpass', 500, 1100, 0.6, 0.6);
+    var self = this;
+    setTimeout(function () { self.burstN(0.9, 0.05, 'bandpass', 900, 420, 0.7, 0.5); }, 700);
+  },
+  owl: function () {    // филин: у-ху
+    this.osc2('sine', 349, 335, 0.3, 0.05, 0.8);
+    var self = this;
+    setTimeout(function () { self.osc2('sine', 294, 280, 0.45, 0.05, 0.8); }, 350);
+  },
+  fanfare: function () {   // ачивка: два бодрых аккорда
+    var self = this;
+    [[523, 784], [659, 1046]].forEach(function (ch, ci) {
+      ch.forEach(function (f) {
+        setTimeout(function () { self.osc2('triangle', f, 0, 0.2, 0.12, 0.3); }, ci * 160);
+      });
+    });
+  },
+  crunch: function () {   // хруст снега под валенками
+    this.burstN(0.06, 0.08, 'bandpass', 1000, 600, 1.4);
+    this.osc2('triangle', 150, 90, 0.045, 0.05);
+  },
+  crit: function () {   // КРИТ: стальной «ДЗЫНЬ» FM-металлом
+    this.fmT(1568, 0.5, 0.16, 0.4);
+    this.osc2('square', 2093, 2090, 0.16, 0.06);
+  },
+  combo: function (n) {   // серия: фанфарка, тон растёт вместе с серией
+    var base = 700 + Math.min(500, (n || 0) * 12);
+    var self = this;
+    [1, 1.26, 1.5].forEach(function (m, i) {
+      setTimeout(function () { self.osc2('triangle', base * m, 0, 0.12, 0.12, 0.25); }, i * 55);
+    });
+  },
+  cuckoo: function () {   // стенные часы: ку-ку
+    var self = this;
+    this.tone(660, 0.14, 'sine', 0.12, 640);
+    setTimeout(function () { self.tone(520, 0.18, 'sine', 0.12, 500); }, 200);
+  },
 
   _cds: {},
   canSay: function (key, cd) {
@@ -302,12 +480,12 @@ var AU = {
     if (!this.canSay('bv_' + id + '_' + kind, kind === 'spawn' ? 6 : (kind === 'die' ? 4 : 2.2))) return;
     // НАСТОЯЩИЙ рык синтез-голосом: старший лес говорит коронную фразу
     var PH = {
-      alpha:   { spawn: 'Врр! Стая, ко мне!', die: 'Не может быть…', attack: 'Грр!' },
-      shisha:  { spawn: 'Эр-р-р! Тепла хочу!', die: 'Зимы больше нет…', attack: 'Р-р-умпф!' },
-      glavar:  { spawn: 'Хе-хе-хе! Кошелёк или жизнь, дед!', die: 'Продулся…', attack: 'Сдавайся!' },
-      hozyain: { spawn: 'Ту-у-у! С пути уйди!', die: 'Состав сбит…', attack: 'Ту-у!' },
-      metelica:{ spawn: 'Ха-ха-ха! Заметаю, старый!', die: 'Оттаяла…', attack: 'Лети!' },
-      leshiy:  { spawn: 'Хо-хо-хо! Мой лес, дед!', die: 'Лес отпускает…', attack: 'Хо!' }
+      alpha:   { spawn: 'Стая! Тепло близко — рвите его!', die: 'Стая… разбегайтесь…', attack: 'Гр-р-р!' },
+      shisha:  { spawn: 'Шатун пришёл! Жару надышу — со всеми поделюсь!', die: 'В берлогу бы… хоть глазком…', attack: 'ХР-Р-Р!' },
+      glavar:  { spawn: 'Кошелёк или жизнь, старик! Впрочем, давай сразу всё!', die: 'Атаман из меня так себе…', attack: 'Руби его!' },
+      hozyain: { spawn: 'Тракт мой! Пошлину плати, дед, или пополам!', die: 'Тракт… теперь свободен…', attack: 'С дороги!' },
+      metelica:{ spawn: 'Хи-хи-хи! Спляшем, старый? Я поведу!', die: 'Танец… закончен…', attack: 'Кружись!' },
+      leshiy:  { spawn: 'Ты на моей территории, дед! Лес, взять его!', die: 'Комендант… сдал гарнизон…', attack: 'Стоять смирно!' }
     }[id];
     if (PH && PH[kind]) this.playVoice('boss_' + id + '_' + kind, 'boss', PH[kind], id === 'metelica' ? 0.92 : 0.76);
     if (!this.ctx) return;
@@ -407,19 +585,47 @@ var AU = {
   stopVoice: function () {
     if (this.vsrc) { try { this.vsrc.stop(); } catch (e) {} this.vsrc = null; }
   },
-  _startVoice: function (buf, rate, vol) {
+  // эффект-цепь по типу голоса: босс — рык-дисторшн, радио — эфир
+  _voiceChain: function (who) {
+    try {
+      var src = this.ctx.createBufferSource();
+      var g = this.ctx.createGain();
+      var last = src;
+      if (who === 'boss') {
+        // рык: пила-дисторшн + бандпасс «из бочки»
+        var ws = this.ctx.createWaveShaper();
+        var curve = new Float32Array(256);
+        for (var i = 0; i < 256; i++) {
+          var x = i / 128 - 1;
+          curve[i] = Math.tanh(x * 4.2);       // жёсткая клиппер-передаточная
+        }
+        ws.curve = curve;
+        var bf = this.ctx.createBiquadFilter();
+        bf.type = 'bandpass'; bf.frequency.value = 420; bf.Q.value = 0.8;
+        last.connect(ws); ws.connect(bf); last = bf;
+        g.gain.value = 1.35;                   // дисторшн жрёт громкость — вернём
+      } else if (who === 'radio') {
+        // эфир: узкая полоса как у лампового приёмника
+        var rf = this.ctx.createBiquadFilter();
+        rf.type = 'bandpass'; rf.frequency.value = 1500; rf.Q.value = 0.9;
+        last.connect(rf); last = rf;
+      }
+      last.connect(g); g.connect(this.master);
+      return { src: src, g: g };
+    } catch (e) { return null; }
+  },
+  _startVoice: function (buf, rate, vol, who) {
     var self = this;
     try {
       this.stopVoice();                      // новая реплика перебивает старую
-      var src = this.ctx.createBufferSource();
-      var g = this.ctx.createGain();
-      src.buffer = buf;
-      src.playbackRate.value = rate || 1;
-      g.gain.value = vol != null ? vol : 0.95;
-      src.connect(g); g.connect(this.master);
-      src.onended = function () { if (self.vsrc === src) self.vsrc = null; };
-      src.start();
-      this.vsrc = src;
+      var ch = this._voiceChain(who);
+      if (!ch) return false;
+      ch.src.buffer = buf;
+      ch.src.playbackRate.value = rate || 1;
+      ch.g.gain.value = vol != null ? vol : 0.95;
+      ch.src.onended = function () { if (self.vsrc === ch.src) self.vsrc = null; };
+      ch.src.start();
+      this.vsrc = ch.src;
       return true;
     } catch (e) { return false; }
   },
@@ -432,7 +638,7 @@ var AU = {
     if (who === 'boss') rate = rate || 0.76;        // рык: ниже и медленнее
     else rate = rate || 1;
     var vol = who === 'radio' ? 0.7 : 0.95;
-    if (this.voiceBuf[fid]) return this._startVoice(this.voiceBuf[fid], rate, vol);
+    if (this.voiceBuf[fid]) return this._startVoice(this.voiceBuf[fid], rate, vol, who);
     try {
       fetch('voice/' + fid + '.mp3').then(function (r) {
         if (!r.ok) throw 0;
@@ -443,12 +649,24 @@ var AU = {
         });
       }).then(function (buf) {
         self.voiceBuf[fid] = buf;
-        self._startVoice(buf, rate, vol);
+        self._startVoice(buf, rate, vol, who);
+        if (who === 'radio') self._crackle(buf.duration);   // треск эфира под диктора
       }).catch(function () {
         if (text) self.dedTalk(text, 'norm', true);   // файла нет — блип-фолбэк
       });
       return true;    // файл загружается и заговорит
     } catch (e) { return false; }
+  },
+  // потрескивание лампового приёмника на всю длину реплики
+  _crackle: function (dur) {
+    var self = this, n = Math.min(22, Math.floor(dur / 0.35));
+    for (var i = 0; i < n; i++) {
+      (function (d) {
+        setTimeout(function () {
+          self.burstN(0.02, 0.035, 'highpass', 4000, 6500, 1);
+        }, d);
+      })(200 + Math.random() * dur * 1000);
+    }
   },
   // прогрев кэша ключевых реплик (после разблокировки звука)
   prewarm: function () {
@@ -482,13 +700,43 @@ var AU = {
     [392.0, 2, 196.0], [392.0, 1, 0], [392.0, 1, 0], [349.2, 2, 0], [392.0, 2, 0], [493.9, 4, 246.9],
     [440.0, 2, 220.0], [392.0, 2, 0], [349.2, 2, 0], [329.6, 3, 164.8], [0, 3, 0]
   ],
+  droneNode: null,
+  droneOn: function (on) {   // низкий гул земли при живом старшем леса
+    if (!this.ctx || this.muted) return;
+    if (on && !this.droneNode) {
+      try {
+        var o1 = this.ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 41;
+        var o2 = this.ctx.createOscillator(); o2.type = 'sawtooth'; o2.frequency.value = 41.6;
+        var f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 130;
+        var g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.16, this.ctx.currentTime + 1.2);
+        o1.connect(f); o2.connect(f); f.connect(g); g.connect(this.master);
+        this.send(g, 0.4);
+        o1.start(); o2.start();
+        this.droneNode = { o1: o1, o2: o2, g: g };
+      } catch (e) { /* пусто */ }
+    } else if (!on && this.droneNode) {
+      try {
+        var d = this.droneNode, t = this.ctx.currentTime;
+        d.g.gain.setValueAtTime(d.g.gain.value, t);
+        d.g.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
+        d.o1.stop(t + 1.6); d.o2.stop(t + 1.6);
+      } catch (e) { /* пусто */ }
+      this.droneNode = null;
+    }
+  },
   musicTick: function (dt) {
     if (!this.ctx || this.muted || !this.musicOn) return;
     this.musicT -= dt;
     if (this.musicT > 0) return;
     var st = this.MEL[this.musicStep % this.MEL.length];
     this.musicStep++;
-    this.musicT = st[1] * 0.3;
+    // темп живее, когда страшно: осада или живой старший
+    var beat = 0.3;
+    if (G.bossAlive || G.siege) beat = 0.24;
+    else if (G.enemies.length > 14) beat = 0.27;
+    this.musicT = st[1] * beat;
     if (st[0] > 0) {
       this.tone(st[0], 1.4, 'sine', 0.055);          // голос шкатулки
       this.tone(st[0] * 2, 0.5, 'sine', 0.018);      // стеклянный обертон
@@ -635,6 +883,27 @@ function clampToWorld(o, pad) {
     return true;   // упёрся в край
   }
   return false;
+}
+
+// СЛЕДЫ ВАЛЕНОК: тающие отпечатки за дедом
+function drawFootprints() {
+  if (!G.footprints) return;
+  ctx.save();
+  for (var i = 0; i < G.footprints.length; i++) {
+    var f = G.footprints[i];
+    var al = 0.22 * (1 - f.t / 26);
+    if (al <= 0.01) continue;
+    ctx.globalAlpha = al;
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.a);
+    ctx.fillStyle = '#0a0e1c';
+    ctx.beginPath();
+    ctx.ellipse(f.side * 4, 0, 5, 8.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);   // сброс локального поворота
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
 // СНЕЖНАЯ СТЕНА: по краю мира клубится непроходимая метель
@@ -1067,6 +1336,30 @@ function drawBush(x, y) {
   ctx.restore();
 }
 
+var bigFlakes = [];
+for (var bf = 0; bf < 26; bf++) {
+  bigFlakes.push({ x: Math.random() * VW, y: Math.random() * VH, s: rnd(1.8, 3.4), v: rnd(36, 70), d: rnd(0.4, 1) });
+}
+// ПЕРЕДНИЙ ПЛАН: крупный снег летит поверх мира — глубина кадра
+function drawForegroundSnow(dt) {
+  ctx.save();
+  for (var i = 0; i < bigFlakes.length; i++) {
+    var f = bigFlakes[i];
+    f.y += f.v * dt;
+    f.x += Math.sin(performance.now() / 900 + i) * 10 * dt - CAM.x * 0.012 * f.d;
+    if (f.y > VH + 8) { f.y = -8; f.x = Math.random() * VW; }
+    if (f.x > VW + 8) f.x = -8;
+    if (f.x < -8) f.x = VW + 8;
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#e8f0fa';
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, f.s, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
 function drawSnowfall() {
   for (var i = 0; i < snowFlakes.length; i++) {
     var s = snowFlakes[i];
@@ -1196,6 +1489,7 @@ var G = {
   combo: 0,           // текущая серия убийств без передышки
   comboT: 0,          // сколько ещё живёт серия
   comboReward: 0,     // сколько грибов уже выпало с серии
+  whiteFlash: 0,      // белая вспышка (смерть старшего)
   levelQueue: 0        // сколько левел-апов ждут выбора карточек
 };
 
@@ -1822,7 +2116,7 @@ function killEnemy(e) {
   if (G.combo > G.stats.maxCombo) G.stats.maxCombo = G.combo;
   if (G.combo > 0 && G.combo % 10 === 0) {
     floatText(e.x, e.y - 34, 'СЕРИЯ ×' + G.combo + '!', '#ff7ad9', 19, 1.3);
-    AU.combo();
+    AU.combo(G.combo);
     var cr = Math.floor(G.combo / 10);
     for (var cb = 0; cb < cr; cb++) {
       G.pickups.push({
@@ -1830,18 +2124,24 @@ function killEnemy(e) {
         vx: rnd(-60, 60), vy: rnd(-60, 60), t: 0, r: 6, life: 9
       });
     }
+    if (G.combo === 25) dedEvent('combo25');
     if (G.combo === 50) unlockAch('combo50');
   } else if (G.combo >= 5 && G.combo % 5 === 0) {
-    AU.combo();
+    AU.combo(G.combo);
   }
 
   // ПУФ! Изгнание в конфетти — мультяшка исчезает
   spawnConfetti(e.x, e.y, e.boss ? 60 : (e.elite ? 26 : 12), e.boss ? 1.8 : 1);
   floatText(e.x, e.y - e.r - 18, 'ПУФ!', '#ff7ad9', 18);
   spawnSpark(e.x, e.y, 6, '#fff');
+  if (e.elite && !e.boss) dedEvent('elitekill');
 
   hitstop = Math.max(hitstop, e.boss ? 0.34 : (e.elite ? 0.07 : 0.028));   // босс: сочное слоу-мо победы
   CAM.kick(e.boss ? 0.9 : (e.elite ? 0.3 : 0.08));
+  if (e.boss) {
+    AU.droneOn(false);                    // старший пал — гул земли стихает
+    G.whiteFlash = 0.5;                   // белая вспышка победы
+  }
   AU.kill();
 
   // трофеи: грибы-опыт (ГАСНУТ — жадность = риск), сердца, свёртки
@@ -2392,11 +2692,15 @@ function spawnBoss(idx) {
   e.stateT = 2;
   e.chargeA = 0;
   G.bossAlive = e;
+  AU.droneOn(true);
   AU.roar();
   AU.bossVoice(b.id, 'spawn');
   CAM.kick(0.8);
   announce('⚠ ' + b.name + ' ⚠\n' + b.taunt + (loop ? ' (виток ' + (loop + 1) + ')' : ''), 2600, true);
-  setTimeout(function () { if (G.state === 'play') dedEvent('boss'); }, 1200);
+  setTimeout(function () {
+    if (G.state !== 'play') return;
+    dedEvent(loop >= 1 ? 'bossloop' : 'boss');
+  }, 1200);
   return e;
 }
 
@@ -2667,6 +2971,7 @@ function updateDirector(dt) {
   if (G.mode === 'classic' && !G.siege && G.t >= SIEGE_TIME) {
     G.siege = true;
     AU.bell();
+    dedEvent('siege');
     announce('Ⰰ ОСАДА!\nлес идёт ва-банк', 2800);
     CAM.kick(0.4);
     // страж осады: элитный медведь-переросток возглавляет последний штурм
@@ -2730,6 +3035,13 @@ function updateDirector(dt) {
   if (G.comboT > 0) {
     G.comboT -= dt;
     if (G.comboT <= 0) G.combo = 0;
+  // следы тают: у каждого своя жизнь, потом выпадает снег
+  if (G.footprints) {
+    for (var fi = G.footprints.length - 1; fi >= 0; fi--) {
+      G.footprints[fi].t += dt;
+      if (G.footprints[fi].t > 26) G.footprints.splice(fi, 1);
+    }
+  }
   }
 
   // СЛЕДЫ НА СНЕГУ: дед топает — остаются вмятины (гаснут за ~6 сек)
@@ -3034,6 +3346,7 @@ function applyCard(card) {
   else if (card.kind === 'evo') {
     p.evolved[card.id] = true;
     AU.evo();
+    dedEvent('evo');
     unlockAch('evo1');
     announce('✦ ' + EVOS[card.id].name + ' ✦', 2400, true);
     spawnConfetti(p.x, p.y, 50, 1.5);
@@ -3163,7 +3476,30 @@ var DED_LINES = [
   '«Ещё один порыв ветра — и я обижусь»',
   '«Держись, дед. Дед, держись»',
   '«Видал, как я их?.. Видал?»',
-  '«Ах ты ж снеговик недоделанный»'
+  '«Ах ты ж снеговик недоделанный»',
+  // v4.0: дед разогнался
+  '«Я в сорок первом в окопах сидел. А вы — снег»',
+  '«Тулуп — государственное имущество. Помнёте — отвечу»',
+  '«У меня сердце как у коня. Конь тоже был упрямый»',
+  '«Грибы — они как люди: яркий — значит, вредный»',
+  '«Бабка говорила: не спорь с лесом. Ну я и не спорю. Я его бью»',
+  '«Костей не оставлю. Костей у меня и своих мало»',
+  '«Это не мороз. Мороз у нас в понедельник будет»',
+  '«Валентки у меня злые. Сам вязал»',
+  '«Лес, ты меня боишься? Правильно делаешь»',
+  '«Двадцать лет как двадцать лет. Ничего не изменилось. Кроме всего»',
+  '«Манька у меня кошка учёная. Она уже поняла, чем кончится»',
+  '«Мне бы только до рассвета. А там посмотрим, кто из нас старший»',
+  '«Топор — инструмент номер один. Лопата — номер два. Всё остальное — от лукавого»',
+  '«Не мешай, дед думает. Дед редко думает, но метко»',
+  '«У вас лапы, а у меня характер. Характер страшнее»',
+  '«Печь бы растопить. Да печью вы не дадите»',
+  '«Я старый, но медленный. Хитрый, значит»',
+  '«Живём один раз. Я вот, например, до сих пор живу»',
+  '«Пурга за окном, самовар в углу. Красота, только вы всё портите»',
+  '«Снег идёт, дед идёт. Все идут. Один лес стоит, дурак»',
+  '«Вот дожить бы до пенсии. Ага. Триста лет как собираюсь»',
+  '«Тише, мыши, кот на крыше. А я под крышей. С топором»'
 ];
 
 // Событийные реплики: дед реагирует на происходящее
@@ -3183,20 +3519,27 @@ var DED_EVENTS = {
   levelup: ['«Во, брат!»', '«Силен ещё!»', '«Ух ты ж!»'],
   win: ['«РАССВЕТ! Дожили!»', '«Живой, Манька!»'],
   death: ['«Манька… прости…»', '«Грибы… всё… грибы…»'],
-  ach: ['«Вот это я ещё могу!»', '«Медаль мне. Железную»', '«Заслужил, считаю»']
+  ach: ['«Вот это я ещё могу!»', '«Медаль мне. Железную»', '«Заслужил, считаю»'],
+  // v4.0: новые озвученные события
+  combo25: ['«Двадцать пять! Считал, не сбился!»', '«Вот это я разошёлся!»', '«Держите, твари, ещё немного!»'],
+  siege: ['«Ну, лес, пошла осада. Держимся!»', '«Всё, шуточки кончились»', '«Валерьянки бы… да некогда»'],
+  elitekill: ['«Старшой был. Больше нет»', '«Значок мне за этого»', '«Элита, говоришь? Лежи теперь»'],
+  evo: ['«Ох ты ж! Инструмент-то повзрослел!»', '«Вот это по-нашему!»', '«Дед и в оружии понимает!»'],
+  bossloop: ['«Опять вы?! Да сколько вас там!»', '«Второй заход? Ну-ну»', '«А вас, оказывается, много…»']
 };
 
 // интонация голоса по событию
 var DED_MOODS = {
   hurt: 'pain', lowhp: 'pain', death: 'sad',
   win: 'exc', bosskill: 'exc', zap: 'exc', levelup: 'exc', heart: 'exc',
-  start: 'norm', boss: 'norm', gold: 'norm', dawn: 'norm', firstkill: 'norm', endless5: 'norm', ach: 'exc'
+  start: 'norm', boss: 'norm', gold: 'norm', dawn: 'norm', firstkill: 'norm', endless5: 'norm',
+  ach: 'exc', combo25: 'exc', siege: 'norm', elitekill: 'exc', evo: 'exc', bossloop: 'norm'
 };
 
 var dedSayT = 0;
 function dedSay(force) {
   if (!force && dedSayT > G.t) return;
-  dedSayT = G.t + 14;
+  dedSayT = G.t + 12;
   var p = G.player;
   if (!p) return;
   var di = Math.floor(Math.random() * DED_LINES.length);
@@ -3225,14 +3568,16 @@ function dedEvent(type) {
 // Пристань-Тихая вещает в пустоту. Дед слушает — иначе сойти с ума.
 
 var RADIO_LINES = [
-  { t: 22,  txt: '📻 «Пристань-Тихая» вызывает… есть кто живой? У нас керосин кончился' },
+  { t: 22,  txt: '📻 «Пристань-Тихая» вызывает… есть кто живой? Приём… керосин кончился, но эфир работает' },
   { t: 95,  txt: '📻 …сводка с фронта: фронт ушёл на восток. Все. Никто не заметил' },
-  { t: 155, txt: '📻 …гражданам велено сидеть по домам. Граждане, вы слышите? Сидеть' },
+  { t: 155, txt: '📻 …гражданам велено сидеть по домам. Граждане, вы слышите? Сидеть по домам' },
   { t: 245, txt: '📻 …на разъезде Заря замечен движущийся лес. Подтвердить нечем: очевидцев нет' },
-  { t: 330, txt: '📻 …не ешьте жёлтый снег. И красный тоже не ешьте' },
-  { t: 420, txt: '📻 …поезд №7 не придёт. Вообще. Не ждите' },
-  { t: 480, txt: '📻 …метель усиливается. Кто в поле — тому крышка, кто в избе — двойная' },
-  { t: 555, txt: '📻 …если слышите вой — не отвечайте. Вой — не собака, вой — лес' }
+  { t: 330, txt: '📻 …медпункт напоминает: жёлтый снег не ешьте. Красный тоже. Вообще ничего жёлтого' },
+  { t: 420, txt: '📻 …поезд номер семь не придёт. Вообще никогда. Расписание отменено вместе с поездом' },
+  { t: 480, txt: '📻 …метель усиливается. Кто в поле — тому крышка, кто в избе — двойная с обоями' },
+  { t: 520, txt: '📻 …передаём вальс для тех, кто ещё танцует. Остальным — по расписанию' },
+  { t: 555, txt: '📻 …если слышите вой — не отвечайте. Вой — не собака, вой — лес' },
+  { t: 575, txt: '📻 …дежурная смена «Пристань-Тихой» прощается. Света больше нет, есть рассвет' }
 ];
 
 var RADIO_ENDLESS = [
@@ -3241,7 +3586,9 @@ var RADIO_ENDLESS = [
   '📻 …дед, ты ещё там? Мы в тебя верили… кажется',
   '📻 …время на часах кончилось. Часы тоже',
   '📻 …повторяю: рассвета в эфире нет. Дежурство продолжается',
-  '📻 …кто взял лампу? Лампу взял лес'
+  '📻 …кто взял лампу? Лампу взял лес',
+  '📻 …за окном чьи-то следы. Следы без сапог',
+  '📻 …приёмник греется, дед. Как и всё в этом мире'
 ];
 
 function updateRadio(dt) {
@@ -3449,6 +3796,8 @@ function announce(txt, ms, rainbow) {
 
 // ══════════════════════════════════════════════════ РЕНДЕР ══════════════
 
+var renderDT = 0.016;   // кадр-тайм для эффектов внутри render
+
 function render() {
   ctx.save();
   // масштаб и камера
@@ -3457,6 +3806,7 @@ function render() {
   ctx.translate(-CAM.x + CAM.shakeX, -CAM.y + CAM.shakeY);
 
   drawGround();
+  drawFootprints();
   if (G.player) {
     drawPickups();
     drawCrowMarks();
@@ -3474,6 +3824,7 @@ function render() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   drawAurora();
   drawSnowfall();
+  if (G.state === 'play' || G.state === 'pause') drawForegroundSnow(renderDT);
 
   // РАССВЕТ: последняя минута — восток наливается золотом
   if (G.dawn && G.state === 'play') {
@@ -3551,6 +3902,12 @@ function render() {
 
   // босс-бар
   if (G.bossAlive && !G.bossAlive.dead) drawBossBar();
+  // белая вспышка на смерть старшего — поверх всего мира
+  if (G.whiteFlash > 0) {
+    G.whiteFlash -= renderDT;
+    ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.85, G.whiteFlash * 1.7).toFixed(3) + ')';
+    ctx.fillRect(0, 0, VW, VH);
+  }
   ctx.restore();
 }
 
@@ -4570,6 +4927,19 @@ function drawBossBar() {
 var hudT = 0;
 
 function updateHUD(dt) {
+  // СЕРДЦЕ ДЕДА: при HP<30% стучит в груди и в колонках
+  var pl = G.player;
+  if (G.state === 'play' && pl) {
+    var hpK = pl.hp / pl.maxHp;
+    if (hpK < 0.3) {
+      G._hbT = (G._hbT || 0) - dt;
+      if (G._hbT <= 0) {
+        G._hbT = 0.55 + hpK * 1.2;           // чем меньше HP, тем чаще
+        AU.heartbeat();
+      }
+    }
+  }
+
   hudT -= dt;
   if (hudT > 0) return;
   hudT = 0.1;
@@ -4653,6 +5023,7 @@ function startRun(mode) {
   particles = [];
   floaters = [];
   G.kills = 0;
+  G.footprints = [];
   G.combo = 0; G.comboT = 0;
   G.statsButts = 0; G.statsCrits = 0; G._bossButtPick = 0;
   G.cuckooT = 60;
@@ -4712,6 +5083,8 @@ function endRun(winFlag) {
   G.won = winFlag;
   G.bossAlive = null;
   G.radioOn = false;
+  AU.droneOn(false);          // гул земли — долой, ночь кончилась
+  AU.stopVoice();
   canvas.style.filter = '';
 
   if (winFlag) {
@@ -4885,6 +5258,23 @@ function tick(ts) {
       if (mv.x || mv.y) {
         p.x += mv.x * p.speed * speedMul() * dt;
         p.y += mv.y * p.speed * speedMul() * dt;
+        // СЛЕДЫ НА СНЕГУ: каждые 26px пути — отпечаток валенка
+        G._stepAcc = (G._stepAcc || 0) + p.speed * speedMul() * dt;
+        if (G._stepAcc > 26) {
+          G._stepAcc = 0;
+          G._side = !G._side;   // левый-правый-левый…
+          G.footprints = G.footprints || [];
+          G.footprints.push({ x: p.x, y: p.y, a: Math.atan2(mv.y, mv.x), side: G._side ? 1 : -1, t: 0 });
+          if (G.footprints.length > 90) G.footprints.splice(0, G.footprints.length - 90);
+        }
+        // комья снега из-под валенок при живом беге
+        if (Math.random() < dt * 6 && (Math.abs(mv.x) + Math.abs(mv.y)) > 0.3) {
+          particles.push({
+            kind: 'snowpuff', x: p.x - mv.x * 10, y: p.y - mv.y * 10,
+            vx: -mv.x * rnd(20, 60) + rnd(-14, 14), vy: -mv.y * rnd(20, 60) + rnd(-14, 14),
+            t: 0, life: rnd(0.25, 0.45), size: rnd(1.5, 3)
+          });
+        }
         // КРАЙ МИРА: дальше метель — деда запирает в лесной чаше
         if (clampToWorld(p, p.r)) {
           if (Math.random() < dt * 1.4) {
@@ -4923,6 +5313,13 @@ function tick(ts) {
     CAM.update(dt);
     updateHUD(dt);
     AU.musicTick(dt);
+    // амбиент: редкие порывы ветра, иногда филин (когда вокруг тихо)
+    G._ambT = (G._ambT || rnd(14, 24)) - dt;
+    if (G._ambT <= 0) {
+      G._ambT = rnd(16, 34);
+      if (G.enemies.length < 4 && Math.random() < 0.4) AU.owl();
+      else AU.gust();
+    }
   } else if (G.state === 'menu' || G.state === 'help') {
     // меню: лёгкий живой фон
     G.t += dt * 0.3;
@@ -4932,6 +5329,7 @@ function tick(ts) {
   }
 
   if (G.player || G.state === 'menu' || G.state === 'help') {
+    renderDT = dt;
     render();
     updateSnow(dt);
   }
