@@ -356,8 +356,11 @@
     els.heroFlavor = el('div', 'menu-hero-flavor', secHero);
     updateHeroSummary();
 
-    // --- дополнительно: зерно мира ----------------------------------------
-    var extra = el('div', 'menu-extra', wrap);
+    var actions = el('div', 'menu-actions', wrap);
+
+    // ЗЕРНО МИРА — В ПАНЕЛЬ КНОПОК (ЭТАП 12): отдельный блок над кнопками
+    // съедал строку и растягивал меню в прокрутку. Теперь одна строка.
+    var extra = el('div', 'menu-extra', actions);
     var exLbl = el('label', 'menu-extra-lbl', extra);
     setText(exLbl, 'зерно мира:');
     els.seed = el('input', 'menu-seed', extra);
@@ -366,7 +369,8 @@
     els.seed.placeholder = 'случайное';
     els.seed.title = 'Одинаковые числа — одинаковый мир. Пусто — случайный мир.';
     var btnRndSeed = el('button', 'ws-btn menu-btn-small', extra);
-    setText(btnRndSeed, '⟲ случайное');
+    setText(btnRndSeed, '⟲');
+    btnRndSeed.title = 'Случайное зерно мира';
     btnRndSeed.addEventListener('click', function () {
       snd('click');
       els.seed.value = String((Math.random() * 1e9) >>> 0);
@@ -374,8 +378,6 @@
 
     // --- сообщения и кнопки ------------------------------------------------
     els.err = el('div', 'menu-err hidden', wrap);
-
-    var actions = el('div', 'menu-actions', wrap);
 
     els.btnStart = el('button', 'ws-btn primary menu-btn-start', actions);
     setText(els.btnStart, 'Начать');
@@ -390,19 +392,11 @@
     btnRnd.title = 'Судьба сама выберет профессию и черты.';
     btnRnd.addEventListener('click', onRandomHero);
 
-    // Демо-прохождение: автопилот сам играет партию до парохода (js/ui/demo.js)
-    var btnDemo = el('button', 'ws-btn demo-btn', actions);
-    setText(btnDemo, '▶ Демо-прохождение');
-    btnDemo.title = 'Автопилот сам сыграет всю партию: обыски, изгнания, факелы, ' +
-      'Грибной Зов и тарелка. Смотри и ищи баги. Журнал — в .txt.';
-    btnDemo.addEventListener('click', onDemo);
-
-    // Рой агентов: очередь дедов-личностей играет партии подряд (js/ai/swarm.js)
-    var btnSwarm = el('button', 'ws-btn demo-btn', actions);
-    setText(btnSwarm, '🤖 Рой агентов');
-    btnSwarm.title = 'Несколько дедов-агентов по очереди проходят игру: каждый со ' +
-      'своим характером и стратегией. Записи — в Кинозале.';
-    btnSwarm.addEventListener('click', onSwarm);
+    // ДЕВ-КНОПКИ УБРАНЫ ИЗ МЕНЮ (ЭТАП 12): «▶ Демо-прохождение» и
+    // «🤖 Рой агентов» — инструменты разработки, игроку не нужны:
+    // их готовые плёнки уже поставляются с игрой (recordings/, Кинозал).
+    // Сами модули живы: демо/рой запускаются из консоли
+    // (WS.Demo.start() / WS.Swarm) и из тестов scripts/tests/.
 
     // Кинозал: записи прохождений на любой скорости (js/ui/cinema.js)
     var btnCinema = el('button', 'ws-btn demo-btn', actions);

@@ -309,8 +309,32 @@
       ctx.fillRect(0, 0, cv.width, cv.height);
     }
 
+    // КИНЕМАТОГРАФИЧНАЯ ПОЛОСА НЕБА (ЭТАП 12): горизонтальный градиент
+    // сверху кадра — рассвет/закат заливают небо тёплым, ночь — глубоким
+    // индиго. Даёт «плёночную» глубину: мир больше не плоский серый.
+    var sky = null;
+    if (t >= 5 && t < 8.5) sky = ['rgba(255,176,102,0.20)', 'rgba(255,120,80,0.08)', 'rgba(0,0,0,0)'];
+    else if (t >= 15.5 && t < 19.5) sky = ['rgba(255,140,84,0.26)', 'rgba(214,90,120,0.10)', 'rgba(0,0,0,0)'];
+    else if (t >= 19.5 || t < 4.5) sky = ['rgba(26,34,84,0.34)', 'rgba(12,16,48,0.16)', 'rgba(0,0,0,0)'];
+    if (sky) {
+      var skyH = Math.round(cv.height * 0.42);
+      var skyG = ctx.createLinearGradient(0, 0, 0, skyH);
+      skyG.addColorStop(0, sky[0]);
+      skyG.addColorStop(0.62, sky[1]);
+      skyG.addColorStop(1, sky[2]);
+      ctx.fillStyle = skyG;
+      ctx.fillRect(0, 0, cv.width, skyH);
+    }
+
     var polar = WS.Time.isPolarNight ? WS.Time.isPolarNight() : false;
     var maxDark = polar ? 0.93 : 0.88;
+    // КИНОЗАЛ: «ночная съёмка» — плёнки начинаются в полночь, а в
+    // мире-призраке нет костров; честная тьма 0.88 делала кадр чёрным
+    // (игру бота не было видно). В режиме просмотра затемнение мягкое,
+    // ночь остаётся ночью, но мир читается — как камера с прибором.
+    if (WS.Cinema && WS.Cinema.isOpen && WS.Cinema.isOpen()) {
+      maxDark = Math.min(maxDark, 0.52);
+    }
     if (darkness <= 0.04) return;
 
     var alpha = darkness * maxDark;
@@ -348,8 +372,10 @@
     ctx.drawImage(lightCv, 0, 0);
 
     // тёплый блик окон: аддитивное свечение КЭШИРОВАННЫМ спрайтом (только L.win)
+    // ЭТАП 12: ночью окна горят ярче (0.5→0.72) и шире — «зимняя сказка»:
+    // тёплые янтарные окна в синей ночи, главный красивый кадр игры
     var glowSpr = getWindowGlowSprite();
-    var glowA = Math.min(0.5, darkness * 0.55);
+    var glowA = Math.min(0.72, darkness * 0.8);
     if (glowA > 0.03) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -358,7 +384,7 @@
         if (!WL.win) continue;
         var ws2 = M.toScreen(WL.x - WS.Cam.cx, WL.y - WS.Cam.cy);
         var wsx = c.x + ws2.x * WS.Cam.zoom, wsy = c.y + ws2.y * WS.Cam.zoom;
-        var wr = (WL.r || 40) * WS.Cam.zoom * 1.35;
+        var wr = (WL.r || 40) * WS.Cam.zoom * 1.55;
         if (wsx < -wr || wsy < -wr || wsx > cv.width + wr || wsy > cv.height + wr) continue;
         ctx.globalAlpha = glowA;
         ctx.drawImage(glowSpr, wsx - wr, wsy - 6 * WS.Cam.zoom - wr, wr * 2, wr * 2);
@@ -417,7 +443,13 @@
       vctx.fillStyle = g;
       vctx.fillRect(0, 0, cv.width, cv.height);
     }
+    // НОЧЬЮ ВИНЬЕТКА ГЛУБЖЕ (ЭТАП 12): тьма сгущается к краям кадра —
+    // «плёночный» кадр, взгляд деда фокусируется в центре
+    var nightK = 1 - (WS.Time && WS.Time.light ? WS.Time.light() : 1);
+    ctx.save();
+    ctx.globalAlpha = 0.75 + nightK * 0.25;
     ctx.drawImage(vignette, 0, 0);
+    ctx.restore();
   }
 
   WS.boot(function initGfx() {

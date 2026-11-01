@@ -80,6 +80,12 @@
     G.running = false;                  // НИКАКОЙ симуляции — только рендер
     try { WS.Cam.follow = p; } catch (e6) { /* пусто */ }
     try { WS.Cam.cx = p.x; WS.Cam.cy = p.y; } catch (e7) { /* пусто */ }
+    // ФОНАРЬ ДЕДА-ПРИЗРАКА: тёплый ореол, следует за призраком по плёнке.
+    // Мир-призрак пуст (ни костров, ни окон) — без него ночная часть
+    // плёнки была бы чёрной даже с «ночной съёмкой» gfx.js.
+    try {
+      C.light = WS.World.addLight({ x: p.x, y: p.y, r: 76, a: 0.98, flicker: true, fire: true });
+    } catch (eL) { C.light = null; }
     return p;
   }
 
@@ -199,6 +205,8 @@
       p.sprFrame = Math.floor(C.ghost.walkT * 8) % 4;
       p.hp = C.lastStat.hp;
       try { WS.Cam.cx = p.x; WS.Cam.cy = p.y; } catch (e) { /* пусто */ }
+      // фонарь деда-призрака ходит вместе с ним (см. buildGhostWorld)
+      if (C.light) { C.light.x = p.x; C.light.y = p.y; }
     }
     // время суток: пишем прямо в состояние — освещение оживает
     if (g && g.time) {
@@ -346,6 +354,12 @@
       prep(rec);
       var m = rec.meta || {};
       buildGhostWorld(m.seed || 1917, m.prof);
+      // ГЛАВНОЕ: спрятать меню. Кинозал — полупрозрачный оверлей (rgba
+      // .82) над миром-призраком; непрозрачный тёмный фон меню (#070a10,
+      // z-200) полностью съедал картинку — игрок видел чёрный экран
+      // вместо игры бота. Меню вернёт restoreAfter() при закрытии.
+      try { if (WS.Ui && WS.Ui.hideMenu) WS.Ui.hideMenu(); } catch (eM) { /* пусто */ }
+      dom.root.classList.add('playing');     // снять тёмную вуаль (см. css)
       dom.root.querySelector('.cn-list').classList.add('hidden');
       dom.root.querySelector('.cn-player').classList.remove('hidden');
       dom.root.querySelector('.cn-end').classList.add('hidden');
@@ -543,7 +557,10 @@
     C.open = false;
     C.playing = false;
     C.rec = null;
-    if (dom.root) dom.root.classList.add('hidden');
+    if (dom.root) {
+      dom.root.classList.add('hidden');
+      dom.root.classList.remove('playing');   // снять режим плейера с корня
+    }
     // вернуть меню/пустой мир
     restoreAfter();
   }
@@ -564,6 +581,7 @@
     if (!C.open) return;
     C.playing = false;
     C.rec = null;
+    dom.root.classList.remove('playing');   // вернуть тёмную вуаль списку
     var player = dom.root.querySelector('.cn-player');
     if (player) player.classList.add('hidden');
     var end = dom.root.querySelector('.cn-end');

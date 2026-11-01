@@ -94,6 +94,10 @@ body.crazy-high::after {
   backdrop-filter: blur(2px);
   padding: clamp(6px, 2vmin, 24px);
 }
+/* Изба Экспедиций открывается ИЗ главного меню (z-200): по #id,
+   иначе поздний .ws-screen{z-index:100} из ui.css прижимал её под
+   меню и экран «не работал» (клики уходили в карточки меню) */
+#ws-exped { z-index: 300; }
 .ws-tree-screen.hidden { display: none; }
 .ws-tree-box {
   width: min(96vw, 980px);

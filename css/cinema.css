@@ -3,6 +3,11 @@
    должен накрывать его целиком, как Изба Экспедиций. Селектор по id
    нужен, чтобы перебить поздний .ws-screen{z-index:100} из ui.css */
 #ws-cinema { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 12, 0.82); }
+/* РЕЖИМ ПЛЕЕРА: вуаль снимается — иначе мир-призрак под ней темнел
+   до почти чёрного (avg 183 → ~36) и «игру бота не было видно».
+   Тёмная вуаль остаётся только у списка записей (панель со своим
+   непрозрачным фоном). */
+#ws-cinema.playing { background: transparent; }
 .ws-cinema.hidden { display: none; }
 
 /* --- список записей --- */
