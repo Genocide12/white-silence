@@ -73,13 +73,27 @@ var AU = {
   ctx: null,
   master: null,
   muted: false,
+  vol: 0.62,
+
+  setVol: function (v) {
+    this.vol = clamp(v, 0, 1);
+    if (this.master) this.master.gain.value = this.muted ? 0 : this.vol;
+    var hint = document.getElementById('vol-hint');
+    if (hint) {
+      hint.textContent = '🔊 ' + Math.round(this.vol * 100) + '%';
+      hint.style.opacity = 1;
+      clearTimeout(this._volT);
+      var self = this;
+      this._volT = setTimeout(function () { hint.style.opacity = 0; }, 900);
+    }
+  },
 
   init: function () {
     if (this.ctx) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = this.vol;
       this.master.connect(this.ctx.destination);
     } catch (e) { /* без звука тоже можно */ }
   },
@@ -222,7 +236,7 @@ var AU = {
 
   /** Голос деда: скрипучий, фраза разбирается на слоги-блипы. */
   dedTalk: function (phrase, mood, force) {
-    if (!force && !this.canSay('ded', mood === 'pain' ? 2.5 : 4)) return false;
+    if (!force && !this.canSay('ded', mood === 'pain' ? 1.6 : 2.6)) return false;
     if (force) this.canSay('ded', 0.6);   // даже важное — не чаше раза в 0.6с
     if (!this.ctx || this.muted) return true;   // звука нет — текст всё равно покажем
     var base = mood === 'pain' ? 145 : (mood === 'exc' ? 118 : 98);
@@ -247,8 +261,8 @@ var AU = {
     }
     this.voice(notes, {
       type: 'sawtooth',
-      cut: mood === 'pain' ? 700 : 520,
-      vib: 5, vol: mood === 'sad' ? 0.13 : 0.11,
+      cut: mood === 'pain' ? 900 : 760,
+      vib: 5, vol: mood === 'sad' ? 0.34 : (mood === 'pain' ? 0.36 : 0.33),
       gap: mood === 'sad' ? 0.09 : 0.035
     });
     return true;
@@ -262,32 +276,32 @@ var AU = {
       alpha: {    // ВОЖАК: вой в туман
         spawn: [{ f: 320, d: 0.4, s: 400 }, { f: 400, d: 0.9, s: 200 }],
         attack: [{ f: 380, d: 0.25, s: 260 }],
-        base: 320, opt: { type: 'sine', cut: 1500, vib: 5, vol: 0.14 }
+        base: 320, opt: { type: 'sine', cut: 1600, vib: 5, vol: 0.30 }
       },
       shisha: {   // МЕДВЕДЬ-ШАТУН: утробное «ЭР-Р-Р»
         spawn: [{ f: 58, d: 0.9, s: 44, v: 0.22 }, { f: 46, d: 0.6, s: 38, v: 0.18 }],
         attack: [{ f: 64, d: 0.4, s: 40, v: 0.2 }],
-        base: 58, opt: { type: 'sawtooth', cut: 300, vol: 0.2 }
+        base: 58, opt: { type: 'sawtooth', cut: 340, vol: 0.38 }
       },
       glavar: {   // АТАМАН: хриплый смешок «ХЕ-ХЕ-ХЕ»
         spawn: [{ f: 200, d: 0.13, s: 160 }, { f: 185, d: 0.13, s: 150 }, { f: 170, d: 0.2, s: 130 }],
         attack: [{ f: 190, d: 0.12, s: 155 }, { f: 175, d: 0.16, s: 135 }],
-        base: 190, opt: { type: 'sawtooth', cut: 700, vol: 0.13 }
+        base: 190, opt: { type: 'sawtooth', cut: 850, vol: 0.27 }
       },
       hozyain: {  // ХОЗЯИН ТРАКТА: паровозный гудок «ТУ-У-У»
         spawn: [{ f: 150, d: 0.45, s: 146 }, { f: 150, d: 0.6, s: 142 }],
         attack: [{ f: 150, d: 0.3, s: 140 }],
-        base: 150, opt: { type: 'square', cut: 800, vol: 0.15 }
+        base: 150, opt: { type: 'square', cut: 950, vol: 0.30 }
       },
       metelica: { // ВЕДЬМА МЕТЕЛИ: хохот «ХА-ХА-ХА-ХА»
         spawn: [{ f: 640, d: 0.14, s: 700 }, { f: 700, d: 0.14, s: 640 }, { f: 620, d: 0.14, s: 690 }, { f: 690, d: 0.22, s: 520 }],
         attack: [{ f: 660, d: 0.12, s: 720 }, { f: 720, d: 0.18, s: 560 }],
-        base: 640, opt: { type: 'sine', cut: 2500, vol: 0.12 }
+        base: 640, opt: { type: 'sine', cut: 2600, vol: 0.26 }
       },
       leshiy: {   // ЛЕШИЙ: басовитое «ХО-ХО-ХО» со скрипом
         spawn: [{ f: 105, d: 0.22, s: 88 }, { f: 98, d: 0.22, s: 82 }, { f: 92, d: 0.3, s: 70 }],
         attack: [{ f: 100, d: 0.18, s: 78 }],
-        base: 100, opt: { type: 'sawtooth', cut: 400, vib: 6, vol: 0.17 }
+        base: 100, opt: { type: 'sawtooth', cut: 480, vib: 6, vol: 0.34 }
       }
     }[id];
     if (!N) return;
@@ -304,15 +318,45 @@ var AU = {
   // ─── прикольные звуки ───
   meow: function () {   // кот Барсик: «МЯУ» — глиссандо вверх и вниз
     if (!this.canSay('meow', 3)) return;
-    this.voice([{ f: 460, d: 0.16, s: 760 }, { f: 760, d: 0.22, s: 380 }], { type: 'sine', vol: 0.09, cut: 2400, gap: 0 });
+    this.voice([{ f: 460, d: 0.16, s: 760 }, { f: 760, d: 0.22, s: 380 }], { type: 'sine', vol: 0.20, cut: 2600, gap: 0 });
   },
   whistle: function () {   // самовар: свистит паром
     if (!this.canSay('whistle', 7)) return;
-    this.voice([{ f: 1750, d: 0.5, s: 2100 }, { f: 2100, d: 0.45, s: 1800 }], { type: 'sine', vol: 0.05, cut: 5000, vib: 9, vibHz: 11 });
+    this.voice([{ f: 1750, d: 0.5, s: 2100 }, { f: 2100, d: 0.45, s: 1800 }], { type: 'sine', vol: 0.13, cut: 5000, vib: 9, vibHz: 11 });
   },
   whoosh: function () {   // тапок-самолёт: «вжух»
-    this.voice([{ f: 820, d: 0.14, s: 240, v: 0.06 }], { type: 'sine', cut: 2000, gap: 0 });
+    this.voice([{ f: 820, d: 0.14, s: 240, v: 0.14 }], { type: 'sine', cut: 2200, gap: 0 });
     this.noise(0.1, 0.05, 1400);
+  },
+  puff: function () {   // дед затягивается: «пфф-хх»
+    this.noise(0.22, 0.16, 900);
+    var self = this;
+    setTimeout(function () { self.noise(0.3, 0.12, 500); }, 260);
+  },
+  fanfare: function () {   // салют ачивке: два бодрых аккорда
+    this.tone(523, 0.1, 'square', 0.14);
+    this.tone(784, 0.16, 'square', 0.14);
+    var self = this;
+    setTimeout(function () { self.tone(659, 0.1, 'square', 0.13); }, 110);
+    setTimeout(function () { self.tone(1046, 0.24, 'square', 0.15); }, 200);
+  },
+  crunch: function () {   // хруст снега под валенками
+    this.noise(0.05, 0.05, 1100);
+  },
+  crit: function () {   // крит: звонкий «ДЗЫНЬ»
+    this.tone(1318, 0.09, 'square', 0.16);
+    this.tone(1760, 0.14, 'square', 0.12);
+  },
+  combo: function () {   // серия: восходящее «пи-ли-дон»
+    var self = this;
+    [784, 988, 1175].forEach(function (n, i) {
+      setTimeout(function () { self.tone(n, 0.09, 'triangle', 0.14); }, i * 55);
+    });
+  },
+  cuckoo: function () {   // стенные часы: ку-ку
+    var self = this;
+    this.tone(660, 0.14, 'sine', 0.12, 640);
+    setTimeout(function () { self.tone(520, 0.18, 'sine', 0.12, 500); }, 200);
   },
   windNode: null,
   startWind: function () {   // фоновый ветер: петля шума через фильтр
@@ -327,11 +371,11 @@ var AU = {
       src.buffer = buf; src.loop = true;
       var f = this.ctx.createBiquadFilter();
       f.type = 'lowpass'; f.frequency.value = 420;
-      var g = this.ctx.createGain(); g.gain.value = 0.045;
+      var g = this.ctx.createGain(); g.gain.value = 0.026;
       // медленное дыхание ветра
-      g.gain.setValueAtTime(0.03, t);
-      g.gain.linearRampToValueAtTime(0.07, t + 2.5);
-      g.gain.linearRampToValueAtTime(0.03, t + 5);
+      g.gain.setValueAtTime(0.018, t);
+      g.gain.linearRampToValueAtTime(0.042, t + 2.5);
+      g.gain.linearRampToValueAtTime(0.018, t + 5);
       src.connect(f); f.connect(g); g.connect(this.master);
       src.start(t);
       this.windNode = { src: src, gain: g };
@@ -361,10 +405,21 @@ window.addEventListener('keydown', function (e) {
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   if (e.code === 'KeyM') {
     AU.muted = !AU.muted;
+    if (AU.master) AU.master.gain.value = AU.muted ? 0 : AU.vol;
     announce(AU.muted ? '🔇 ТИХО' : '🔊 ЗВУК', 900);
+  }
+  // громкость: - и = (они же +)
+  if (e.code === 'Minus' || e.code === 'Equal') {
+    AU.setVol(AU.vol + (e.code === 'Minus' ? -0.1 : 0.1));
   }
   if (e.code === 'Space' && G.state !== 'play') e.preventDefault();
 });
+
+// громкость колесом мыши
+window.addEventListener('wheel', function (e) {
+  if (G.state !== 'play') return;
+  AU.setVol(AU.vol + (e.deltaY < 0 ? 0.05 : -0.05));
+}, { passive: true });
 window.addEventListener('keyup', function (e) { keys[e.code] = false; });
 
 var joyEl = $$('joy');
@@ -578,6 +633,13 @@ function drawParticles() {
       ctx.beginPath();
       ctx.arc(p.x, p.y - p.t * 26, (p.size || 5) * (1.4 - 0.4 * a), 0, TAU);
       ctx.fill();
+    } else if (p.kind === 'foot') {
+      // СЛЕД ВАЛЕНКА: вмятина в снегу, медленно заплывает
+      ctx.globalAlpha = 0.5 * a * a;
+      ctx.fillStyle = p.col;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.size * 1.5, p.size * 0.9, 0.3, 0, TAU);
+      ctx.fill();
     } else {
       ctx.globalAlpha = a;
       ctx.fillStyle = p.col;
@@ -586,8 +648,8 @@ function drawParticles() {
       ctx.fill();
     }
   }
-  ctx.globalAlpha = 1;
-  // тексты
+    ctx.globalAlpha = 1;
+    // тексты
   ctx.textAlign = 'center';
   for (var j = 0; j < floaters.length; j++) {
     var f = floaters[j];
@@ -745,10 +807,11 @@ function drawHouse(x, y, v) {
   ctx.lineTo(-w / 2 - 2, -h / 2 + 7);
   ctx.closePath();
   ctx.fill();
-  // тёплое окно — глюк деда: в мёртвом посёлке свет горит
+  // тёплое окно — глюк деда: в мёртвом посёлке свет горит (и мерцает, как от керосинки)
+  var flick = 0.82 + Math.sin((x + y) * 0.7 + performance.now() / 300) * 0.12 + Math.random() * 0.06;
   ctx.fillStyle = '#ffd76e';
   ctx.fillRect(-8, -h * 0.28, 16, 13);
-  ctx.fillStyle = 'rgba(255, 215, 110, 0.25)';
+  ctx.fillStyle = 'rgba(255, 215, 110,' + (0.25 * flick) + ')';
   ctx.beginPath();
   ctx.arc(0, -h * 0.2, 26, 0, TAU);
   ctx.fill();
@@ -832,6 +895,58 @@ function drawSnowfall() {
 function drawAurora() {
   if (G.dawn) return;   // перед рассветом сияние гаснет
   var t = performance.now() / 1000;
+
+  // ── ЗВЁЗДЫ: редкие, мерцают (генерируются один раз) ──
+  if (!G._stars || G._stars.w !== canvas.width) {
+    G._stars = { w: canvas.width, h: canvas.height, list: [] };
+    for (var si = 0; si < 46; si++) {
+      G._stars.list.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height * 0.55,
+        r: 0.6 + Math.random() * 1.3,
+        ph: Math.random() * TAU
+      });
+    }
+  }
+  ctx.save();
+  for (var st = 0; st < G._stars.list.length; st++) {
+    var s2 = G._stars.list[st];
+    var tw = 0.35 + 0.65 * Math.abs(Math.sin(t * (0.7 + s2.r * 0.4) + s2.ph));
+    ctx.globalAlpha = tw * 0.8;
+    ctx.fillStyle = '#dfe8f2';
+    ctx.beginPath();
+    ctx.arc(s2.x, s2.y, s2.r, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ── ЛУНА: тусклый серп за сиянием, медленно плывёт ──
+  ctx.save();
+  var mx = canvas.width * 0.78, my = canvas.height * 0.16 + Math.sin(t * 0.02) * 6;
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#e8f0ff';
+  ctx.beginPath(); ctx.arc(mx, my, 30, 0, TAU); ctx.fill();
+  // «откусленная» тень — серп
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath(); ctx.arc(mx - 12, my - 7, 27, 0, TAU); ctx.fill();
+  ctx.restore();
+  // ореол луны
+  ctx.save();
+  ctx.globalAlpha = 0.08;
+  ctx.fillStyle = '#cfe0ff';
+  ctx.beginPath(); ctx.arc(mx, my, 62, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  // ── ЗАРНИЦЫ: редкая зимняя молния — короткая белая вспышка неба ──
+  if (!G._flash) G._flash = 0;
+  if (Math.random() < 0.0012) G._flash = 0.4;
+  if (G._flash > 0) {
+    G._flash -= 0.016;
+    var fa = Math.min(0.35, G._flash * 0.9);
+    ctx.fillStyle = 'rgba(200,220,255,' + fa + ')';
+    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.5);
+  }
+
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
   for (var band = 0; band < 3; band++) {
@@ -890,6 +1005,9 @@ var G = {
   waveT: 0,            // таймер миниволн
   spawnAcc: 0,
   stats: { dmg: 0, mushrooms: 0, gifts: 0, maxCombo: 0 },
+  combo: 0,           // текущая серия убийств без передышки
+  comboT: 0,          // сколько ещё живёт серия
+  comboReward: 0,     // сколько грибов уже выпало с серии
   levelQueue: 0        // сколько левел-апов ждут выбора карточек
 };
 
@@ -914,7 +1032,8 @@ function newPlayer() {
     // пассивки: id -> lv
     passives: {},
     evolved: {},        // id -> true после эволюции
-    catOrb: 0          // угол орбиты кота
+    catOrb: 0,          // угол орбиты кота
+    smokeT: 0           // дед курит: >0 — дымит огоньком и дымком
   };
 }
 
@@ -1111,6 +1230,7 @@ function fireWeapons(dt) {
         palmSlap(ang + Math.PI);  // вторая рука
       }
       AU.slap();
+      wfx('palm'); wfx('palmAng', ang);
     }
   }
 
@@ -1123,6 +1243,7 @@ function fireWeapons(dt) {
       if (st) {
         sl.cd = 2.4 * cdMul();
         AU.whoosh();   // тапок полетел — «вжух»
+        wfx('slipper');
         var a = angTo(p.x, p.y, st.x, st.y);
         var n = (sl.lv >= 2 || p.evolved.slipper) ? 2 : 1;
         var dmg = (16 + 8 * sl.lv) * dmgMul() * (p.evolved.slipper ? 1.6 : 1);
@@ -1148,6 +1269,7 @@ function fireWeapons(dt) {
       if (jtgt) {
         jt.cd = 3.1 * cdMul();
         var ja = angTo(p.x, p.y, jtgt.x, jtgt.y);
+        wfx('joint'); wfx('jointAng', ja);
         var jn = p.evolved.joint ? 8 : (jt.lv >= 4 ? 5 : (jt.lv >= 1 ? 3 : 2));
         var jdmg = (18 + 7 * jt.lv) * dmgMul() * (p.evolved.joint ? 1.5 : 1);
         var jrad = (52 + 9 * jt.lv) * (p.evolved.joint ? 1.5 : 1);
@@ -1221,6 +1343,7 @@ function fireWeapons(dt) {
         // ХЛОП-волна
         particles.push({ kind: 'ring', x: p.x, y: p.y, t: 0, life: 0.35, r0: 20, r1: pr, col: '#6ecbff' });
         AU.pop();
+        wfx('plunger');
         for (var pi = 0; pi < G.enemies.length; pi++) {
           var pe = G.enemies[pi];
           if (pe.dead) continue;
@@ -1278,6 +1401,7 @@ function fireWeapons(dt) {
             var brd = (12 + 6 * bl.lv) * dmgMul() * (p2.evolved.balalaika ? 1.5 : 1);
             particles.push({ kind: 'ring', x: p2.x, y: p2.y, t: 0, life: 0.45, r0: 26, r1: br, col: '#ffd76e' });
             AU.pop();
+            wfx('balalaika');
             for (var qi = 0; qi < G.enemies.length; qi++) {
               var qe = G.enemies[qi];
               if (qe.dead) continue;
@@ -1388,6 +1512,7 @@ function fireWeapons(dt) {
       var skt = nearestEnemy(p.x, p.y, 520);
       if (skt) {
         sk.cd = 4.2 * cdMul();
+        wfx('skipidar');
         G.bullets.push({
           kind: 'flask', x: p.x, y: p.y,
           vx: Math.cos(angTo(p.x, p.y, skt.x, skt.y)) * 330,
@@ -1400,6 +1525,31 @@ function fireWeapons(dt) {
       }
     }
   }
+
+  // ДЕД КУРИТ: тлеет и дымит
+  if (p.smokeT > 0) {
+    p.smokeT -= dt;
+    if (Math.random() < dt * 7) {
+      particles.push({
+        kind: 'steam', x: p.x + p.face * 14, y: p.y - 8,
+        vx: rnd(-8, 8) + 12, vy: -32 - rnd(0, 14),
+        life: rnd(0.7, 1.3), t: 0, col: 'rgba(205,214,228,0.5)', size: rnd(2.5, 4.5), grav: -12
+      });
+    }
+  }
+
+  // тик анимаций оружия (затухающие импульсы 0..1)
+  p.wFx = p.wFx || {};
+  for (var fk in p.wFx) {
+    if (p.wFx[fk] > 0) p.wFx[fk] = Math.max(0, p.wFx[fk] - dt / 0.3);
+  }
+}
+
+/** Импульс анимации оружия: fx('palm') = 1 в момент удара, плавно гаснет. */
+function wfx(name) {
+  var p = G.player;
+  p.wFx = p.wFx || {};
+  p.wFx[name] = 1;
 }
 
 /** Удар лодошкой: дуга перед дедом. */
@@ -1439,6 +1589,10 @@ function normAng(a) {
 
 function hurtEnemy(e, dmg, fromX, fromY, knock) {
   if (e.dead) return;
+  // КРИТ: 5% + 3% за уровень «Лодошки-Мастера»; урон ×2 — с золотой цифрой
+  var critCh = 0.05 + 0.03 * pasLv('dmg');
+  var crit = Math.random() < critCh;
+  if (crit) dmg *= 2;
   dmg = Math.round(dmg);
   e.hp -= dmg;
   e.flash = 0.09;
@@ -1449,7 +1603,16 @@ function hurtEnemy(e, dmg, fromX, fromY, knock) {
     e.vx += Math.cos(a) * k;
     e.vy += Math.sin(a) * k;
   }
-  floatText(e.x, e.y - e.r - 6, '' + dmg, dmg >= 40 ? '#ffd76e' : '#fff', dmg >= 40 ? 17 : 14);
+  // цифры: крит — крупная золотая с подпрыгом, обычная — белая
+  if (crit) {
+    floatText(e.x, e.y - e.r - 6, 'КРИТ ' + dmg + '!', '#ffd76e', 20, 1.1);
+    spawnSpark(e.x, e.y, 5, '#ffd76e');
+    AU.crit();
+    G.statsCrits = (G.statsCrits || 0) + 1;
+    if (G.statsCrits >= 20) unlockAch('crit20');
+  } else {
+    floatText(e.x, e.y - e.r - 6, '' + dmg, dmg >= 40 ? '#ffd76e' : '#fff', dmg >= 40 ? 17 : 14);
+  }
   if (e.hp <= 0) killEnemy(e);
 }
 
@@ -1458,12 +1621,31 @@ function killEnemy(e) {
   e.dead = true;
   G.kills++;
 
+  // КОМБО: серия изгнаний за 2.5 сек — каждые 10 грибной бонус деду
+  G.combo = (G.combo || 0) + 1;
+  G.comboT = 2.5;
+  if (G.combo > G.stats.maxCombo) G.stats.maxCombo = G.combo;
+  if (G.combo > 0 && G.combo % 10 === 0) {
+    floatText(e.x, e.y - 34, 'СЕРИЯ ×' + G.combo + '!', '#ff7ad9', 19, 1.3);
+    AU.combo();
+    var cr = Math.floor(G.combo / 10);
+    for (var cb = 0; cb < cr; cb++) {
+      G.pickups.push({
+        kind: 'shroom', x: e.x + rnd(-26, 26), y: e.y + rnd(-26, 26),
+        vx: rnd(-60, 60), vy: rnd(-60, 60), t: 0, r: 6, life: 9
+      });
+    }
+    if (G.combo === 50) unlockAch('combo50');
+  } else if (G.combo >= 5 && G.combo % 5 === 0) {
+    AU.combo();
+  }
+
   // ПУФ! Изгнание в конфетти — мультяшка исчезает
   spawnConfetti(e.x, e.y, e.boss ? 60 : (e.elite ? 26 : 12), e.boss ? 1.8 : 1);
   floatText(e.x, e.y - e.r - 18, 'ПУФ!', '#ff7ad9', 18);
   spawnSpark(e.x, e.y, 6, '#fff');
 
-  hitstop = Math.max(hitstop, e.boss ? 0.14 : (e.elite ? 0.06 : 0.028));
+  hitstop = Math.max(hitstop, e.boss ? 0.34 : (e.elite ? 0.07 : 0.028));   // босс: сочное слоу-мо победы
   CAM.kick(e.boss ? 0.9 : (e.elite ? 0.3 : 0.08));
   AU.kill();
 
@@ -1482,8 +1664,20 @@ function killEnemy(e) {
     // БОЛЬШОЙ ГРИБ со старшего: сытный, гаснет медленно
     G.pickups.push({ kind: 'bigshroom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 11, life: 20 });
   }
-  // ХИЛКА: редкая — беречь её надо (с боссов и то не всегда)
-  if (Math.random() < 0.012 || (e.boss && Math.random() < 0.5)) {
+  // ОКУРОК (хилка): недокуренная папироса — у деда на вес золота.
+  // Мобы роняют редко, элиты — больше половины, старший лес — россыпью 3-4 шт.
+  if (e.boss) {
+    var butts = 3 + (Math.random() < 0.5 ? 1 : 0);
+    for (var bi2 = 0; bi2 < butts; bi2++) {
+      G.pickups.push({
+        kind: 'heart', x: e.x + rnd(-30, 30), y: e.y + rnd(-30, 30),
+        vx: rnd(-40, 40), vy: rnd(-40, 40), t: 0, r: 9, fromBoss: true
+      });
+    }
+    G._bossButtDrop = butts;   // ачивка «Скупой дед»: подобрать всю россыпь
+  } else if (e.elite) {
+    if (Math.random() < 0.6) G.pickups.push({ kind: 'heart', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 9 });
+  } else if (Math.random() < 0.015) {
     G.pickups.push({ kind: 'heart', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 9 });
   }
   if (e.elite || e.boss) {
@@ -1497,6 +1691,13 @@ function killEnemy(e) {
     dedEvent('bosskill');
     unlockAch('boss1');
     if (G.bossIdx >= 3) unlockAch('boss3');
+    // «Лес ответил»: копим убитых старших за все ночи
+    try {
+      var bset = JSON.parse(localStorage.getItem('dedBosses') || '{}');
+      bset[e.boss] = 1;
+      localStorage.setItem('dedBosses', JSON.stringify(bset));
+      if (Object.keys(bset).length >= 6) unlockAch('allboss');
+    } catch (er) { /* приватный режим */ }
   }
 
   // СНЕГОВИК: рассыпался — из комьев слепились два мелких Снегавчика
@@ -1526,7 +1727,7 @@ function hurtPlayer(dmg, srcX, srcY) {
   CAM.kick(0.45);
   hitstop = Math.max(hitstop, 0.05);
   AU.hurt();
-  if (Math.random() < 0.35) dedEvent('hurt');
+  if (Math.random() < 0.55) dedEvent('hurt');
   floatText(p.x, p.y - 26, '-' + dmg, '#ff5b6e', 18);
   spawnSpark(p.x, p.y, 10, '#ff5b6e');
   // отброс деда
@@ -1693,7 +1894,10 @@ var ENEMY_TYPES = {
   snowman:{ name: 'Снеговик', hp: 130, dmg: 14, speed: 38,  r: 20, col: '#e8f2ff', mass: 2.2, splitter: true },
   mini:   { name: 'Снегавчик', hp: 15, dmg: 6,  speed: 125, r: 9,  col: '#dfe8f2', mass: 0.5 },
   mouse:  { name: 'Полёвка',  hp: 5,   dmg: 3,  speed: 145, r: 7,  col: '#d7c4ff', mass: 0.3 },
-  owl:    { name: 'Сова',     hp: 32,  dmg: 15, speed: 120, r: 14, col: '#9dffe0', mass: 0.9, bomber: true }
+  owl:    { name: 'Сова',     hp: 32,  dmg: 15, speed: 120, r: 14, col: '#9dffe0', mass: 0.9, bomber: true },
+  // v3.3 БИОМАССА: лес звереет дальше
+  boar:   { name: 'Кабан',  hp: 75,  dmg: 17, speed: 74,  r: 19, col: '#c97b5a', mass: 1.8, charger: true },
+  squirrel:{ name: 'Белка', hp: 14,  dmg: 11, speed: 165, r: 9,  col: '#ff9d5c', mass: 0.5, ranged: true, keepsDist: true }
 };
 
 var nextEntId = 1;
@@ -1791,8 +1995,8 @@ function updateEnemies(dt) {
         if (e.wstT <= 0) { e.wst = 0; e.wstT = rnd(1.6, 2.4); }
       }
     } else if (d.ranged) {
-      // бандит: держит дистанцию и плюётся снежками
-      var want = 235;
+      // бандит/белка: держит дистанцию и плюётся (белка — шустрая, дистанция больше)
+      var want = d.keepsDist ? 300 : 235;
       var mv = 0;
       if (dd > want + 30) mv = 1;
       else if (dd < want - 40) mv = -1;
@@ -2003,6 +2207,18 @@ function spawnBoss(idx) {
 function updateBoss(e, dt, ux, uy, dd) {
   var p = G.player;
   e.stateT -= dt;
+
+  // ФАЗА БЕРСЕРКА: на половине здоровья старший звереет — быстрее и злее
+  if (!e.enraged && e.hp <= e.maxHp * 0.5) {
+    e.enraged = true;
+    e.speed *= 1.28;
+    e.dmg = Math.round(e.dmg * 1.15);
+    AU.bossVoice(e.boss, 'attack');
+    AU.roar();
+    CAM.kick(0.7);
+    announce('🔥 ' + (e.name || 'СТАРШИЙ') + ' В ЯРОСТИ! 🔥', 1500, true);
+    spawnConfetti(e.x, e.y, 24, 1.4);
+  }
 
   if (e.boss === 'alpha') {
     // АЛЬФА: погоня → телеграф → рывок; зовёт стаю
@@ -2217,11 +2433,11 @@ function composition(t) {
   var pool = ['wolf', 'wolf'];
   if (t > 40) pool.push('hare', 'hare');
   if (t > 120) pool.push('bandit');
-  if (t > 200) pool.push('crow', 'marten');
-  if (t > 300) pool.push('bear', 'moose');
-  if (t > 450) pool.push('snowman', 'hare', 'bandit', 'crow');
-  if (t > 600) pool.push('owl', 'moose', 'marten', 'snowman');   // бесконечка
-  if (t > 900) pool.push('moose', 'owl', 'snowman', 'bandit');   // совсем жёстко
+  if (t > 200) pool.push('crow', 'marten', 'squirrel');
+  if (t > 300) pool.push('bear', 'moose', 'boar');
+  if (t > 450) pool.push('snowman', 'hare', 'bandit', 'crow', 'squirrel');
+  if (t > 600) pool.push('owl', 'moose', 'marten', 'snowman', 'boar');   // бесконечка
+  if (t > 900) pool.push('moose', 'owl', 'snowman', 'bandit', 'boar', 'squirrel');   // совсем жёстко
   return pool;
 }
 
@@ -2257,6 +2473,14 @@ function updateDirector(dt) {
     AU.bell();
     announce('Ⰰ ОСАДА!\nлес идёт ва-банк', 2800);
     CAM.kick(0.4);
+    // страж осады: элитный медведь-переросток возглавляет последний штурм
+    var sg = spawnEnemy('bear', G.player.x + rnd(-400, 400), G.player.y - 420, true);
+    sg.name = 'СТРАЖ ОСАДЫ';
+    sg.hp = sg.maxHp = Math.round(sg.hp * 2.2);
+    sg.r *= 1.3;
+    sg.speed *= 1.15;
+    AU.bossVoice('shisha', 'spawn');
+    floatText(sg.x, sg.y - 40, 'СТРАЖ ОСАДЫ', '#ff5b6e', 19);
   }
 
   // РАССВЕТ: последние 60 секунд небо светлеет — дожить!
@@ -2265,6 +2489,12 @@ function updateDirector(dt) {
       G.dawn = true;
       dedEvent('dawn');
       announce('НЕБО СВЕТЛЕЕТ НА ВОСТОКЕ\nдержись!', 3200);
+      // первый луч: колокол + хрустальный перезвон
+      AU.bell();
+      var self2 = AU;
+      [659, 784, 988, 1319].forEach(function (n, i) {
+        setTimeout(function () { self2.tone(n, 0.4, 'sine', 0.12); }, 600 + i * 260);
+      });
     }
     if (G.t >= RUN_TIME) {
       endRun(true);
@@ -2299,6 +2529,33 @@ function updateDirector(dt) {
 
   // дед бормочет
   if (Math.random() < dt * 0.07) dedSay();
+
+  // тик комбо: серия живёт 2.5 сек после последнего изгнания
+  if (G.comboT > 0) {
+    G.comboT -= dt;
+    if (G.comboT <= 0) G.combo = 0;
+  }
+
+  // СЛЕДЫ НА СНЕГУ: дед топает — остаются вмятины (гаснут за ~6 сек)
+  if (p.walkT > 0 && Math.random() < dt * 7) {
+    particles.push({
+      kind: 'foot', x: p.x + rnd(-5, 5), y: p.y + 12 + rnd(-3, 3),
+      life: 6, t: 0, col: 'rgba(140,158,180,0.5)', size: 3.4
+    });
+  }
+
+  // КОТ МЯУКАЕТ сам по себе (раз в ~9 сек, если живёт у деда)
+  if (p.weapons.cat && Math.random() < dt / 9) AU.meow();
+
+  // ХРУСТ СНЕГА под валенками, когда дед идёт
+  if (p.walkT > 0 && Math.random() < dt * 6) AU.crunch();
+
+  // КУКУШКА: каждый «час ночи» (60 сек) стенные часы станции кукуют — время идёт
+  G.cuckooT = (G.cuckooT || 60) - dt;
+  if (G.cuckooT <= 0) {
+    G.cuckooT = 60;
+    AU.cuckoo();
+  }
 
   // мини-волна каждые 40–60 сек
   G.waveT -= dt;
@@ -2416,9 +2673,14 @@ function updatePickups(dt) {
         dedEvent('gold');
       } else if (it.kind === 'heart') {
       p.hp = Math.min(p.maxHp, p.hp + 25);
-      floatText(p.x, p.y - 30, '+25 🫀', '#7bffb0', 17);
-      AU.pop();
-      if (Math.random() < 0.6) dedEvent('heart');
+      p.smokeT = 10;   // дед закурил: 10 сек дымит как паровоз
+      floatText(p.x, p.y - 30, 'ЗАКУРИЛ! +25', '#7bffb0', 17);
+      AU.puff();
+      G.statsButts = (G.statsButts || 0) + 1;
+      if (it.fromBoss) G._bossButtPick = (G._bossButtPick || 0) + 1;
+      if (G.statsButts >= 10) unlockAch('smoker');
+      if (G._bossButtPick >= 5) unlockAch('butts5');
+      if (Math.random() < 0.8) dedEvent('heart');
     } else if (it.kind === 'gift') {
         openGift();
       }
@@ -2449,11 +2711,11 @@ function openGift() {
       txt = WEAPONS[wid].ico + ' ' + WEAPONS[wid].name + ' → ур. ' + p.weapons[wid].lv;
     } else {
       p.hp = p.maxHp;
-      txt = '🫀 ПОЛНОЕ ЗДОРОВЬЕ';
+      txt = '🚬 ОКУРОК ДУРАКА (ХП ПОЛНОЕ)';
     }
   } else if (roll < 0.58) {
     p.hp = Math.min(p.maxHp, p.hp + 60);
-    txt = '🫀 +60 ХП';
+    txt = '🚬 ОКУРОК: +60 ХП';
   } else if (roll < 0.82) {
     G.trip = 100;
     txt = '🍄 ПРИХОД НА ПОЛНОМ — ЖМИ [G]!';
@@ -2578,6 +2840,13 @@ function applyCard(card) {
     unlockAch('evo1');
     announce('✦ ' + EVOS[card.id].name + ' ✦', 2400, true);
     spawnConfetti(p.x, p.y, 50, 1.5);
+    // «Дед-конструктор»: копим эволюции за все ночи
+    try {
+      var eset = JSON.parse(localStorage.getItem('dedEvos') || '{}');
+      eset[card.id] = 1;
+      localStorage.setItem('dedEvos', JSON.stringify(eset));
+      if (Object.keys(eset).length >= Object.keys(EVOS).length) unlockAch('sixevo');
+    } catch (er) { /* приватный режим */ }
     CAM.kick(0.6);
   } else {
     p.hp = Math.min(p.maxHp, p.hp + 40);
@@ -2711,19 +2980,20 @@ var DED_EVENTS = {
   // v3.2: озвученные события (блип-речь + фраза)
   start: ['«Ну, с Богом, Манька…»', '«Идём. Ночь-то длинная…»'],
   hurt: ['«Ай-яй!»', '«Ох, зараза!»', '«Батюшки!»', '«Ты чего?!»'],
-  heart: ['«Жив-жив!»', '«Ещё сто лет!»', '«То-то же!»'],
+  heart: ['«Жив-жив!»', '«Ещё сто лет!»', '«Курить — здоровью вредить. Ну и что»', '«Самокрутка-матушка!»', '«Вот это затяжка!»'],
   zap: ['«Хлопай ушами!»', '«БА-БАХ, милые!»'],
   boss: ['«Ох, тыж-ж…»', '«Здравствуй, милай…»', '«Серьёзный, зараза…»'],
   levelup: ['«Во, брат!»', '«Силен ещё!»', '«Ух ты ж!»'],
   win: ['«РАССВЕТ! Дожили!»', '«Живой, Манька!»'],
-  death: ['«Манька… прости…»', '«Грибы… всё… грибы…»']
+  death: ['«Манька… прости…»', '«Грибы… всё… грибы…»'],
+  ach: ['«Вот это я ещё могу!»', '«Медаль мне. Железную»', '«Заслужил, считаю»']
 };
 
 // интонация голоса по событию
 var DED_MOODS = {
   hurt: 'pain', lowhp: 'pain', death: 'sad',
   win: 'exc', bosskill: 'exc', zap: 'exc', levelup: 'exc', heart: 'exc',
-  start: 'norm', boss: 'norm', gold: 'norm', dawn: 'norm', firstkill: 'norm', endless5: 'norm'
+  start: 'norm', boss: 'norm', gold: 'norm', dawn: 'norm', firstkill: 'norm', endless5: 'norm', ach: 'exc'
 };
 
 var dedSayT = 0;
@@ -2822,7 +3092,16 @@ var ACHS = [
   { id: 'zap3',      ico: '💥', name: 'Три залпа',         desc: 'Три грибных залпа за одну ночь' },
   { id: 'winner',    ico: '🌅', name: 'До рассвета',       desc: 'Дожить до утра в обычной ночи' },
   { id: 'endless10', ico: '🌙', name: 'Донышка',           desc: 'Продержаться 10 минут в бесконечной ночи' },
-  { id: 'maxed',     ico: '🛠️', name: 'Полный набор',      desc: 'Носить 6 оружий одновременно' }
+  { id: 'maxed',     ico: '🛠️', name: 'Полный набор',      desc: 'Носить 6 оружий одновременно' },
+  // v3.3: новая метa
+  { id: 'combo50',   ico: '🌪️', name: 'Вихрь деда',        desc: 'Серия из 50 изгнаний без передышки' },
+  { id: 'smoker',    ico: '🚬', name: 'Курильщик со стажем',desc: 'Подобрать 10 окурков за ночь' },
+  { id: 'crit20',    ico: '⚔️', name: 'Куда бью — там ломит', desc: '20 критов за одну ночь' },
+  { id: 'noheal',    ico: '💪', name: 'Организм — кремень',  desc: 'Дожить до рассвета без единого окурка' },
+  { id: 'allboss',   ico: '🌲', name: 'Лес ответил',        desc: 'Изгнать всех шестерых старших леса (за все ночи)' },
+  { id: 'sixevo',    ico: '✨', name: 'Дед-конструктор',    desc: 'Собрать все эволюции (за все ночи)' },
+  { id: 'trip100',   ico: '🌈', name: 'Дед увидел вечность', desc: 'Десять грибных залпов за ночь' },
+  { id: 'butts5',    ico: '🪙', name: 'Скупой дед',         desc: 'Подобрать 5 окурков с одного старшего' }
 ];
 
 function getAchs() {
@@ -2841,6 +3120,13 @@ function unlockAch(id) {
   try { localStorage.setItem('dedAch', JSON.stringify(got)); } catch (e) { /* приватный режим */ }
   achToastQ.push(def);
   pumpAchToasts();
+  AU.fanfare();   // маленький салют деду
+  var pl = G.player;
+  if (pl && G.state === 'play') {
+    setTimeout(function () {
+      if (G.state === 'play') dedEvent('ach');
+    }, 900);
+  }
 }
 
 var achPumping = false;
@@ -2883,6 +3169,7 @@ function renderAchs() {
 // ════════════════════════════════════ ПРИХОД И ГРИБНОЙ ЗАЛП ═════════════
 
 function updateTrip(dt) {
+  var p = G.player;
   if (G.zapT > 0) {
     G.zapT -= dt;
     G.zapFlash = Math.max(0, G.zapFlash - dt);
@@ -2891,11 +3178,20 @@ function updateTrip(dt) {
       Math.floor(G.zapT * 120) % 360 + 'deg)';
     // конфетти-дождь
     if (Math.random() < dt * 24) {
-      spawnConfetti(G.player.x + rnd(-VW / 3, VW / 3), G.player.y + rnd(-VH / 3, VH / 3), 3);
+      spawnConfetti(p.x + rnd(-VW / 3, VW / 3), p.y + rnd(-VH / 3, VH / 3), 3);
+    }
+    // дед гыгычет от прихода
+    if (p && Math.random() < dt * 0.55) {
+      AU.dedTalk(pick(['Гы-гы-гы!', 'Хи-хи!', 'Ох, грибы!', 'Летает!']), 'exc');
+      floatText(p.x, p.y - 46, 'гы-гы-гы…', '#ff7ad9', 14);
     }
     if (G.zapT <= 0) canvas.style.filter = '';
   } else {
     G.trip = clamp(G.trip - 0.5 * dt, 0, 100);
+    // на высоком приходе дед посмеивается сам
+    if (p && G.trip > 70 && Math.random() < dt * 0.14) {
+      AU.dedTalk(pick(['Хе-хе…', 'Ишь…', 'Вижу… всё вижу…']), 'norm');
+    }
   }
 }
 
@@ -2905,6 +3201,7 @@ function tryZap() {
   G.zapT = 5;
   G.zapFlash = 0.4;
   G.zapCount++;
+  if (G.zapCount >= 10) unlockAch('trip100');
   if (G.zapCount >= 3) unlockAch('zap3');
   var p = G.player;
   AU.zap();
@@ -2989,14 +3286,46 @@ function render() {
     ctx.fillStyle = 'rgba(255, 220, 140, ' + (G.zapFlash * 0.9) + ')';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
-  // вигнетка
+  // вигнетка (гуще, когда деду плохо)
+  var vgK = G.player && G.player.hp < 40 ? 0.75 : 0.55;
   var vg = ctx.createRadialGradient(
     canvas.width / 2, canvas.height / 2, canvas.height * 0.42,
     canvas.width / 2, canvas.height / 2, canvas.height * 0.85);
   vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(2,4,10,0.55)');
+  vg.addColorStop(1, 'rgba(2,4,10,' + vgK + ')');
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // СТРЕЛКА К СТАРШЕМУ ЛЕСУ: босс за экраном — указатель у кромки
+  if (G.state === 'play' && G.bossAlive && !G.bossAlive.dead && G.player) {
+    var bb2 = G.bossAlive;
+    var m2 = ctx.getTransform();
+    var sx2 = m2.a * bb2.x + m2.c * bb2.y + m2.e;
+    var sy2 = m2.b * bb2.x + m2.d * bb2.y + m2.f;
+    if (sx2 < 40 || sx2 > canvas.width - 40 || sy2 < 40 || sy2 > canvas.height - 40) {
+      var cx2 = canvas.width / 2, cy2 = canvas.height / 2;
+      var ang2 = Math.atan2(sy2 - cy2, sx2 - cx2);
+      var rx2 = cx2 + Math.cos(ang2) * (Math.min(cx2, cy2) - 60);
+      var ry2 = cy2 + Math.sin(ang2) * (Math.min(cx2, cy2) - 60);
+      ctx.save();
+      ctx.translate(rx2, ry2);
+      ctx.rotate(ang2);
+      ctx.globalAlpha = 0.7 + Math.sin(performance.now() / 200) * 0.3;
+      ctx.fillStyle = '#ff5b6e';
+      ctx.beginPath();
+      ctx.moveTo(14, 0); ctx.lineTo(-8, -9); ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#ff5b6e';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText((bb2.name || 'СТАРШИЙ').slice(0, 16), rx2, ry2 + 24);
+      ctx.restore();
+    }
+  }
 
   // низкое ХП — пульс тревоги
   if (G.state === 'play' && G.player && G.player.hp < 30) {
@@ -3048,9 +3377,32 @@ function drawPickups() {
       ctx.restore();
       ctx.globalAlpha = 1;
     } else if (it.kind === 'heart') {
-      ctx.font = '18px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('❤️', it.x, it.y + bob + 6);
+      // ОКУРОК: тлеющая папироса — огонёк дышит, дымок вьётся
+      var bob2 = bob;
+      ctx.save();
+      ctx.translate(it.x, it.y + bob2);
+      ctx.rotate(-0.5 + Math.sin(it.t * 2.4) * 0.12);
+      // хвостик дымка
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = '#cdd6e4';
+      for (var sm2 = 0; sm2 < 3; sm2++) {
+        var smx = Math.sin(it.t * 3 + sm2 * 1.7) * (2 + sm2 * 1.6);
+        ctx.beginPath();
+        ctx.arc(smx, -6 - sm2 * 5.5, 1.7 + sm2 * 0.8, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      // сам окурок: мундштук + тлеющий кончик
+      ctx.fillStyle = '#e8dfc8';
+      ctx.fillRect(-6, -1.6, 8, 3.2);
+      ctx.fillStyle = '#a88d5a';
+      ctx.fillRect(2, -1.6, 4, 3.2);
+      var ember = 0.7 + Math.sin(it.t * 7) * 0.3;
+      ctx.fillStyle = '#ff8c42';
+      ctx.beginPath(); ctx.arc(6.4, 0, 1.9 * ember + 0.7, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,180,80,' + (0.35 * ember) + ')';
+      ctx.beginPath(); ctx.arc(6.4, 0, 3.6, 0, TAU); ctx.fill();
+      ctx.restore();
     } else if (it.kind === 'gift') {
       var pulse = 1 + Math.sin(it.t * 6) * 0.12;
       ctx.save();
@@ -3111,6 +3463,118 @@ function drawEntities() {
 function drawWeaponFx() {
   var p = G.player;
   if (!p) return;
+  p.wFx = p.wFx || {};
+  var fx = p.wFx;
+
+  // ── РУКА-ЗАМАХ (лодошка): кулак деда вылетает по направлению удара ──
+  if (fx.palm > 0) {
+    var pa = fx.palmAng || 0;
+    var ext = Math.sin(fx.palm * Math.PI) * 26;   // вынос и возврат
+    var hx = p.x + Math.cos(pa) * (10 + ext);
+    var hy = p.y + Math.sin(pa) * (10 + ext) - 4;
+    ctx.save();
+    // размытая дуга замаха
+    ctx.globalAlpha = fx.palm * 0.5;
+    ctx.strokeStyle = '#ffd76e';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 4, 24 + ext * 0.6, pa - 0.9, pa + 0.9);
+    ctx.stroke();
+    // рукавица
+    ctx.globalAlpha = 0.4 + fx.palm * 0.6;
+    ctx.fillStyle = '#e8dfc8';
+    ctx.beginPath(); ctx.ellipse(hx, hy, 8, 6, pa, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#8a6a2a';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ── ВАНТУЗ: ХЛОП — резкий тычок вперёд, присоска на ручке ──
+  if (fx.plunger > 0) {
+    var pl = Math.sin(fx.plunger * Math.PI);
+    var plx = p.x, ply = p.y - 10 - pl * 10;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + fx.plunger * 0.65;
+    // ручка
+    ctx.strokeStyle = '#c98f5a';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(plx, ply + 14); ctx.lineTo(plx, ply - 12 * pl - 4); ctx.stroke();
+    // присоска-купол
+    ctx.fillStyle = '#8a2433';
+    ctx.beginPath();
+    ctx.ellipse(plx, ply + 14, 10 + pl * 5, 5, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ── БАЛАЛАЙКА: дедбряхнул — струны дрожат, тело видно ──
+  if (fx.balalaika > 0) {
+    var bl2 = fx.balalaika;
+    ctx.save();
+    ctx.translate(p.x - p.face * 18, p.y - 10);
+    ctx.rotate(p.face * -0.3 + Math.sin(bl2 * 40) * 0.06);
+    ctx.globalAlpha = 0.45 + bl2 * 0.55;
+    // треугольный корпус
+    ctx.fillStyle = '#c98f5a';
+    ctx.beginPath();
+    ctx.moveTo(-6, -8); ctx.lineTo(6, -8); ctx.lineTo(0, 6);
+    ctx.closePath(); ctx.fill();
+    // гриф
+    ctx.strokeStyle = '#8a6a2a'; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(0, -20); ctx.stroke();
+    // струны трясутся
+    ctx.strokeStyle = '#f4e9c8'; ctx.lineWidth = 1;
+    for (var st = -1; st <= 1; st++) {
+      ctx.beginPath();
+      ctx.moveTo(st * 2.4, -8);
+      ctx.lineTo(st * 2.4 + Math.sin(bl2 * 60 + st) * 2.6 * bl2, 4);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── СКИПИДАР: замах склянкой над головой ──
+  if (fx.skipidar > 0) {
+    var skf = fx.skipidar;
+    ctx.save();
+    ctx.translate(p.x + p.face * 8, p.y - 20 - Math.sin(skf * Math.PI) * 8);
+    ctx.rotate(p.face * (0.6 - skf * 1.4));
+    ctx.globalAlpha = 0.5 + skf * 0.5;
+    ctx.fillStyle = '#9db88a';
+    ctx.fillRect(-3, -6, 6, 10);
+    ctx.fillStyle = '#ff8c42';
+    ctx.fillRect(-1.8, -8, 3.6, 3);
+    ctx.restore();
+  }
+
+  // ── ТАПОК: дед замахнулся второй ногой — пыль из-под валенка ──
+  if (fx.slipper > 0) {
+    ctx.save();
+    ctx.globalAlpha = fx.slipper * 0.7;
+    ctx.fillStyle = '#dfe8f2';
+    for (var sd = 0; sd < 4; sd++) {
+      var sdx = p.x - p.face * (6 + sd * 5 + fx.slipper * 12);
+      var sdy = p.y + 12 - sd * 2;
+      ctx.beginPath(); ctx.arc(sdx, sdy, 2.6 - sd * 0.4, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // ── ЛУЧИНА: бросок — искра от руки ──
+  if (fx.joint > 0) {
+    var jfa = fx.jointAng || 0;
+    ctx.save();
+    ctx.globalAlpha = fx.joint * 0.8;
+    var jhx = p.x + Math.cos(jfa) * 16;
+    var jhy = p.y + Math.sin(jfa) * 16 - 6;
+    ctx.fillStyle = '#ff8c42';
+    ctx.beginPath(); ctx.arc(jhx, jhy, 3 + fx.joint * 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ffd76e';
+    ctx.beginPath(); ctx.arc(jhx, jhy, 1.6, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
 
   // ГРИБНАЯ АУРА: пульсирующее споровое поле
   if (p.weapons.aura) {
@@ -3496,6 +3960,53 @@ function drawEnemy(e) {
     ctx.fillStyle = body;
     tri(-7, -12, -9, -18, -3, -13);
     tri(7, -12, 9, -18, 3, -13);
+  } else if (e.type === 'boar') {
+    // КАБАН: приземистый корпус, клыки вверх, разгон — копытная пыль
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, 2, 15, 10, 0, 0, TAU); ctx.fill();
+    // щетина на хребте
+    ctx.fillStyle = '#8a4a30';
+    for (var bs = -2; bs <= 2; bs++) {
+      tri(bs * 5 - 2, -6, bs * 5, -13 - (bs % 2 ? 2 : 0), bs * 5 + 2, -6);
+    }
+    // пятачок
+    ctx.fillStyle = '#ffb0a0';
+    ctx.beginPath(); ctx.ellipse(11, 3, 4.4, 3.4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#8a2433';
+    ctx.beginPath(); ctx.arc(10, 2.4, 0.8, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(12.4, 2.4, 0.8, 0, TAU); ctx.fill();
+    // клыки
+    ctx.strokeStyle = '#f4e9c8';
+    ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(10, 5); ctx.lineTo(13, -1); ctx.stroke();
+    // злой глаз
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath(); ctx.arc(7, -2, 1.7, 0, TAU); ctx.fill();
+    // хвостик-крючок
+    ctx.strokeStyle = body; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(-15, -2, 3, 0, Math.PI * 1.4); ctx.stroke();
+  } else if (e.type === 'squirrel') {
+    // БЕЛКА-СНАЙПЕР: пушистый хвост-вопрос, шишка в лапках, при теле — злая
+    ctx.fillStyle = body;
+    // хвост
+    ctx.beginPath();
+    ctx.moveTo(-5, 2);
+    ctx.quadraticCurveTo(-16, 8, -10, -10 - Math.sin(e.t * 8) * 2);
+    ctx.quadraticCurveTo(-4, -6, -5, 2);
+    ctx.fill();
+    // тело и голова
+    ctx.beginPath(); ctx.ellipse(0, 2, 6.4, 7, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -6, 4.6, 0, TAU); ctx.fill();
+    // ушко
+    tri(2.4, -9.4, 3.6, -14, 6, -10);
+    // глаз-бусина и зуб
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath(); ctx.arc(5.4, -6.6, 1.3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(4.6, -3.4, 1.4, 1.8);
+    // шишка в лапках (снаряд)
+    ctx.fillStyle = '#8a6a2a';
+    ctx.beginPath(); ctx.ellipse(8, 1, 2.6, 3.4, 0.4, 0, TAU); ctx.fill();
   }
 
   // корона элиты
@@ -3630,6 +4141,25 @@ function drawPlayer(p) {
   ctx.fillStyle = '#e8dfc8';
   ctx.beginPath(); ctx.arc(-8, -14, 3, 0, TAU); ctx.fill();
 
+  // ДЕД КУРИТ: папироса в руке с живым огоньком
+  if (p.smokeT > 0) {
+    ctx.save();
+    ctx.translate(p.face * 10, -4);
+    ctx.rotate(p.face * -0.35);
+    // папироса
+    ctx.fillStyle = '#e8dfc8';
+    ctx.fillRect(0, -1.4, 9, 2.8);
+    ctx.fillStyle = '#a88d5a';
+    ctx.fillRect(7, -1.4, 2.6, 2.8);
+    // тлеющий кончик
+    var emb = 0.7 + Math.sin(G.t * 9) * 0.3;
+    ctx.fillStyle = '#ff8c42';
+    ctx.beginPath(); ctx.arc(9.8, 0, 1.5 * emb + 0.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,180,80,' + (0.3 * emb) + ')';
+    ctx.beginPath(); ctx.arc(9.8, 0, 3, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
   ctx.restore();
 
   // кот Барсик на орбите
@@ -3684,6 +4214,28 @@ function drawCat(x, y, a) {
 function drawBullets() {
   for (var i = 0; i < G.bullets.length; i++) {
     var b = G.bullets[i];
+    // ШЛЕЙФЫ: тапок/дубина — снежная пыль, лучина — угольки, склянка — брызги
+    if (b.kind === 'slipper' || b.kind === 'tapok') {
+      if (Math.random() < 0.5) {
+        particles.push({
+          kind: 'puff', x: b.x + rnd(-3, 3), y: b.y + rnd(-3, 3),
+          vx: rnd(-14, 14), vy: rnd(-10, 6), life: 0.3, t: 0,
+          col: 'rgba(223,232,242,0.55)', size: rnd(1.5, 3)
+        });
+      }
+    } else if (b.kind === 'joint' && Math.random() < 0.4) {
+      particles.push({
+        kind: 'puff', x: b.x - Math.cos(Math.atan2(b.vy, b.vx)) * 8, y: b.y,
+        vx: rnd(-10, 10), vy: -16, life: 0.35, t: 0,
+        col: Math.random() < 0.4 ? 'rgba(255,140,66,0.7)' : 'rgba(200,200,220,0.4)', size: rnd(1.4, 2.6)
+      });
+    } else if (b.kind === 'flask' && Math.random() < 0.3) {
+      particles.push({
+        kind: 'puff', x: b.x + rnd(-4, 4), y: b.y + rnd(-4, 4),
+        vx: rnd(-8, 8), vy: rnd(-4, 10), life: 0.3, t: 0,
+        col: 'rgba(157,184,138,0.5)', size: rnd(1.2, 2.2)
+      });
+    }
     ctx.save();
     ctx.translate(b.x, b.y);
     if (b.kind === 'slipper') {
@@ -3813,6 +4365,27 @@ function updateHUD(dt) {
 
   $$('kills').textContent = 'изгнано: ' + G.kills;
 
+  // ПОЛОСА HP СТАРШЕГО ЛЕСА
+  var bh = $$('boss-hp');
+  if (G.bossAlive && !G.bossAlive.dead) {
+    bh.classList.remove('hidden');
+    $$('boss-hp-name').textContent = (G.bossAlive.enraged ? '🔥 ' : '') + (G.bossAlive.name || 'СТАРШИЙ ЛЕСА');
+    $$('boss-hp-bar').style.width = Math.max(0, G.bossAlive.hp / G.bossAlive.maxHp * 100) + '%';
+  } else {
+    bh.classList.add('hidden');
+  }
+
+  // КОМБО-ПЛАШКА: серия ×N, растёт с серией, гаснет к концу окна
+  var kb = $$('combo');
+  if (G.combo >= 5 && G.comboT > 0) {
+    kb.style.display = 'block';
+    kb.textContent = 'СЕРИЯ ×' + G.combo;
+    kb.style.transform = 'scale(' + (1 + Math.min(0.45, G.combo * 0.006)) + ')';
+    kb.style.opacity = Math.min(1, G.comboT / 0.8);
+  } else {
+    kb.style.display = 'none';
+  }
+
   // слоты оружия
   var slots = $$('weapon-slots');
   var html = '';
@@ -3846,6 +4419,9 @@ function startRun(mode) {
   particles = [];
   floaters = [];
   G.kills = 0;
+  G.combo = 0; G.comboT = 0;
+  G.statsButts = 0; G.statsCrits = 0; G._bossButtPick = 0;
+  G.cuckooT = 60;
   G.level = 1;
   G.xp = 0;
   G.xpNext = 8;
@@ -3904,6 +4480,7 @@ function endRun(winFlag) {
     dedEvent('win');
     spawnConfetti(G.player.x, G.player.y, 120, 2);
     unlockAch('winner');
+    if (G.mode === 'classic' && !(G.statsButts > 0)) unlockAch('noheal');
   } else {
     AU.death();
     AU.stopWind();
@@ -3924,6 +4501,7 @@ function endRun(winFlag) {
     }
     best.runs = (best.runs || 0) + 1;
     if (winFlag) best.wins = (best.wins || 0) + 1;
+    best.totalButts = (best.totalButts || 0) + (G.statsButts || 0);
     localStorage.setItem('dedBest', JSON.stringify(best));
   } catch (e) { /* приватный режим — просто играем */ }
 
@@ -3970,11 +4548,14 @@ function togglePause() {
     G.state = 'pause';
     $$('pause-stats').innerHTML =
       'Время: <b>' + fmtTime(G.t) + '</b><br>Изгнано: <b>' + G.kills +
-      '</b><br>Уровень: <b>' + G.level + '</b>';
+      '</b><br>Уровень: <b>' + G.level + '</b><br>Лучшая серия: <b>×' + (G.stats.maxCombo || 0) +
+      '</b><br>Критов: <b>' + (G.statsCrits || 0) + '</b> · окурков: <b>' + (G.statsButts || 0) + '</b>';
     $$('pause').classList.remove('hidden');
+    canvas.style.filter = 'blur(3px)';   // мир уходит из фокуса на паузе
   } else if (G.state === 'pause') {
     G.state = 'play';
     $$('pause').classList.add('hidden');
+    canvas.style.filter = '';
   }
 }
 
@@ -3999,20 +4580,42 @@ function toMenu() {
   showBest();
 }
 
+/** Ранг деда по числу достижений: от «Новичок у станции» до «Легенда тайги». */
+function dedRank() {
+  var got = getAchs();
+  var n = Object.keys(got).length;
+  var tiers = [
+    [0,  '🧦 Дед в тапках'],
+    [3,  '🧣 Обычный дед'],
+    [7,  '🍄 Грибной дед'],
+    [12, '🪓 Дед-хозяин'],
+    [18, '⚡ Дед-элементаль'],
+    [24, '👑 Легенда тайги']
+  ];
+  var r = tiers[0];
+  for (var i = 0; i < tiers.length; i++) if (n >= tiers[i][0]) r = tiers[i];
+  return r[1] + ' · ' + n + '/' + ACHS.length;
+}
+
 function showBest() {
   var el = $$('best-stats');
   try {
     var best = JSON.parse(localStorage.getItem('dedBest') || '{}');
+    var got = getAchs();
+    var achN = Object.keys(got).length;
     if (!best.runs) {
-      el.innerHTML = 'Первый забег? Не тормози, дед.';
+      el.innerHTML = 'Первый забег? Не тормози, дед.<br>Ранг: <b style="color:#7bffb0">' + dedRank() + '</b>';
       return;
     }
     el.innerHTML =
+      'Ранг: <b style="color:#7bffb0">' + dedRank() + '</b><br>' +
       'НОЧЬ: лучшее время <b style="color:#ffd76e">' + fmtTime(best.bestTime || 0) +
       '</b> · изгнаний <b style="color:#ffd76e">' + (best.bestKills || 0) + '</b>' +
       ' · побед: ' + (best.wins || 0) +
       '<br>БЕСКОНЕЧНАЯ: рекорд <b style="color:#b39bff">' + fmtTime(best.endlessTime || 0) +
-      '</b> · изгнаний <b style="color:#b39bff">' + (best.endlessKills || 0) + '</b>';
+      '</b> · изгнаний <b style="color:#b39bff">' + (best.endlessKills || 0) + '</b>' +
+      '<br>Ночей пережито: <b>' + (best.runs || 0) + '</b>' +
+      ' · дед выкурил окурков: <b>' + (best.totalButts || 0) + '</b> 🚬';
   } catch (e) {
     el.innerHTML = '';
   }
@@ -4116,6 +4719,11 @@ bind('btn-achs', function () {
   G.state = 'achs';
 });
 bind('btn-achs-back', toMenu);
+bind('btn-news', function () {
+  $$('menu').classList.add('hidden');
+  $$('news').classList.remove('hidden');
+});
+bind('btn-news-back', toMenu);
 bind('btn-reroll', rerollCards);
 bind('btn-resume', togglePause);
 bind('btn-quit', toMenu);
