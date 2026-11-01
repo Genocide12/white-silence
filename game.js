@@ -681,6 +681,7 @@ var G = {
   zapFlash: 0,
   bossIdx: 0,          // какой босс следующий (0,1,2)
   bossAlive: null,
+  runSeq: 0,           // номер забега: волны старого забега не переносятся в новый
   ufo: null,           // (убрано: финал — рассвет)
   dawn: false,         // идёт рассвет
   dawnT: 0,
@@ -1049,6 +1050,7 @@ function killEnemy(e) {
   if (e.boss) {
     AU.roar();
     announce('БОСС ИЗГНАН!\n🍄 +ополчение грибов', 2200, true);
+    G.bossAlive = null;   // флаг снят — обычный спавн возобновляется
   }
 }
 
@@ -1497,6 +1499,10 @@ function composition(t) {
 function updateDirector(dt) {
   var p = G.player;
 
+  // страховка: старшего пометили мёртвым где-то ещё — снимаем флаг сам,
+  // иначе обычный спавн и следующие боссы стоят навсегда
+  if (G.bossAlive && G.bossAlive.dead) G.bossAlive = null;
+
   // БОССЫ — старшие леса: 3:00, 6:30, 9:00
   if (G.bossIdx < BOSS_TIMES.length && G.t >= BOSS_TIMES[G.bossIdx] && !G.bossAlive) {
     spawnBoss(G.bossIdx);
@@ -1549,10 +1555,14 @@ function updateDirector(dt) {
     G.waveT = rnd(40, 60);
     var wv = WAVE_EVENTS[Math.min(WAVE_EVENTS.length - 1, Math.floor(G.t / 100))];
     announce('🥁 ' + wv.name, 1600);
+    var seq = G.runSeq;   // волны убитого забега не переносятся в новый
     for (var i = 0; i < wv.n; i++) {
       (function (ii) {
-        setTimeout(function () {
-          if (G.state !== 'play') return;
+        setTimeout(function fire() {
+          // забег закончился/вышли в меню — волна отменяется
+          if (seq !== G.runSeq || G.state === 'menu' || G.state === 'death' || G.state === 'win') return;
+          // прокачка/пауза — не терять волну, подождать возвращения в игру
+          if (G.state !== 'play') { setTimeout(fire, 160); return; }
           var type = wv.type === 'mix' ? pick(composition(G.t)) : wv.type;
           if (wv.ring) spawnAtRing(type);
           else {
@@ -2501,6 +2511,7 @@ function updateHUD(dt) {
 function startRun() {
   G.state = 'play';
   G.t = 0;
+  G.runSeq++;
   G.player = newPlayer();
   G.enemies = [];
   G.bullets = [];
@@ -2743,7 +2754,7 @@ requestAnimationFrame(tick);
 // отладочный хук (использует scripts/playtest.mjs)
 window.DED = {
   G: G, CAM: CAM, AU: AU,
-  startRun: startRun, spawnBoss: spawnBoss,
+  startRun: startRun, spawnBoss: spawnBoss, killEnemy: killEnemy,
   hurtPlayer: hurtPlayer, tryZap: tryZap, gainXp: gainXp,
   announce: announce, rerollCards: rerollCards, spawnAtRing: spawnAtRing,
   WEAPONS: WEAPONS, PASSIVES: PASSIVES, EVOS: EVOS, ENEMY_TYPES: ENEMY_TYPES,
