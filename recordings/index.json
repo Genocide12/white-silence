@@ -1,0 +1,37 @@
+{
+ "records": [
+  {
+   "file": "Гена-Турбо.json",
+   "name": "Гена-Турбо",
+   "result": "victory",
+   "day": 59,
+   "realSec": 2232,
+   "seed": 40061,
+   "at": 1793504046979,
+   "banished": 23,
+   "calls": 3
+  },
+  {
+   "file": "Гена-Лодошка.json",
+   "name": "Гена-Лодошка",
+   "result": "victory",
+   "day": 60,
+   "realSec": 2875,
+   "seed": 40500,
+   "at": 1793504046985,
+   "banished": 42,
+   "calls": 3
+  },
+  {
+   "file": "Гена-Вантуз.json",
+   "name": "Гена-Вантуз",
+   "result": "death",
+   "day": 61,
+   "realSec": 1445,
+   "seed": 40800,
+   "at": 1793504046994,
+   "banished": 74,
+   "calls": 0
+  }
+ ]
+}
