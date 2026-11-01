@@ -1713,7 +1713,11 @@
           ', грибной энергии: ' + Math.floor(cz.energy) +
           ', изгнано мультяшек: ' + cz.banished +
           ', прикорнул раз: ' + cz.respawns +
-          ', факелов: ' + invCount('torch') + '/' + TORCHES_NEED);
+          ', факелов: ' + invCount('torch') + '/' + TORCHES_NEED +
+          ', материалы: д' + invCount('plank') + '/т' + invCount('cloth_rag') +
+          '/ж' + invCount('fat') + '/м' + invCount('lamp_oil') +
+          '/пыль ' + invCount('stardust') +
+          (p.fracture ? (p.fracTreat ? ' 🦴✓' : ' 🦴') : ''));
     } else {
       log('— День ' + dayN() + '. ' + greetDay() +
           ' Еды: ' + countFood() + ', воды: ' + waterCount() +
