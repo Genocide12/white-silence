@@ -134,11 +134,23 @@ var AU = {
     } catch (e) { /* пусто */ }
   },
 
-  slap: function () { this.noise(0.08, 0.22, 2400); this.tone(180, 0.06, 'square', 0.1, 90); },
+  slap: function () {   // ЛОДОШКА: хлёсткий «ХЛЯСЬ» — щелчок + шлепок + низ
+    this.noise(0.09, 0.3, 2600);
+    this.tone(190, 0.08, 'square', 0.16, 70);
+    this.tone(95, 0.12, 'sine', 0.2, 45);
+  },
   pop: function () { this.tone(660, 0.07, 'sine', 0.12, 990); },
   gem: function () { this.tone(880, 0.05, 'sine', 0.08, 1320); },
-  hurt: function () { this.tone(140, 0.18, 'sawtooth', 0.2, 60); },
-  kill: function () { this.tone(320, 0.1, 'square', 0.1, 160); this.noise(0.06, 0.1, 3000); },
+  hurt: function () {   // деду прилетело: глухой удар + дребезг
+    this.tone(140, 0.18, 'sawtooth', 0.22, 60);
+    this.tone(70, 0.22, 'sine', 0.26, 40);
+    this.noise(0.08, 0.14, 700);
+  },
+  kill: function () {    // изгнание: «БАМ» + хруст конфетти
+    this.tone(300, 0.09, 'square', 0.14, 120);
+    this.tone(80, 0.16, 'sine', 0.22, 40);
+    this.noise(0.07, 0.13, 3200);
+  },
   levelup: function () {
     this.tone(523, 0.12, 'square', 0.12); 
     var self = this;
@@ -238,7 +250,11 @@ var AU = {
   dedTalk: function (phrase, mood, force) {
     if (!force && !this.canSay('ded', mood === 'pain' ? 1.6 : 2.6)) return false;
     if (force) this.canSay('ded', 0.6);   // даже важное — не чаше раза в 0.6с
+    // НАСТОЯЩАЯ РЕЧЬ: дед произносит фразу синтез-голосом (низкий скрипучий).
+    // Блипы остаются тихим «скрипом» под голосом — характер деда не теряем.
+    var spoke = this.say(phrase, 'ded');
     if (!this.ctx || this.muted) return true;   // звука нет — текст всё равно покажем
+    var blipMul = spoke ? 0.3 : 1;              // голос говорит — блипы вполголоса
     var base = mood === 'pain' ? 145 : (mood === 'exc' ? 118 : 98);
     var words = phrase.split(' ');
     var notes = [];
@@ -262,7 +278,7 @@ var AU = {
     this.voice(notes, {
       type: 'sawtooth',
       cut: mood === 'pain' ? 900 : 760,
-      vib: 5, vol: mood === 'sad' ? 0.34 : (mood === 'pain' ? 0.36 : 0.33),
+      vib: 5, vol: (mood === 'sad' ? 0.34 : (mood === 'pain' ? 0.36 : 0.33)) * blipMul,
       gap: mood === 'sad' ? 0.09 : 0.035
     });
     return true;
@@ -270,8 +286,19 @@ var AU = {
 
   /** Голоса старших леса: у каждого свой характер. kind: 'spawn'|'attack'|'die'. */
   bossVoice: function (id, kind) {
-    if (!this.ctx || this.muted) return;
+    if (this.muted) return;
     if (!this.canSay('bv_' + id + '_' + kind, kind === 'spawn' ? 6 : (kind === 'die' ? 4 : 2.2))) return;
+    // НАСТОЯЩИЙ рык синтез-голосом: старший лес говорит коронную фразу
+    var PH = {
+      alpha:   { spawn: 'Врр! Стая, ко мне!', die: 'Не может быть…', attack: 'Грр!' },
+      shisha:  { spawn: 'Эр-р-р! Тепла хочу!', die: 'Зимы больше нет…', attack: 'Р-р-умпф!' },
+      glavar:  { spawn: 'Хе-хе-хе! Кошелёк или жизнь, дед!', die: 'Продулся…', attack: 'Сдавайся!' },
+      hozyain: { spawn: 'Ту-у-у! С пути уйди!', die: 'Состав сбит…', attack: 'Ту-у!' },
+      metelica:{ spawn: 'Ха-ха-ха! Заметаю, старый!', die: 'Оттаяла…', attack: 'Лети!' },
+      leshiy:  { spawn: 'Хо-хо-хо! Мой лес, дед!', die: 'Лес отпускает…', attack: 'Хо!' }
+    }[id];
+    if (PH && PH[kind]) this.say(PH[kind], 'boss');
+    if (!this.ctx) return;
     var N = {
       alpha: {    // ВОЖАК: вой в туман
         spawn: [{ f: 320, d: 0.4, s: 400 }, { f: 400, d: 0.9, s: 200 }],
@@ -358,6 +385,77 @@ var AU = {
     this.tone(660, 0.14, 'sine', 0.12, 640);
     setTimeout(function () { self.tone(520, 0.18, 'sine', 0.12, 500); }, 200);
   },
+
+  // ─── НАСТОЯЩАЯ РЕЧЬ: браузерный синтезатор голоса (ru-RU) ───
+  // Дед говорит по-русски: низкий скрипучий питч. Боссы рычат (pitch 0.05).
+  // Если синтеза в браузере нет — тихо остаёмся на блипах, игра не ломается.
+  ttsVoice: null, ttsReady: false, ttsOK: null,
+  pickVoice: function () {
+    this.ttsReady = true;
+    try {
+      if (!window.speechSynthesis) { this.ttsOK = false; return; }
+      var vs = speechSynthesis.getVoices() || [];
+      var ru = [];
+      for (var i = 0; i < vs.length; i++) if (/^ru/i.test(vs[i].lang)) ru.push(vs[i]);
+      this.ttsVoice = ru[0] || null;
+      this.ttsOK = true;
+    } catch (e) { this.ttsOK = false; }
+  },
+  say: function (text, who) {
+    try {
+      if (!window.speechSynthesis || this.muted || !text) return false;
+      if (!this.ttsReady) this.pickVoice();
+      if (this.ttsOK === false) return false;
+      if (speechSynthesis.speaking || speechSynthesis.pending) {
+        if (who !== 'ded') return false;   // реплики боссов друг друга не перебивают
+        speechSynthesis.cancel();          // а дед перебивает всех — он главный
+      }
+      var u = new SpeechSynthesisUtterance(text);
+      if (this.ttsVoice) u.voice = this.ttsVoice;
+      u.lang = 'ru-RU';
+      u.volume = 1;
+      if (who === 'boss') { u.pitch = 0.05; u.rate = 0.72; }      // старший лес: рык
+      else if (who === 'radio') { u.pitch = 1; u.rate = 1.04; }   // диктор станции
+      else { u.pitch = 0.22; u.rate = 0.92; }                     // дед: низко и скрипуче
+      speechSynthesis.speak(u);
+      return true;
+    } catch (e) { return false; }
+  },
+
+  // ─── МУЗЫКА: музыкальная шкатулка «Ой, мороз, мороз» ───
+  // [нота, доли, бас] — мотив народной песни, доля ~0.3с.
+  musicOn: true, musicT: 0, musicStep: 0,
+  MEL: [
+    [329.6, 2, 164.8], [329.6, 1, 0], [329.6, 1, 0], [293.7, 2, 0], [329.6, 2, 0], [392.0, 4, 196.0],
+    [440.0, 2, 220.0], [440.0, 1, 0], [440.0, 1, 0], [392.0, 2, 0], [349.2, 2, 0], [329.6, 4, 164.8],
+    [329.6, 2, 164.8], [329.6, 1, 0], [329.6, 1, 0], [293.7, 2, 0], [329.6, 2, 0], [392.0, 4, 196.0],
+    [440.0, 2, 220.0], [392.0, 2, 0], [349.2, 2, 0], [329.6, 2, 0], [293.7, 3, 146.8], [0, 1, 0],
+    [392.0, 2, 196.0], [392.0, 1, 0], [392.0, 1, 0], [349.2, 2, 0], [392.0, 2, 0], [493.9, 4, 246.9],
+    [523.3, 2, 261.6], [523.3, 1, 0], [523.3, 1, 0], [493.9, 2, 0], [440.0, 2, 0], [392.0, 4, 196.0],
+    [392.0, 2, 196.0], [392.0, 1, 0], [392.0, 1, 0], [349.2, 2, 0], [392.0, 2, 0], [493.9, 4, 246.9],
+    [440.0, 2, 220.0], [392.0, 2, 0], [349.2, 2, 0], [329.6, 3, 164.8], [0, 3, 0]
+  ],
+  musicTick: function (dt) {
+    if (!this.ctx || this.muted || !this.musicOn) return;
+    this.musicT -= dt;
+    if (this.musicT > 0) return;
+    var st = this.MEL[this.musicStep % this.MEL.length];
+    this.musicStep++;
+    this.musicT = st[1] * 0.3;
+    if (st[0] > 0) {
+      this.tone(st[0], 1.4, 'sine', 0.055);          // голос шкатулки
+      this.tone(st[0] * 2, 0.5, 'sine', 0.018);      // стеклянный обертон
+    }
+    if (st[2] > 0) this.tone(st[2], 1.6, 'triangle', 0.05);   // бас-доля
+  },
+
+  // разблокировка звука после первого жеста: контекст мог создаться «suspended»
+  unlock: function () {
+    this.init();
+    try {
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    } catch (e) { /* пусто */ }
+  },
   windNode: null,
   startWind: function () {   // фоновый ветер: петля шума через фильтр
     if (!this.ctx || this.windNode || this.muted) return;
@@ -397,7 +495,7 @@ var touchStart = null;
 
 window.addEventListener('keydown', function (e) {
   keys[e.code] = true;
-  AU.init();
+  AU.unlock();
   if (e.code === 'KeyG' || e.code === 'Space') {
     tryZap();
     if (G.state === 'play') e.preventDefault();
@@ -426,7 +524,7 @@ var joyEl = $$('joy');
 var knobEl = $$('joy-knob');
 
 window.addEventListener('pointerdown', function (e) {
-  AU.init();
+  AU.unlock();
   if (G.state !== 'play') return;
   if (e.target.closest && e.target.closest('.btn, .card')) return;
   if (touchId !== null) return;
@@ -473,6 +571,48 @@ function moveInput() {
 }
 
 // ═════════════════════════════════════════ КАМЕРА / СОК (GAME FEEL) ══════
+
+// ═════════════════════════════════════════════════ ГРАНИЦА МИРА ══════════
+// Станция стоит в лесной чаше: дальше — сплошная метель, не пройти.
+var WORLD_R = 1500;
+
+function clampToWorld(o, pad) {
+  pad = pad || 0;
+  var r = WORLD_R - pad;
+  var d = Math.hypot(o.x, o.y);
+  if (d > r) {
+    var k = r / d;
+    o.x *= k;
+    o.y *= k;
+    return true;   // упёрся в край
+  }
+  return false;
+}
+
+// СНЕЖНАЯ СТЕНА: по краю мира клубится непроходимая метель
+function drawWorldEdge() {
+  var p = G.player;
+  if (!p) return;
+  var d = Math.hypot(p.x, p.y);
+  if (d < WORLD_R - 560) return;   // далеко от края — не рисуем
+  var a0 = Math.atan2(p.y, p.x);
+  ctx.save();
+  for (var i = -13; i <= 13; i++) {
+    var a = a0 + i * 0.055;
+    var wx = Math.cos(a) * WORLD_R, wy = Math.sin(a) * WORLD_R;
+    var t = performance.now() / 1000;
+    var surge = Math.sin(t * 1.6 + i * 1.3) * 26;
+    var al = 0.34 * (1 - Math.abs(i) / 15);
+    var g = ctx.createRadialGradient(wx, wy, 10, wx, wy, 240 + surge);
+    g.addColorStop(0, 'rgba(223,232,242,' + al + ')');
+    g.addColorStop(1, 'rgba(223,232,242,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(wx, wy, 240 + surge, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
 
 var CAM = {
   x: 0, y: 0,
@@ -1594,6 +1734,13 @@ function hurtEnemy(e, dmg, fromX, fromY, knock) {
   var crit = Math.random() < critCh;
   if (crit) dmg *= 2;
   dmg = Math.round(dmg);
+  // ХИТ-МАРКЕР: рубящий росчерк в точке удара — каждый контакт читается
+  var ha = angTo(fromX, fromY, e.x, e.y);
+  particles.push({
+    kind: 'arc', x: e.x, y: e.y, t: 0, life: 0.16,
+    r: e.r + 8, ang: ha, arc: crit ? 2.2 : 1.4,
+    col: crit ? '#ffd76e' : '#fff'
+  });
   e.hp -= dmg;
   e.flash = 0.09;
   G.stats.dmg += dmg;
@@ -1949,6 +2096,7 @@ function updateEnemies(dt) {
     var e = G.enemies[i];
     if (e.dead) { G.enemies.splice(i, 1); continue; }
     e.t += dt;
+    clampToWorld(e, -e.r);   // лес не вылезает за метель (даже чуть «из стены»)
     if (e.flash > 0) e.flash -= dt;
     if (e.catCd > 0) e.catCd -= dt;
     if (e.atkCd > 0) e.atkCd -= dt;
@@ -2615,6 +2763,7 @@ function updatePickups(dt) {
   for (var i = G.pickups.length - 1; i >= 0; i--) {
     var it = G.pickups[i];
     it.t += dt;
+    clampToWorld(it, 10);   // призы не улетают в метель
 
     // ГРИБЫ ГАСНУТ: последние 3 секунды тают на глазах
     if (it.kind === 'shroom' || it.kind === 'bigshroom' || it.kind === 'gold') {
@@ -3071,6 +3220,9 @@ function radioSay(txt) {
   if (!radioEl) radioEl = $$('radio');
   if (!radioEl) return;
   radioEl.textContent = txt;
+  // диктор станции говорит вслух (ровным «радио»-голосом), текст без «📻»
+  var spoken = txt.replace(/^📻\s*/, '').replace(/…/g, '.');
+  AU.say(spoken, 'radio');
   radioEl.classList.add('show');
   AU.pop();
   if (radioHide) clearTimeout(radioHide);
@@ -3205,6 +3357,7 @@ function tryZap() {
   if (G.zapCount >= 3) unlockAch('zap3');
   var p = G.player;
   AU.zap();
+  AU.say('Гы-гы-гы! Вот это приход!', 'ded');   // дед ржёт в голос на залпе
   CAM.kick(1.2);
   hitstop = Math.max(hitstop, 0.1);
   announce('🍄 ГРИБНОЙ ЗАЛП! 🍄', 1500, true);
@@ -3251,6 +3404,7 @@ function render() {
   if (G.player) {
     drawPickups();
     drawCrowMarks();
+    drawWorldEdge();
     drawEntities();
     drawWeaponFx();
     drawBullets();
@@ -3469,23 +3623,29 @@ function drawWeaponFx() {
   // ── РУКА-ЗАМАХ (лодошка): кулак деда вылетает по направлению удара ──
   if (fx.palm > 0) {
     var pa = fx.palmAng || 0;
-    var ext = Math.sin(fx.palm * Math.PI) * 26;   // вынос и возврат
+    var ext = Math.sin(fx.palm * Math.PI) * 44;   // вынос и возврат (жирно)
     var hx = p.x + Math.cos(pa) * (10 + ext);
     var hy = p.y + Math.sin(pa) * (10 + ext) - 4;
     ctx.save();
-    // размытая дуга замаха
-    ctx.globalAlpha = fx.palm * 0.5;
+    // размытая дуга замаха (жирная, в два слоя)
+    ctx.globalAlpha = fx.palm * 0.55;
     ctx.strokeStyle = '#ffd76e';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.arc(p.x, p.y - 4, 24 + ext * 0.6, pa - 0.9, pa + 0.9);
+    ctx.arc(p.x, p.y - 4, 26 + ext * 0.7, pa - 1.05, pa + 1.05);
     ctx.stroke();
-    // рукавица
-    ctx.globalAlpha = 0.4 + fx.palm * 0.6;
+    ctx.globalAlpha = fx.palm * 0.8;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y - 4, 26 + ext * 0.7, pa - 0.75, pa + 0.75);
+    ctx.stroke();
+    // рукавица (крупная, с варежкой-манжетой)
+    ctx.globalAlpha = 0.5 + fx.palm * 0.5;
     ctx.fillStyle = '#e8dfc8';
-    ctx.beginPath(); ctx.ellipse(hx, hy, 8, 6, pa, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx, hy, 12, 8.5, pa, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#8a6a2a';
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
   }
@@ -3493,19 +3653,29 @@ function drawWeaponFx() {
   // ── ВАНТУЗ: ХЛОП — резкий тычок вперёд, присоска на ручке ──
   if (fx.plunger > 0) {
     var pl = Math.sin(fx.plunger * Math.PI);
-    var plx = p.x, ply = p.y - 10 - pl * 10;
+    var plx = p.x, ply = p.y - 12 - pl * 16;
     ctx.save();
-    ctx.globalAlpha = 0.35 + fx.plunger * 0.65;
-    // ручка
+    ctx.globalAlpha = 0.45 + fx.plunger * 0.55;
+    // ручка (длиннее, толще)
     ctx.strokeStyle = '#c98f5a';
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 7;
     ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(plx, ply + 14); ctx.lineTo(plx, ply - 12 * pl - 4); ctx.stroke();
-    // присоска-купол
+    ctx.beginPath(); ctx.moveTo(plx, ply + 16); ctx.lineTo(plx, ply - 20 * pl - 6); ctx.stroke();
+    // присоска-купол (вдвое больше, ХЛОПает)
     ctx.fillStyle = '#8a2433';
     ctx.beginPath();
-    ctx.ellipse(plx, ply + 14, 10 + pl * 5, 5, 0, 0, TAU);
+    ctx.ellipse(plx, ply + 16, 17 + pl * 8, 8, 0, 0, TAU);
     ctx.fill();
+    ctx.strokeStyle = '#5c1622';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // кольцо хлопка
+    ctx.globalAlpha = fx.plunger * 0.7;
+    ctx.strokeStyle = '#6ecbff';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(plx, ply + 16, 20 + (1 - fx.plunger) * 26, 0, TAU);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -4071,6 +4241,14 @@ function drawPlayer(p) {
   var blink = p.iframe > 0 && Math.floor(p.iframe * 14) % 2 === 0;
   if (blink) ctx.globalAlpha = 0.4;
 
+  // СКВОШ-И-СТРЕТЧ: на бегу дед пружинит — приседает и вытягивается
+  var moving = p.walkT > 0 && (Math.abs(p.lastVX || 0) + Math.abs(p.lastVY || 0)) > 1;
+  if (moving) {
+    var sq = Math.sin(p.walkT * 11);                 // фаза шага
+    ctx.scale(1 + 0.07 * sq, 1 - 0.07 * sq);         // сплющить/вытянуть
+    ctx.translate(0, 1.4 * (1 - Math.abs(sq)));      // присед на «падении» шага
+  }
+
   // свечение в трипе
   if (G.zapT > 0) {
     ctx.shadowColor = '#b16bff';
@@ -4464,6 +4642,12 @@ function startRun(mode) {
     announce('БЕСКОНЕЧНАЯ НОЧЬ\nрассвета не будет. сколько вытерпишь?', 3000);
   }
   dedEvent('start');
+  // интро голосом: ночь встречаем словами, а не блипами
+  setTimeout(function () {
+    if (G.state === 'play') {
+      AU.say('Ну что, лес. Поглядим, чья возьмёт.', 'ded');
+    }
+  }, 1400);
 }
 
 function endRun(winFlag) {
@@ -4645,6 +4829,13 @@ function tick(ts) {
       if (mv.x || mv.y) {
         p.x += mv.x * p.speed * speedMul() * dt;
         p.y += mv.y * p.speed * speedMul() * dt;
+        // КРАЙ МИРА: дальше метель — деда запирает в лесной чаше
+        if (clampToWorld(p, p.r)) {
+          if (Math.random() < dt * 1.4) {
+            AU.crunch();
+            floatText(p.x, p.y - 40, pick(['Дальше — метель!', 'Край мира, дед', 'Не пройти…']), '#aab7cc', 13);
+          }
+        }
         p.walkT += dt;
         if (mv.x) p.face = mv.x > 0 ? 1 : -1;
         // ПРИЦЕЛ ЛОДОШКИ = направление хода; вороны читают скорость для упреждения
@@ -4675,6 +4866,7 @@ function tick(ts) {
     updateParticles(dt);
     CAM.update(dt);
     updateHUD(dt);
+    AU.musicTick(dt);
   } else if (G.state === 'menu' || G.state === 'help') {
     // меню: лёгкий живой фон
     G.t += dt * 0.3;
@@ -4698,7 +4890,7 @@ function bind(id, fn) {
   var el = document.getElementById(id);
   if (!el) return;
   el.addEventListener('click', function (e) {
-    AU.init();
+    AU.unlock();
     AU.pop();
     fn(e);
   });
