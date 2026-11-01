@@ -39,11 +39,15 @@
   <div id="menu" class="screen">
     <div class="snow-bg"></div>
     <h1>БЕЛОЕ БЕЗМОЛВИЕ</h1>
-    <div class="subtitle">БЕЗУМНЫЙ ДЕД · ДОЖИТЬ ДО РАССВЕТА</div>
-    <div class="tagline">Станция Пристань-Тихая, зима 1917.<br>
-    Одна ночь. Лес лезет со всех сторон — а дед уже слегка с грибами.</div>
-    <button class="btn big" id="btn-play">В НОЧЬ</button>
+    <div class="subtitle">БЕЗУМНЫЙ ДЕД · ПРИСТАНЬ-ТИХАЯ, 1917</div>
+    <div class="tagline">Одна ночь. Лес лезет со всех сторон — а дед уже слегка с грибами.<br>
+    Больше оружий, больше зверья, бесконечная ночь — и радио, которое никто не слушает.</div>
+    <div class="mode-row">
+      <button class="btn big" id="btn-play">🌙 В НОЧЬ<br><small>10 минут · дожить до рассвета</small></button>
+      <button class="btn big endless" id="btn-endless">♾️ БЕСКОНЕЧНАЯ НОЧЬ<br><small>пока дед не сдастся</small></button>
+    </div>
     <button class="btn" id="btn-help">КАК ИГРАТЬ</button>
+    <button class="btn" id="btn-achs">🏆 ДОСТИЖЕНИЯ</button>
     <div id="best-stats"></div>
   </div>
 
@@ -64,9 +68,10 @@
         <p>🍄 <b>Грибы — опыт</b>, но они <b>гаснут</b>: побежал за дальним — рискуешь.</p>
         <p>✨ <b>Золотой гриб</b> — лакомый. И обманка: схватишь — лес проснётся.</p>
         <p>👑 <b>Старшие</b> (синее пламя) оставляют <b>сверток</b> — приз на выбор судьбы.</p>
-        <p><b>Волк присел</b> — сейчас рывок, отходи вбок. <b>Ворона замерла</b> — будет пике в отмеченную точку.</p>
-        <p><b>3:00, 6:30, 9:00 — старшие леса</b> (боссы). После 9:00 — <b>осада</b>.</p>
-        <p><b>10:00 — РАССВЕТ.</b> Дожил — победил. ХП на нуле — безмолвие приняло деда.</p>
+        <p><b>Волк присел</b> — рывок. <b>Ворона замерла</b> — пике в метку. <b>Лось бьёт копытом</b> — таран по прямой. <b>Сова зависла</b> — снежная бомба в круг. <b>Снеговик</b> при смерти делится на двоих мелких.</p>
+        <p><b>12 оружий × 12 эволюций</b>: макс. оружие + макс. парная пассивка = секретная карточка. До 6 оружий за забег.</p>
+        <p><b>Режимы</b>: 🌙 ночь 10 минут (рассвет = победа) и ♾️ <b>бесконечная ночь</b> — старшие каждые 2,5 минуты, лес всё злее, рекорд по времени.</p>
+        <p>📻 <b>Радио</b> станции что-то вещает. Реплики деда — тоже сюжет. Смотрите оба.</p>
       </div>
     </div>
     <button class="btn big" id="btn-help-back">ПОНЯЛ</button>
@@ -89,6 +94,7 @@
   <div id="death" class="screen hidden">
     <h2>БЕЗМОЛВИЕ ПРИНЯЛО ДЕДА</h2>
     <p class="big-emoji">🌫️</p>
+    <p class="win-line" id="death-line"></p>
     <p class="end-stats" id="death-stats"></p>
     <button class="btn big" id="btn-retry">ЕЩЁ НОЧЬ</button>
     <button class="btn" id="btn-death-menu">В МЕНЮ</button>
@@ -97,11 +103,23 @@
   <div id="win" class="screen hidden">
     <h2>РАССВЕТ</h2>
     <p class="big-emoji">🌅</p>
-    <p class="win-line">Небо на востоке налилось золотом.<br>Мультяшки истаяли. Дед идёт ставить самовар.</p>
+    <p class="win-line" id="win-line"></p>
     <p class="end-stats" id="win-stats"></p>
     <button class="btn big" id="btn-win-retry">ЕЩЁ НОЧЬ</button>
     <button class="btn" id="btn-win-menu">В МЕНЮ</button>
   </div>
+
+  <!-- ===== достижения ===== -->
+  <div id="achs" class="screen hidden">
+    <h2>🏆 ДОСТИЖЕНИЯ ДЕДА</h2>
+    <div id="ach-list"></div>
+    <button class="btn big" id="btn-achs-back">В МЕНЮ</button>
+  </div>
+
+  <!-- радио станции: сюжет по ходу ночи -->
+  <div id="radio"></div>
+  <!-- тост ачивки -->
+  <div id="ach-toast"></div>
 
   <div id="gift-overlay" class="hidden"><div id="gift-box">🎁</div><div id="gift-text"></div></div>
 

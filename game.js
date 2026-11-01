@@ -666,7 +666,8 @@ function drawAurora() {
 // ══════════════════════════════════════════════════════ СОСТОЯНИЕ ═══════
 
 var G = {
-  state: 'menu',       // menu | help | play | levelup | pause | death | win
+  state: 'menu',       // menu | help | play | levelup | pause | death | win | achs
+  mode: 'classic',     // classic (10 мин до рассвета) | endless (бесконечная ночь)
   t: 0,                // время забега, сек
   player: null,
   enemies: [],
@@ -679,10 +680,14 @@ var G = {
   trip: 0,             // 0..100 — ПРИХОД
   zapT: 0,             // >0 — идёт грибной залп (радуга)
   zapFlash: 0,
-  bossIdx: 0,          // какой босс следующий (0,1,2)
+  zapCount: 0,         // залпов за ночь (ачивка «Три залпа»)
+  bossIdx: 0,
   bossAlive: null,
   runSeq: 0,           // номер забега: волны старого забега не переносятся в новый
-  ufo: null,           // (убрано: финал — рассвет)
+  nextBossT: 0,        // время следующего босса (бесконечка: каждые 150с)
+  lastHitT: 0,         // когда деда последний раз били (ачивка «Неприкасаемый»)
+  lowHpSaid: false,    // реплика про рваный тулуп — раз за забег
+  radioOn: false, radioT: 0, radioIdx: 0,
   dawn: false,         // идёт рассвет
   dawnT: 0,
   siege: false,        // финальная осада перед рассветом
@@ -693,9 +698,10 @@ var G = {
   levelQueue: 0        // сколько левел-апов ждут выбора карточек
 };
 
-var BOSS_TIMES = [180, 390, 540];    // 3:00, 6:30, 9:00
-var SIEGE_TIME = 545;                // после третьего босса — осада до рассвета
-var RUN_TIME = 600;                  // 10:00 — РАССВЕТ = победа
+var BOSS_TIMES = [180, 390, 540];    // 3:00, 6:30, 9:00 (классика)
+var ENDLESS_BOSS_EVERY = 150;        // бесконечка: старший каждые 2.5 мин
+var SIEGE_TIME = 545;                // после третьего старшего — осада до рассвета
+var RUN_TIME = 600;                  // 10:00 — РАССВЕТ = победа (классика)
 
 function newPlayer() {
   return {
@@ -752,20 +758,57 @@ var WEAPONS = {
   cat: {
     name: 'Кот Барсик', ico: '🐱', max: 5, kind: 'weapon',
     desc: 'Верный кот кружит вокруг деда и царапает наглых.',
-    lvDesc: ['+царапки', '+радиус', '+второй кот', '+урон', 'МАКС'],
-    pair: null
+    lvDesc: ['+царапки', '+радиус', '+второй кот', '+урон', 'МАКС: основа эволюции'],
+    pair: 'body'
   },
   aura: {
     name: 'Грибная Аура', ico: '🍄', max: 5, kind: 'weapon',
     desc: 'Споры вокруг деда: кто подойдёт — тот заперхал.',
-    lvDesc: ['+радиус', '+урон', '+радиус', '+урон', 'МАКС'],
-    pair: null
+    lvDesc: ['+радиус', '+урон', '+радиус', '+урон', 'МАКС: основа эволюции'],
+    pair: 'hp'
   },
   plunger: {
     name: 'Вантуз', ico: '🪠', max: 5, kind: 'weapon',
     desc: 'ХЛОП! Присасывает ближних мультяшек и бьёт разом.',
-    lvDesc: ['+радиус', '+урон', '+присос', '+радиус', 'МАКС'],
-    pair: null
+    lvDesc: ['+радиус', '+урон', '+присос', '+радиус', 'МАКС: основа эволюции'],
+    pair: 'cd'
+  },
+  // v3.0 АРСЕНАЛ
+  tapok: {
+    name: 'Тапок-Самолёт', ico: '🥿', max: 5, kind: 'weapon',
+    desc: 'Домашний тапок сам находит наглеца и гоняет его по сугробам.',
+    lvDesc: ['+урон', '+второй тапок', '+скорость', '+урон', 'МАКС: основа эволюции'],
+    pair: 'dmg'
+  },
+  balalaika: {
+    name: 'Балалайка', ico: '🪕', max: 5, kind: 'weapon',
+    desc: 'Три струны — три удара звуком. Волны трясут снег кругом.',
+    lvDesc: ['+волна', '+радиус', '+чаще', '+урон', 'МАКС: основа эволюции'],
+    pair: 'cd'
+  },
+  axe: {
+    name: 'Топор Деда', ico: '🪓', max: 5, kind: 'weapon',
+    desc: 'Тяжёлый топор кружит вокруг деда, как маятник в сенях.',
+    lvDesc: ['+урон', '+радиус', '+второй топор', '+урон', 'МАКС: основа эволюции'],
+    pair: 'body'
+  },
+  samovar: {
+    name: 'Самовар', ico: '🫖', max: 5, kind: 'weapon',
+    desc: 'Шипит паром куда смотрит дед. Кипяток — аргумент деда.',
+    lvDesc: ['+пар', '+длина', '+урон', '+шире', 'МАКС: основа эволюции'],
+    pair: 'hp'
+  },
+  klushka: {
+    name: 'Клюшка', ico: '🏒', max: 5, kind: 'weapon',
+    desc: 'Вертушка деда: клюшка метёт по кругу, расчищая лед.',
+    lvDesc: ['+урон', '+быстрее', '+дальше', '+урон', 'МАКС: основа эволюции'],
+    pair: 'speed'
+  },
+  skipidar: {
+    name: 'Скипидар', ico: '🧪', max: 5, kind: 'weapon',
+    desc: 'Склянка летит в толпу и загорается лужей. Пахнет деревней.',
+    lvDesc: ['+лужа', '+урон', '+больше', '+дольше', 'МАКС: основа эволюции'],
+    pair: 'shroom'
   }
 };
 
@@ -799,6 +842,42 @@ var EVOS = {
   joint: {
     name: 'ПОЖАР ЛУЧИН', ico: '☄️', kind: 'evo', req: 'shroom',
     desc: 'Восемь лучин за залп. Ночь в огне.'
+  },
+  cat: {
+    name: 'БАРСИК-ЛЕГЕНДА', ico: '😼', kind: 'evo', req: 'body',
+    desc: 'Три кота, когти как серпы. Мурчит от ярости.'
+  },
+  aura: {
+    name: 'СПОРОВОЕ ПОЛЕ', ico: '🌀', kind: 'evo', req: 'hp',
+    desc: 'Аура вдвое шире и понемногу лечит деда.'
+  },
+  plunger: {
+    name: 'ЧЁРНАЯ ДЫРА', ico: '🕳️', kind: 'evo', req: 'cd',
+    desc: 'Вантуз хлопает чаще и втягивает всех в одну точку.'
+  },
+  tapok: {
+    name: 'ТАПОК-ГОСПОДЬ', ico: '🕊️', kind: 'evo', req: 'dmg',
+    desc: 'Рой тапков карает всякого, кто бежит на деда.'
+  },
+  balalaika: {
+    name: 'КОВАРНАЯ БАЛАЛАЙКА', ico: '🎶', kind: 'evo', req: 'cd',
+    desc: 'Волны чаще, шире и отбрасывают лес обратно.'
+  },
+  axe: {
+    name: 'СЕКИРА-ВРАЩЕЛЬ', ico: '⚔️', kind: 'evo', req: 'body',
+    desc: 'Два топора по широкой орбите. Веер из стали.'
+  },
+  samovar: {
+    name: 'ГЕЙЗЕР-САМОВАР', ico: '♨️', kind: 'evo', req: 'hp',
+    desc: 'Пар бьёт во все четыре стороны и обжигает насмерть.'
+  },
+  klushka: {
+    name: 'КЛЮШКА-ВЕРТУН', ico: '💫', kind: 'evo', req: 'speed',
+    desc: 'Две клюшки молотят без остановки. Лёд треснул.'
+  },
+  skipidar: {
+    name: 'КИПЯЩИЙ СКИПИДАР', ico: '🔥', kind: 'evo', req: 'shroom',
+    desc: 'Лужи огромные, горят вдвое дольше. Деревня пахнет победой.'
   }
 };
 
@@ -938,10 +1017,10 @@ function fireWeapons(dt) {
     if (pw.cd <= 0) {
       var pt = nearestEnemy(p.x, p.y, 240);
       if (pt) {
-        pw.cd = 3.6 * cdMul();
-        var pr = 130 + 18 * pw.lv;
+        pw.cd = 3.6 * cdMul() * (p.evolved.plunger ? 0.5 : 1);
+        var pr = 130 + 18 * pw.lv + (p.evolved.plunger ? 60 : 0);
         var pdm = (10 + 8 * pw.lv) * dmgMul();
-        var pull = 160 + 45 * pw.lv;
+        var pull = 160 + 45 * pw.lv + (p.evolved.plunger ? 220 : 0);
         // ХЛОП-волна
         particles.push({ kind: 'ring', x: p.x, y: p.y, t: 0, life: 0.35, r0: 20, r1: pr, col: '#6ecbff' });
         AU.pop();
@@ -956,6 +1035,170 @@ function fireWeapons(dt) {
             pe.vy -= Math.sin(pa) * pull * pk;
           }
         }
+      }
+    }
+  }
+
+  // v3.0 ──────────────────────────────────────────────────────────────────
+
+  // ТАПОК-САМОЛЁТ: самонаводящийся снаряд, кружит и ищет жертву
+  if (p.weapons.tapok) {
+    var tp = p.weapons.tapok;
+    tp.cd -= dt;
+    if (tp.cd <= 0) {
+      var tt = nearestEnemy(p.x, p.y, 700);
+      if (tt) {
+        tp.cd = 1.9 * cdMul();
+        var tn = p.evolved.tapok ? 4 : (tp.lv >= 2 ? 2 : 1);
+        var tdm = (14 + 7 * tp.lv) * dmgMul() * (p.evolved.tapok ? 1.4 : 1);
+        for (var ti = 0; ti < tn; ti++) {
+          var ta = angTo(p.x, p.y, tt.x, tt.y) + rnd(-0.5, 0.5);
+          G.bullets.push({
+            kind: 'tapok', x: p.x, y: p.y - 8,
+            vx: Math.cos(ta) * 340, vy: Math.sin(ta) * 340,
+            r: 9, dmg: tdm, pierce: 999, t: 0, life: 2.6,
+            homing: true, hitSet: {}
+          });
+        }
+        AU.slap();
+      }
+    }
+  }
+
+  // БАЛАЛАЙКА: расходящиеся кольца звука от деда
+  if (p.weapons.balalaika) {
+    var bl = p.weapons.balalaika;
+    bl.cd = (bl.cd || 0) - dt;
+    if (bl.cd <= 0) {
+      bl.cd = 2.6 * cdMul() * (p.evolved.balalaika ? 0.62 : 1) * (bl.lv >= 3 ? 0.8 : 1);
+      var bn = p.evolved.balalaika ? 2 : 1;
+      for (var bi = 0; bi < bn; bi++) {
+        (function (delay) {
+          setTimeout(function () {
+            if (G.state !== 'play') return;
+            var p2 = G.player;
+            var br = 110 + 26 * bl.lv;
+            var brd = (12 + 6 * bl.lv) * dmgMul() * (p2.evolved.balalaika ? 1.5 : 1);
+            particles.push({ kind: 'ring', x: p2.x, y: p2.y, t: 0, life: 0.45, r0: 26, r1: br, col: '#ffd76e' });
+            AU.pop();
+            for (var qi = 0; qi < G.enemies.length; qi++) {
+              var qe = G.enemies[qi];
+              if (qe.dead) continue;
+              var qd = dist(p2.x, p2.y, qe.x, qe.y);
+              if (qd < br + qe.r && qd > br * 0.35) {
+                hurtEnemy(qe, brd, p2.x, p2.y, p2.evolved.balalaika ? 260 : 120);
+              }
+            }
+          }, delay);
+        })(bi * 240);
+      }
+    }
+  }
+
+  // ТОПОР: тяжёлая орбита (как кот, но медленнее и больнее)
+  if (p.weapons.axe) {
+    var ax = p.weapons.axe;
+    p.axeOrb = (p.axeOrb || 0) + dt * (1.6 + 0.22 * ax.lv);
+    var axr = 100 + 16 * ax.lv + (p.evolved.axe ? 34 : 0);
+    var axdmg = (16 + 9 * ax.lv) * dmgMul() * (p.evolved.axe ? 1.5 : 1);
+    var axes = (ax.lv >= 3 ? 2 : 1) + (p.evolved.axe ? 1 : 0);
+    for (var xi = 0; xi < axes; xi++) {
+      var xa = p.axeOrb + xi * (TAU / axes);
+      var xx = p.x + Math.cos(xa) * axr;
+      var xy = p.y + Math.sin(xa) * axr;
+      for (var ye = 0; ye < G.enemies.length; ye++) {
+        var yen = G.enemies[ye];
+        if (yen.dead) continue;
+        yen.axeCd = yen.axeCd || 0;
+        if (yen.axeCd > 0) continue;
+        if (dist2(xx, xy, yen.x, yen.y) < (28 + yen.r) * (28 + yen.r)) {
+          yen.axeCd = 0.5;
+          hurtEnemy(yen, axdmg, xx, xy, 220);
+        }
+      }
+    }
+  }
+
+  // САМОВАР: конус пара в сторону хода деда
+  if (p.weapons.samovar) {
+    var sm = p.weapons.samovar;
+    sm.cd = (sm.cd || 0) - dt;
+    if (sm.cd <= 0) {
+      sm.cd = 0.22;
+      var smA = p.aimT > 0 ? p.moveA : (p.face > 0 ? 0 : Math.PI);
+      var smLen = 120 + 26 * sm.lv + (p.evolved.samovar ? 60 : 0);
+      var smW = 34 + 7 * sm.lv;
+      var smdmg = (4 + 2.6 * sm.lv) * dmgMul() * (p.evolved.samovar ? 1.3 : 1);
+      // парок
+      if (Math.random() < 0.7) {
+        particles.push({
+          kind: 'steam', x: p.x + Math.cos(smA) * rnd(20, smLen), y: p.y + Math.sin(smA) * rnd(20, smLen),
+          vx: Math.cos(smA) * 60 + rnd(-20, 20), vy: Math.sin(smA) * 60 - 26,
+          life: rnd(0.3, 0.6), t: 0, col: 'rgba(223,232,242,0.8)', size: rnd(3, 7), grav: -30
+        });
+      }
+      var smDirs = p.evolved.samovar ? [smA, smA + Math.PI / 2, smA - Math.PI / 2, smA + Math.PI] : [smA];
+      for (var di = 0; di < smDirs.length; di++) {
+        var dA = smDirs[di];
+        for (var dj = 0; dj < G.enemies.length; dj++) {
+          var de = G.enemies[dj];
+          if (de.dead) continue;
+          var ddx = de.x - p.x, ddy = de.y - p.y;
+          var dproj = ddx * Math.cos(dA) + ddy * Math.sin(dA);
+          var dperp = Math.abs(-ddx * Math.sin(dA) + ddy * Math.cos(dA));
+          if (dproj > 0 && dproj < smLen + de.r && dperp < smW + de.r * 0.5) {
+            hurtEnemy(de, smdmg, p.x, p.y, 20);
+          }
+        }
+      }
+    }
+  }
+
+  // КЛЮШКА: вращающийся удар-луч вокруг деда
+  if (p.weapons.klushka) {
+    var kl = p.weapons.klushka;
+    p.klushA = (p.klushA || 0) + dt * (2.6 + 0.35 * kl.lv) * (p.evolved.klushka ? 1.5 : 1);
+    var klR = 96 + 14 * kl.lv + (p.evolved.klushka ? 30 : 0);
+    var kldmg = (10 + 6 * kl.lv) * dmgMul() * (p.evolved.klushka ? 1.5 : 1);
+    var klN = p.evolved.klushka ? 2 : 1;
+    for (var ki = 0; ki < klN; ki++) {
+      var kA = p.klushA + ki * Math.PI;
+      for (var kj = 0; kj < G.enemies.length; kj++) {
+        var ke = G.enemies[kj];
+        if (ke.dead) continue;
+        ke.klushCd = ke.klushCd || 0;
+        if (ke.klushCd > 0) continue;
+        // точка на окружности + «лопасть» хорды
+        var kdx = ke.x - p.x, kdy = ke.y - p.y;
+        var kd2 = Math.sqrt(kdx * kdx + kdy * kdy);
+        if (kd2 < klR + ke.r && kd2 > klR * 0.45) {
+          var kang = Math.atan2(kdy, kdx);
+          if (Math.abs(normAng(kang - kA)) < 0.5) {
+            ke.klushCd = 0.4;
+            hurtEnemy(ke, kldmg, p.x, p.y, 200);
+          }
+        }
+      }
+    }
+  }
+
+  // СКИПИДАР: склянка → горящая лужа (зона урона)
+  if (p.weapons.skipidar) {
+    var sk = p.weapons.skipidar;
+    sk.cd -= dt;
+    if (sk.cd <= 0) {
+      var skt = nearestEnemy(p.x, p.y, 520);
+      if (skt) {
+        sk.cd = 4.2 * cdMul();
+        G.bullets.push({
+          kind: 'flask', x: p.x, y: p.y,
+          vx: Math.cos(angTo(p.x, p.y, skt.x, skt.y)) * 330,
+          vy: Math.sin(angTo(p.x, p.y, skt.x, skt.y)) * 330,
+          r: 8, dmg: 0, t: 0, life: 0.85,
+          puddleR: (54 + 11 * sk.lv) * (p.evolved.skipidar ? 1.6 : 1),
+          puddleDmg: (7 + 4 * sk.lv) * dmgMul() * (p.evolved.skipidar ? 1.4 : 1),
+          puddleLife: (2.6 + 0.5 * sk.lv) * (p.evolved.skipidar ? 2 : 1)
+        });
       }
     }
   }
@@ -1051,7 +1294,24 @@ function killEnemy(e) {
     AU.roar();
     announce('БОСС ИЗГНАН!\n🍄 +ополчение грибов', 2200, true);
     G.bossAlive = null;   // флаг снят — обычный спавн возобновляется
+    dedEvent('bosskill');
+    unlockAch('boss1');
+    if (G.bossIdx >= 3) unlockAch('boss3');
   }
+
+  // СНЕГОВИК: рассыпался — из комьев слепились два мелких Снегавчика
+  if (ENEMY_TYPES[e.type] && ENEMY_TYPES[e.type].splitter && !e.noSplit) {
+    for (var si = 0; si < 2; si++) {
+      var m = spawnEnemy('mini', e.x + rnd(-14, 14), e.y + rnd(-10, 10));
+      m.noSplit = true;   // мелкие уже не делятся
+    }
+    floatText(e.x, e.y - 24, 'опять двадцать пять!', '#dfe8f2', 13);
+  }
+
+  // первая кровь — дед комментирует
+  if (G.kills === 1) dedEvent('firstkill');
+  if (G.kills === 100) unlockAch('kills100');
+  if (G.kills === 500) unlockAch('kills500');
 }
 
 function hurtPlayer(dmg, srcX, srcY) {
@@ -1061,6 +1321,8 @@ function hurtPlayer(dmg, srcX, srcY) {
   p.hp -= dmg;
   p.iframe = 0.55;
   p.hitFx = 0.3;
+  G.lastHitT = G.t;
+  G.lowHpSaid = false;
   CAM.kick(0.45);
   hitstop = Math.max(hitstop, 0.05);
   AU.hurt();
@@ -1071,6 +1333,11 @@ function hurtPlayer(dmg, srcX, srcY) {
     var a = angTo(srcX, srcY, p.x, p.y);
     p.x += Math.cos(a) * 14;
     p.y += Math.sin(a) * 14;
+  }
+  // тулуп трещит — дед говорит раз в забег
+  if (p.hp < 35 && p.hp > 0 && !G.lowHpSaid) {
+    G.lowHpSaid = true;
+    dedEvent('lowhp');
   }
   if (p.hp <= 0) {
     p.hp = 0;
@@ -1085,7 +1352,20 @@ function updateBullets(dt) {
   for (var i = G.bullets.length - 1; i >= 0; i--) {
     var b = G.bullets[i];
     b.t += dt;
-    if (b.t >= b.life) { G.bullets.splice(i, 1); continue; }
+    if (b.t >= b.life) {
+      // СКЛЯНКА ДОЛЕТЕЛА: разбилась — загорелась лужа
+      if (b.kind === 'flask') {
+        G.bullets.push({
+          kind: 'puddle', x: b.x, y: b.y, vx: 0, vy: 0,
+          r: 0, dmg: b.puddleDmg, t: 0, life: b.puddleLife,
+          puddleR: b.puddleR, tick: 0
+        });
+        spawnConfetti(b.x, b.y, 8);
+        AU.pop();
+      }
+      G.bullets.splice(i, 1);
+      continue;
+    }
 
     if (b.kind === 'slipper') {
       // бумеранг: 60% времени наружу, потом к деду
@@ -1101,10 +1381,60 @@ function updateBullets(dt) {
       }
     }
 
+    // ТАПОК-САМОЛЁТ: подкручивает к ближайшей непобитой жертве
+    if (b.kind === 'tapok') {
+      var ht = null, hd = 640 * 640;
+      for (var hi = 0; hi < G.enemies.length; hi++) {
+        var he = G.enemies[hi];
+        if (he.dead || b.hitSet[he.id]) continue;
+        var hdd = dist2(b.x, b.y, he.x, he.y);
+        if (hdd < hd) { hd = hdd; ht = he; }
+      }
+      if (ht) {
+        var ha = angTo(b.x, b.y, ht.x, ht.y);
+        var cur = Math.atan2(b.vy, b.vx);
+        var na = cur + clamp(normAng(ha - cur), -6 * dt, 6 * dt);
+        var spd = Math.hypot(b.vx, b.vy);
+        b.vx = Math.cos(na) * spd;
+        b.vy = Math.sin(na) * spd;
+      }
+    }
+
+    // ЛУЖА СКИПИДАРА: тикает уроном по зоне
+    if (b.kind === 'puddle') {
+      b.tick -= dt;
+      if (b.tick <= 0) {
+        b.tick = 0.4;
+        for (var qi = 0; qi < G.enemies.length; qi++) {
+          var qe = G.enemies[qi];
+          if (qe.dead) continue;
+          if (dist2(b.x, b.y, qe.x, qe.y) < (b.puddleR + qe.r) * (b.puddleR + qe.r)) {
+            hurtEnemy(qe, b.dmg, b.x, b.y, 0);
+            if (Math.random() < 0.4) spawnSpark(qe.x, qe.y, 2, '#ff8c42');
+          }
+        }
+      }
+      continue;   // лужа не движется и не сталкивается как снаряд
+    }
+
     b.x += b.vx * dt;
     b.y += b.vy * dt;
 
     if (b.hostile) {
+      // СОВИНАЯ БОМБА: упала на метку — взрыв по площади
+      if (b.kind === 'owlbomb') {
+        if (b.t >= (b.fuse || 0.55)) {
+          spawnSnowPuff(b.x, b.y, 14);
+          particles.push({ kind: 'ring', x: b.x, y: b.y, t: 0, life: 0.3, r0: 8, r1: 66, col: '#9dffe0' });
+          CAM.kick(0.25);
+          AU.pop();
+          if (dist2(b.x, b.y, p.x, p.y) < (58 + p.r) * (58 + p.r)) {
+            hurtPlayer(b.dmg, b.x, b.y);
+          }
+          G.bullets.splice(i, 1);
+        }
+        continue;
+      }
       // вражеский снаряд — снежки бандитов
       if (dist2(b.x, b.y, p.x, p.y) < (b.r + p.r) * (b.r + p.r)) {
         hurtPlayer(b.dmg, b.x, b.y);
@@ -1118,7 +1448,7 @@ function updateBullets(dt) {
     for (var j = 0; j < G.enemies.length; j++) {
       var e = G.enemies[j];
       if (e.dead) continue;
-      if (b.kind === 'slipper' && b.hitSet[e.id]) continue;
+      if ((b.kind === 'slipper' || b.kind === 'tapok') && b.hitSet[e.id]) continue;
       if (dist2(b.x, b.y, e.x, e.y) < (b.r + e.r) * (b.r + e.r)) {
         if (b.kind === 'joint') {
           // взрыв косяка
@@ -1135,8 +1465,8 @@ function updateBullets(dt) {
           G.bullets.splice(i, 1);
           break;
         }
-        // тапок: пробивает
-        if (b.kind === 'slipper') {
+        // тапок/дубина: пробивают, жертву не бьют дважды
+        if (b.kind === 'slipper' || b.kind === 'tapok') {
           b.hitSet[e.id] = true;
           hurtEnemy(e, b.dmg, b.x - b.vx, b.y - b.vy, 240);
           continue;
@@ -1155,7 +1485,14 @@ var ENEMY_TYPES = {
   hare:   { name: 'Заяц',   hp: 9,   dmg: 6,  speed: 190, r: 10, col: '#ffb36e', mass: 0.7, zig: true },
   bandit: { name: 'Бандит', hp: 36,  dmg: 10, speed: 78,  r: 15, col: '#7bffb0', mass: 1.2, ranged: true },
   crow:   { name: 'Ворона', hp: 11,  dmg: 12, speed: 240, r: 11, col: '#b39bff', mass: 0.6, diver: true },
-  bear:   { name: 'Медведь', hp: 140, dmg: 20, speed: 52, r: 26, col: '#6ecbff', mass: 2.4, kbRes: true }
+  bear:   { name: 'Медведь', hp: 140, dmg: 20, speed: 52, r: 26, col: '#6ecbff', mass: 2.4, kbRes: true },
+  // v3.0 БИОМАССА: лес разнообразнее
+  moose:  { name: 'Лось',     hp: 95,  dmg: 16, speed: 66,  r: 22, col: '#c98f5a', mass: 2,   charger: true },
+  marten: { name: 'Куница',   hp: 15,  dmg: 9,  speed: 205, r: 11, col: '#ffe66e', mass: 0.6, weaver: true },
+  snowman:{ name: 'Снеговик', hp: 130, dmg: 14, speed: 38,  r: 20, col: '#e8f2ff', mass: 2.2, splitter: true },
+  mini:   { name: 'Снегавчик', hp: 15, dmg: 6,  speed: 125, r: 9,  col: '#dfe8f2', mass: 0.5 },
+  mouse:  { name: 'Полёвка',  hp: 5,   dmg: 3,  speed: 145, r: 7,  col: '#d7c4ff', mass: 0.3 },
+  owl:    { name: 'Сова',     hp: 32,  dmg: 15, speed: 120, r: 14, col: '#9dffe0', mass: 0.9, bomber: true }
 };
 
 var nextEntId = 1;
@@ -1274,6 +1611,65 @@ function updateEnemies(dt) {
         });
         AU.pop();
       }
+    } else if (d.charger) {
+      // ЛОСЬ: разгоняется издалека, КОПЫТИТ снег (телеграф) → ТАРАН по прямой.
+      // Рывок длиннее волчьего и бьёт по пути — отходи вбок заранее.
+      if (!e.wst) { e.wst = 0; e.wstT = rnd(0.5, 1.2); }
+      e.wstT -= dt;
+      if (e.wst === 0) {
+        // тяжёлая рысь
+        e.x += ux * e.speed * slow * dt;
+        e.y += uy * e.speed * slow * dt;
+        if (e.wstT <= 0 && dd < 520 && dd > 90) {
+          e.wst = 1; e.wstT = 0.85;
+          e.dashA = angTo(e.x, e.y, p.x, p.y);
+          AU.grunt();
+        }
+      } else if (e.wst === 1) {
+        // бьёт копытом, рогами показывает линию тарана
+        e.x += rnd(-2, 2); e.y += rnd(-2, 2);
+        if (e.wstT <= 0) { e.wst = 2; e.wstT = 0.75; AU.grunt(); }
+      } else {
+        e.x += Math.cos(e.dashA) * e.speed * 4.6 * slow * dt;
+        e.y += Math.sin(e.dashA) * e.speed * 4.6 * slow * dt;
+        if (e.wstT <= 0) { e.wst = 0; e.wstT = rnd(2.2, 3.2); }
+      }
+    } else if (d.weaver) {
+      // КУНИЦА: быстрый зигзаг-ткач — прижать её AoE, пальцем не поймать
+      var wzig = Math.sin(e.t * 7.5) * 95;
+      e.x += (ux * e.speed - uy * wzig) * slow * dt;
+      e.y += (uy * e.speed + ux * wzig) * slow * dt;
+    } else if (d.bomber) {
+      // СОВА: кружит выше дедовых ударов → ЗАМИРАЕТ → роняет снежную бомбу
+      // в отмеченный круг. Сама не спускается — бей залпом/лучинами.
+      if (!e.wst) { e.wst = 0; e.wstT = 0; }
+      e.wstT -= dt;
+      if (e.wst === 0) {
+        var boa = e.t * 1.1;
+        var box = p.x + Math.cos(boa) * 260;
+        var boy = p.y + Math.sin(boa) * 260;
+        var bda = angTo(e.x, e.y, box, boy);
+        e.x += Math.cos(bda) * e.speed * 0.6 * slow * dt;
+        e.y += Math.sin(bda) * e.speed * 0.6 * slow * dt;
+        if (e.wstT <= 0 && dd < 420) {
+          e.wst = 1; e.wstT = 0.8;
+          e.tx = p.x + (p.lastVX || 0) * 0.6;
+          e.ty = p.y + (p.lastVY || 0) * 0.6;
+          AU.pop();
+        }
+      } else if (e.wst === 1) {
+        // зависла, круг-прицел на снегу растёт
+        if (e.wstT <= 0) {
+          e.wst = 0; e.wstT = rnd(2.6, 3.6);
+          G.bullets.push({
+            kind: 'owlbomb', hostile: true,
+            x: e.tx, y: e.ty - 240,      // падает сверху на метку
+            vx: 0, vy: 430,
+            r: 10, dmg: e.dmg, t: 0, life: 1.1
+          });
+          AU.pop();
+        }
+      }
     } else if (e.type === 'wolf') {
       // ВОЛК: погоня → ПРИСЕЛ (телеграф!) → РЫВОК. Отходи вбок.
       if (!e.wst) { e.wst = 0; e.wstT = 0; }   // 0 погоня, 1 присел, 2 рывок
@@ -1340,28 +1736,49 @@ function updateEnemies(dt) {
 var BOSSES = [
   {
     id: 'alpha', name: 'ВОЖАК СТАИ', col: '#ff5b6e', r: 34, hp: 1500, dmg: 22, speed: 95,
+    base: 'wolf',
     taunt: 'Вожак стаи. Зубы как у мамы.'
   },
   {
     id: 'shisha', name: 'МЕДВЕДЬ-ШАТУН', col: '#6ecbff', r: 46, hp: 3200, dmg: 28, speed: 60,
+    base: 'bear',
     taunt: 'Съел слишком много мухоморов.'
   },
   {
     id: 'glavar', name: 'АТАМАН ДЕЗЕРТИРОВ', col: '#7bffb0', r: 30, hp: 5200, dmg: 20, speed: 85,
+    base: 'bandit',
     taunt: 'Держит весь снежный бизнес.'
+  },
+  // v3.0: новые старшие леса (порядковая очередь в бесконечной ночи)
+  {
+    id: 'hozyain', name: 'ХОЗЯИН ТРАКТА', col: '#c98f5a', r: 42, hp: 5800, dmg: 30, speed: 78,
+    base: 'moose',
+    taunt: 'Лось, который не уступает дорогу поездам.'
+  },
+  {
+    id: 'metelica', name: 'МЕТЕЛИЦА', col: '#b39bff', r: 32, hp: 6400, dmg: 18, speed: 150,
+    base: 'crow',
+    taunt: 'Ведьма метели. Танцует — и ты танцуешь.'
+  },
+  {
+    id: 'leshiy', name: 'ЛЕШИЙ-КОМЕНДАНТ', col: '#9dffe0', r: 44, hp: 7600, dmg: 26, speed: 58,
+    base: 'snowman',
+    taunt: 'Лес под его началом. Дед — самовольная постройка.'
   }
 ];
 
 function spawnBoss(idx) {
-  var b = BOSSES[idx];
+  var loop = Math.floor(idx / BOSSES.length);          // виток очереди (бесконечка)
+  var b = BOSSES[idx % BOSSES.length];
+  var scale = 1 + loop * 1.1 + (G.mode === 'endless' ? G.t / 240 : 0);  // каждый виток злее
   var p = G.player;
   var a = rnd(0, TAU);
   var R = Math.max(VW, VH) / SCALE * 0.55;
-  var e = spawnEnemy('wolf', p.x + Math.cos(a) * R, p.y + Math.sin(a) * R, false, true);
+  var e = spawnEnemy(b.base, p.x + Math.cos(a) * R, p.y + Math.sin(a) * R, false, true);
   e.boss = b.id;
   e.bossIdx = idx;
   e.name = b.name;
-  e.hp = e.maxHp = b.hp;
+  e.hp = e.maxHp = Math.round(b.hp * scale);
   e.dmg = b.dmg;
   e.r = b.r;
   e.col = b.col;
@@ -1373,13 +1790,12 @@ function spawnBoss(idx) {
   G.bossAlive = e;
   AU.roar();
   CAM.kick(0.8);
-  announce('⚠ ' + b.name + ' ⚠\n' + b.taunt, 2600);
+  announce('⚠ ' + b.name + ' ⚠\n' + b.taunt + (loop ? ' (виток ' + (loop + 1) + ')' : ''), 2600);
   return e;
 }
 
 function updateBoss(e, dt, ux, uy, dd) {
   var p = G.player;
-  var b = BOSSES[e.bossIdx];
   e.stateT -= dt;
 
   if (e.boss === 'alpha') {
@@ -1468,8 +1884,107 @@ function updateBoss(e, dt, ux, uy, dd) {
       for (var g = 0; g < 2; g++) spawnAtRing('bandit');
       floatText(e.x, e.y - e.r - 20, '«Ребята, Fargo!»', '#7bffb0', 15);
     }
+  } else if (e.boss === 'hozyain') {
+    // ХОЗЯИН ТРАКТА: погоня → рога в сторону деда (телеграф) → ДЛИННЫЙ таран.
+    // В конце тарана — веер снежков из-под копыт.
+    if (e.state === 'chase') {
+      e.x += ux * e.speed * dt;
+      e.y += uy * e.speed * dt;
+      if (e.stateT <= 0 && dd < 640) {
+        e.state = 'tele';
+        e.stateT = 0.9;
+        e.chargeA = angTo(e.x, e.y, p.x, p.y);
+      }
+    } else if (e.state === 'tele') {
+      e.x += rnd(-3, 3); e.y += rnd(-3, 3);
+      if (e.stateT <= 0) { e.state = 'dash'; e.stateT = 0.85; AU.roar(); }
+    } else if (e.state === 'dash') {
+      e.x += Math.cos(e.chargeA) * e.speed * 5 * dt;
+      e.y += Math.sin(e.chargeA) * e.speed * 5 * dt;
+      // таран бьёт по пути
+      if (dd < e.r + p.r + 6 && p.iframe <= 0) hurtPlayer(e.dmg, e.x, e.y);
+      if (e.stateT <= 0) {
+        e.state = 'chase';
+        e.stateT = rnd(2.6, 3.6);
+        // веер из-под копыт
+        for (var hc = -1; hc <= 1; hc++) {
+          var hba = angTo(e.x, e.y, p.x, p.y) + hc * 0.35;
+          G.bullets.push({
+            kind: 'snowball', hostile: true,
+            x: e.x, y: e.y,
+            vx: Math.cos(hba) * 280, vy: Math.sin(hba) * 280,
+            r: 7, dmg: 12, t: 0, life: 2.2
+          });
+        }
+        AU.pop();
+      }
+    }
+  } else if (e.boss === 'metelica') {
+    // МЕТЕЛИЦА: вальсирует вокруг деда, метёт снежными вихрями (кольца),
+    // из метели сыплются полёвки
+    var ma = (e.mAng = (e.mAng || 0) + dt * 0.55);
+    var want = 260;
+    var tx = p.x + Math.cos(ma) * want;
+    var ty = p.y + Math.sin(ma) * want;
+    var mda = angTo(e.x, e.y, tx, ty);
+    e.x += Math.cos(mda) * e.speed * dt;
+    e.y += Math.sin(mda) * e.speed * dt;
+    e.stateT2 = (e.stateT2 || 0) - dt;
+    if (e.stateT2 <= 0) {
+      e.stateT2 = 2.8;
+      // снежный вихрь
+      particles.push({ kind: 'shock', x: e.x, y: e.y, t: 0, life: 0.5, r0: 24, r1: 260, col: '#b39bff' });
+      AU.howl();
+      e.vortexT = 0; e.vortexX = e.x; e.vortexY = e.y;
+      // из метели — полёвки
+      for (var mv = 0; mv < 4; mv++) spawnAtRing('mouse');
+    }
+    if (e.vortexT !== undefined && e.vortexT < 0.45) {
+      e.vortexT += dt;
+      var vr = lerp(24, 260, e.vortexT / 0.45);
+      if (Math.abs(dist(p.x, p.y, e.vortexX, e.vortexY) - vr) < 24 && p.iframe <= 0) {
+        hurtPlayer(16, e.vortexX, e.vortexY);
+      }
+    }
+  } else if (e.boss === 'leshiy') {
+    // ЛЕШИЙ-КОМЕНДАНТ: неспешно идёт, топает оземь (кольцо), созывает сов и снеговиков.
+    // Если дед далеко — свистит и подтягивается сам.
+    if (e.state === 'chase') {
+      e.x += ux * e.speed * dt;
+      e.y += uy * e.speed * dt;
+      if (e.stateT <= 0 && dd < 460) {
+        e.state = 'tele';
+        e.stateT = 0.7;
+      }
+    } else if (e.state === 'tele') {
+      e.x += rnd(-3, 3); e.y += rnd(-3, 3);
+      if (e.stateT <= 0) {
+        e.state = 'chase';
+        e.stateT = 3.4;
+        particles.push({ kind: 'shock', x: e.x, y: e.y, t: 0, life: 0.55, r0: 30, r1: 360, col: '#9dffe0' });
+        CAM.kick(0.6);
+        AU.roar();
+        e.shockT = 0;
+        e.shockX = e.x; e.shockY = e.y;
+      }
+    }
+    if (e.shockT !== undefined && e.shockT !== null && e.shockT < 0.5) {
+      e.shockT += dt;
+      var lr = lerp(30, 360, e.shockT / 0.5);
+      if (Math.abs(dist(p.x, p.y, e.shockX, e.shockY) - lr) < 26 && p.iframe <= 0) {
+        hurtPlayer(18, e.shockX, e.shockY);
+      }
+    }
+    // призыв: то сов, то снеговиков
+    e.callT = (e.callT || 5) - dt;
+    if (e.callT <= 0) {
+      e.callT = 6.5;
+      var kind = Math.random() < 0.5 ? 'owl' : 'snowman';
+      for (var lc = 0; lc < 2; lc++) spawnAtRing(kind);
+      floatText(e.x, e.y - e.r - 20,
+        kind === 'owl' ? '«Совы — на пост!»' : '«Сугробы — стройся!»', '#9dffe0', 15);
+    }
   }
-  void b;
 }
 
 // ══════════════════════════════════════ ДИРЕКТОР СПАВНА (ТЕМП) ══════════
@@ -1482,17 +1997,24 @@ var WAVE_EVENTS = [
   { name: 'ДЕЗЕРТИРЫ ИДУТ', type: 'bandit', n: 8, side: true },
   { name: 'ВОРОНЬЁ', type: 'crow', n: 10, ring: true },
   { name: 'ШАТУН ЗАШЁЛ В ПОСЁЛОК', type: 'bear', n: 4, side: true },
-  { name: 'ВЕСЬ ЛЕС РАЗОМ', type: 'mix', n: 18, ring: true }
+  { name: 'ПОЛЁВКИ ИЗ-ПОД СНЕГА', type: 'mouse', n: 22, ring: true },
+  { name: 'ЛОСИ ПОШЛИ ТРАКТОМ', type: 'moose', n: 6, side: true },
+  { name: 'СОВИНЫЙ ОБЛЁТ', type: 'owl', n: 6, ring: true },
+  { name: 'ЛЕПИТЬСЯ, СНЕГОВИКИ!', type: 'snowman', n: 6, ring: true },
+  { name: 'КУНИЦЫ В САДАХ', type: 'marten', n: 12, ring: true },
+  { name: 'ВЕСЬ ЛЕС РАЗОМ', type: 'mix', n: 24, ring: true }
 ];
 
 function composition(t) {
-  // что спавнить по обычному ритму (ночь 10 минут)
+  // что спавнить по обычному ритму (классика 10 минут; бесконечка — дальше жёстче)
   var pool = ['wolf', 'wolf'];
   if (t > 40) pool.push('hare', 'hare');
   if (t > 120) pool.push('bandit');
-  if (t > 200) pool.push('crow');
-  if (t > 300) pool.push('bear');
-  if (t > 450) pool.push('hare', 'bandit', 'crow');
+  if (t > 200) pool.push('crow', 'marten');
+  if (t > 300) pool.push('bear', 'moose');
+  if (t > 450) pool.push('snowman', 'hare', 'bandit', 'crow');
+  if (t > 600) pool.push('owl', 'moose', 'marten', 'snowman');   // бесконечка
+  if (t > 900) pool.push('moose', 'owl', 'snowman', 'bandit');   // совсем жёстко
   return pool;
 }
 
@@ -1503,14 +2025,27 @@ function updateDirector(dt) {
   // иначе обычный спавн и следующие боссы стоят навсегда
   if (G.bossAlive && G.bossAlive.dead) G.bossAlive = null;
 
-  // БОССЫ — старшие леса: 3:00, 6:30, 9:00
-  if (G.bossIdx < BOSS_TIMES.length && G.t >= BOSS_TIMES[G.bossIdx] && !G.bossAlive) {
-    spawnBoss(G.bossIdx);
-    G.bossIdx++;
+  // БОССЫ — старшие леса
+  if (G.mode === 'classic') {
+    if (G.bossIdx < BOSS_TIMES.length && G.t >= BOSS_TIMES[G.bossIdx] && !G.bossAlive) {
+      spawnBoss(G.bossIdx);
+      G.bossIdx++;
+    }
+  } else {
+    // БЕСКОНЕЧНАЯ НОЧЬ: очередь боссов без конца, каждые 2.5 минуты
+    if (!G.nextBossT) G.nextBossT = ENDLESS_BOSS_EVERY;
+    if (G.t >= G.nextBossT && !G.bossAlive) {
+      spawnBoss(G.bossIdx);
+      G.bossIdx++;
+      G.nextBossT = G.t + ENDLESS_BOSS_EVERY;
+    }
+    // вехи бесконечки
+    if (G.t >= 300 && !G.said5) { G.said5 = true; dedEvent('endless5'); }
+    if (G.t >= 600) unlockAch('endless10');
   }
 
   // ОСАДА: после третьего старшего лес идёт ва-банк — до самого рассвета
-  if (!G.siege && G.t >= SIEGE_TIME) {
+  if (G.mode === 'classic' && !G.siege && G.t >= SIEGE_TIME) {
     G.siege = true;
     AU.bell();
     announce('Ⰰ ОСАДА!\nлес идёт ва-банк', 2800);
@@ -1518,14 +2053,23 @@ function updateDirector(dt) {
   }
 
   // РАССВЕТ: последние 60 секунд небо светлеет — дожить!
-  if (!G.dawn && G.t >= RUN_TIME - 60) {
-    G.dawn = true;
-    announce('НЕБО СВЕТЛЕЕТ НА ВОСТОКЕ\nдержись!', 3200);
+  if (G.mode === 'classic') {
+    if (!G.dawn && G.t >= RUN_TIME - 60) {
+      G.dawn = true;
+      dedEvent('dawn');
+      announce('НЕБО СВЕТЛЕЕТ НА ВОСТОКЕ\nдержись!', 3200);
+    }
+    if (G.t >= RUN_TIME) {
+      endRun(true);
+      return;
+    }
   }
-  if (G.t >= RUN_TIME) {
-    endRun(true);
-    return;
-  }
+
+  // РАДИО станции: сюжет каплями
+  updateRadio(dt);
+
+  // «НЕПРИКАСАЕМЫЙ»: 5 минут без единого удара по деду
+  if (G.t - G.lastHitT >= 300) unlockAch('untouch');
 
   // ЗОЛОТОЙ ГРИБ: лакомая приманка. Схватишь — лес проснётся
   G.goldT -= dt;
@@ -1553,7 +2097,7 @@ function updateDirector(dt) {
   G.waveT -= dt;
   if (G.waveT <= 0) {
     G.waveT = rnd(40, 60);
-    var wv = WAVE_EVENTS[Math.min(WAVE_EVENTS.length - 1, Math.floor(G.t / 100))];
+    var wv = WAVE_EVENTS[Math.min(WAVE_EVENTS.length - 1, Math.floor(G.t / 95))];
     announce('🥁 ' + wv.name, 1600);
     var seq = G.runSeq;   // волны убитого забега не переносятся в новый
     for (var i = 0; i < wv.n; i++) {
@@ -1583,9 +2127,10 @@ function updateDirector(dt) {
   if (G.spawnAcc >= rate) {
     G.spawnAcc = 0;
     var cap = G.siege ? 170 : 130;
+    if (G.mode === 'endless') cap = Math.min(230, 130 + Math.floor(G.t / 45));
     if (G.enemies.length < cap) {
       var pool = composition(G.t);
-      var batch = 1 + Math.floor(G.t / 70);
+      var batch = Math.min(13, 1 + Math.floor(G.t / 70));
       if (G.siege) batch += 2;
       for (var b = 0; b < batch; b++) {
         var elite = Math.random() < 0.012 + G.t / 16000;
@@ -1640,6 +2185,7 @@ function updatePickups(dt) {
         G.stats.mushrooms++;
         AU.gem();
         spawnSpark(it.x, it.y, 2, '#ffd76e');
+        if (G.stats.mushrooms === 200) unlockAch('shrooms200');
       } else if (it.kind === 'bigshroom') {
         gainXp(8);
         G.trip = clamp(G.trip + 22 * tripGainMul(), 0, 100);
@@ -1659,6 +2205,8 @@ function updatePickups(dt) {
           spawnAtRing(pick(['wolf', 'crow', 'hare']));
         }
         CAM.kick(0.4);
+        unlockAch('gold');
+        dedEvent('gold');
       } else if (it.kind === 'heart') {
         p.hp = Math.min(p.maxHp, p.hp + 25);
         floatText(p.x, p.y - 30, '+25 🫀', '#7bffb0', 17);
@@ -1733,7 +2281,7 @@ function buildCardPool() {
   for (var wid in WEAPONS) {
     var w = p.weapons[wid];
     if (!w) {
-      if (Object.keys(p.weapons).length < 4)   // максимум 4 оружия за забег
+      if (Object.keys(p.weapons).length < 6)   // v3.0: до 6 оружий за забег
         pool.push({ kind: 'new-weapon', id: wid, w: 10 });
     } else if (w.lv < WEAPONS[wid].max) {
       pool.push({ kind: 'up-weapon', id: wid, w: 10 });
@@ -1801,12 +2349,16 @@ function cardView(card) {
 
 function applyCard(card) {
   var p = G.player;
-  if (card.kind === 'new-weapon') p.weapons[card.id] = { lv: 1, cd: 0 };
+  if (card.kind === 'new-weapon') {
+    p.weapons[card.id] = { lv: 1, cd: 0 };
+    if (Object.keys(p.weapons).length >= 6) unlockAch('maxed');
+  }
   else if (card.kind === 'up-weapon') p.weapons[card.id].lv++;
   else if (card.kind === 'passive') p.passives[card.id] = pasLv(card.id) + 1;
   else if (card.kind === 'evo') {
     p.evolved[card.id] = true;
     AU.evo();
+    unlockAch('evo1');
     announce('✦ ' + EVOS[card.id].name + ' ✦', 2400, true);
     spawnConfetti(p.x, p.y, 50, 1.5);
     CAM.kick(0.6);
@@ -1896,8 +2448,50 @@ var DED_LINES = [
   '«Ать-два, ать-два…»',
   '«Чай остынет, пока вы сдохнете»',
   '«Один я, один и останусь»',
-  '«Зима, однако»'
+  '«Зима, однако»',
+  // v3.0: дед разошёлся
+  '«Я вам не бабушка с оладьями!»',
+  '«У меня в сенях валенки злее вас»',
+  '«Мухоморчиков съел — и храбрый какой»',
+  '«Лес у нас глупый пошёл. Раньше умнее был»',
+  '«Это кто тут лапы распустил?!»',
+  '«Ешьте снежок, снежок полезный»',
+  '«В 1917-м и не такое видали»',
+  '«Самоварчик бы сейчас… с мухоморчиком»',
+  '«Не пой, окаянный, и так тошно»',
+  '«Зять обещал заехать. Где-то застрял, видать»',
+  '«У меня псари в таких случаях били»',
+  '«Ты лось, а я — с топором. Кто из нас лес?»',
+  '«Курочка по зёрнышку, а дед — по грибочку»',
+  '«Полегче, полегче, тулуп казённый!»',
+  '«Морозы у нас душевные. А вы — нет»',
+  '«Вот вырасту — устрою вам»',
+  '«Я на этом свете главный. Меня забыли спросить»',
+  '«Ноги-руки целы? Значит, живём»',
+  '«Не шуми, лес, дед думает»',
+  '«Так вас, растительность недорезанная»',
+  '«Раньше вон к нам медведи в гости ходили. С уважением»',
+  '«Кому леща? Лещей всем!»',
+  '«Утром расскажу — никто не поверит»',
+  '«Голова тяжёлая… видно, умный стал»',
+  '«Стоять!.. а, ну беги, беги»',
+  '«В моё время и снег был белый»',
+  '«Тьфу ты, напасть белогривая»',
+  '«Ещё один порыв ветра — и я обижусь»',
+  '«Держись, дед. Дед, держись»',
+  '«Видал, как я их?.. Видал?»',
+  '«Ах ты ж снеговик недоделанный»'
 ];
+
+// Событийные реплики: дед реагирует на происходящее
+var DED_EVENTS = {
+  firstkill: ['«Первый — не считается! Второй — считается…»', '«Вот так-то. Кому ещё?»'],
+  bosskill: ['«Старший был. Теперь — никто!»', '«Рога-копыта — на варежки!»', '«Тяжёлый, зараза. Но мой»'],
+  lowhp: ['«Тулуп порван… но дед цел!»', '«Рано меня хоронить, лес!»'],
+  gold: ['«Знал, что обманка. А всё равно взял»', '«Жадность — она грибная»'],
+  dawn: ['«Скоро самовар… держись, дед»'],
+  endless5: ['«Рассвет не пришёл. Значит, работаем»']
+};
 
 var dedSayT = 0;
 function dedSay(force) {
@@ -1905,6 +2499,143 @@ function dedSay(force) {
   dedSayT = G.t + 14;
   var p = G.player;
   if (p) floatText(p.x, p.y - 44, pick(DED_LINES), '#aab7cc', 14);
+}
+
+/** Событийная реплика (без задержки, важное событие). */
+function dedEvent(type) {
+  var lines = DED_EVENTS[type];
+  if (!lines) return;
+  var p = G.player;
+  if (p) floatText(p.x, p.y - 44, pick(lines), '#ffd76e', 16);
+  dedSayT = Math.max(dedSayT, G.t + 8);
+}
+
+// ════════════════════════ РАДИО СТАНЦИИ (СЮЖЕТ) ══════════════════════════
+// Пристань-Тихая вещает в пустоту. Дед слушает — иначе сойти с ума.
+
+var RADIO_LINES = [
+  { t: 22,  txt: '📻 «Пристань-Тихая» вызывает… есть кто живой? У нас керосин кончился' },
+  { t: 95,  txt: '📻 …сводка с фронта: фронт ушёл на восток. Все. Никто не заметил' },
+  { t: 155, txt: '📻 …гражданам велено сидеть по домам. Граждане, вы слышите? Сидеть' },
+  { t: 245, txt: '📻 …на разъезде Заря замечен движущийся лес. Подтвердить нечем: очевидцев нет' },
+  { t: 330, txt: '📻 …не ешьте жёлтый снег. И красный тоже не ешьте' },
+  { t: 420, txt: '📻 …поезд №7 не придёт. Вообще. Не ждите' },
+  { t: 480, txt: '📻 …метель усиливается. Кто в поле — тому крышка, кто в избе — двойная' },
+  { t: 555, txt: '📻 …если слышите вой — не отвечайте. Вой — не собака, вой — лес' }
+];
+
+var RADIO_ENDLESS = [
+  '📻 …щёт… щёт… несёт помехами',
+  '📻 …тишина. Просто тишина',
+  '📻 …дед, ты ещё там? Мы в тебя верили… кажется',
+  '📻 …время на часах кончилось. Часы тоже',
+  '📻 …повторяю: рассвета в эфире нет. Дежурство продолжается',
+  '📻 …кто взял лампу? Лампу взял лес'
+];
+
+function updateRadio(dt) {
+  if (!G.radioOn) return;
+  G.radioT -= dt;
+  if (G.radioT > 0) return;
+  if (G.mode === 'classic' && G.radioIdx < RADIO_LINES.length) {
+    var line = RADIO_LINES[G.radioIdx];
+    if (G.t >= line.t) {
+      G.radioIdx++;
+      G.radioT = 14;
+      radioSay(line.txt);
+      return;
+    }
+    // до следующей строки далеко — ждать разницу
+    G.radioT = Math.max(2, line.t - G.t);
+    return;
+  }
+  // бесконечка / после всех строк: редкие помехи
+  G.radioT = rnd(40, 70);
+  radioSay(pick(RADIO_ENDLESS));
+}
+
+var radioEl = null, radioHide = null;
+function radioSay(txt) {
+  if (!radioEl) radioEl = $$('radio');
+  if (!radioEl) return;
+  radioEl.textContent = txt;
+  radioEl.classList.add('show');
+  AU.pop();
+  if (radioHide) clearTimeout(radioHide);
+  radioHide = setTimeout(function () { radioEl.classList.remove('show'); }, 6500);
+}
+
+// ════════════════════════════ ДОСТИЖЕНИЯ ════════════════════════════════
+// Смешные ачивки с тостом — лес должен знать деда поимённо.
+
+var ACHS = [
+  { id: 'boss1',     ico: '🦴', name: 'Зубы как у мамы',  desc: 'Изгнать первого старшего леса' },
+  { id: 'boss3',     ico: '👑', name: 'Ночной смотр',      desc: 'Всех трёх старших — за одну ночь' },
+  { id: 'kills100',  ico: '💯', name: 'Сотня — не лимит',  desc: 'Изгнать 100 глюков за ночь' },
+  { id: 'kills500',  ico: '🔥', name: 'И не запыхался',    desc: 'Изгнать 500 глюков за ночь' },
+  { id: 'gold',      ico: '✨', name: 'А зря…',            desc: 'Схватить золотой гриб-обманку' },
+  { id: 'shrooms200',ico: '🍄', name: 'Грибной король',    desc: 'Сожрать 200 грибов за ночь' },
+  { id: 'evo1',      ico: '✦',  name: 'Дед-кулибин',       desc: 'Собрать первую эволюцию оружия' },
+  { id: 'untouch',   ico: '🕊️', name: 'Неприкасаемый',     desc: '5 минут ни разу не получить по тулупу' },
+  { id: 'zap3',      ico: '💥', name: 'Три залпа',         desc: 'Три грибных залпа за одну ночь' },
+  { id: 'winner',    ico: '🌅', name: 'До рассвета',       desc: 'Дожить до утра в обычной ночи' },
+  { id: 'endless10', ico: '🌙', name: 'Донышка',           desc: 'Продержаться 10 минут в бесконечной ночи' },
+  { id: 'maxed',     ico: '🛠️', name: 'Полный набор',      desc: 'Носить 6 оружий одновременно' }
+];
+
+function getAchs() {
+  try { return JSON.parse(localStorage.getItem('dedAch') || '{}'); }
+  catch (e) { return {}; }
+}
+
+var achToastQ = [];
+function unlockAch(id) {
+  var def = null;
+  for (var i = 0; i < ACHS.length; i++) if (ACHS[i].id === id) def = ACHS[i];
+  if (!def) return;
+  var got = getAchs();
+  if (got[id]) return;              // уже есть
+  got[id] = Math.floor(Date.now() / 1000);
+  try { localStorage.setItem('dedAch', JSON.stringify(got)); } catch (e) { /* приватный режим */ }
+  achToastQ.push(def);
+  pumpAchToasts();
+}
+
+var achPumping = false;
+function pumpAchToasts() {
+  if (achPumping || !achToastQ.length) return;
+  achPumping = true;
+  var def = achToastQ.shift();
+  var el = $$('ach-toast');
+  if (!el) { achPumping = false; return; }
+  el.innerHTML =
+    '<span class="at-ico">' + def.ico + '</span>' +
+    '<div><div class="at-name">' + def.name + '</div>' +
+    '<div class="at-desc">' + def.desc + '</div></div>';
+  el.classList.add('show');
+  AU.gift();
+  setTimeout(function () {
+    el.classList.remove('show');
+    setTimeout(function () { achPumping = false; pumpAchToasts(); }, 350);
+  }, 2600);
+}
+
+function renderAchs() {
+  var wrap = $$('ach-list');
+  if (!wrap) return;
+  var got = getAchs();
+  var html = '';
+  var n = 0;
+  for (var i = 0; i < ACHS.length; i++) {
+    var a = ACHS[i];
+    var has = !!got[a.id];
+    if (has) n++;
+    html += '<div class="ach' + (has ? ' got' : '') + '">' +
+      '<span class="ach-ico">' + (has ? a.ico : '🔒') + '</span>' +
+      '<div><div class="ach-name">' + a.name + '</div>' +
+      '<div class="ach-desc">' + a.desc + '</div></div></div>';
+  }
+  wrap.innerHTML = '<div class="ach-total">Открыто: ' + n + ' из ' + ACHS.length + '</div>' + html;
 }
 
 // ════════════════════════════════════ ПРИХОД И ГРИБНОЙ ЗАЛП ═════════════
@@ -1931,6 +2662,8 @@ function tryZap() {
   G.trip = 0;
   G.zapT = 5;
   G.zapFlash = 0.4;
+  G.zapCount++;
+  if (G.zapCount >= 3) unlockAch('zap3');
   var p = G.player;
   AU.zap();
   CAM.kick(1.2);
@@ -2091,24 +2824,28 @@ function drawPickups() {
   ctx.textAlign = 'left';
 }
 
-/** Метки ворон на снегу: сюда будет пике — уходи с точки. */
+/** Метки на снегу: сюда будет удар — уходи с точки. */
 function drawCrowMarks() {
   for (var i = 0; i < G.enemies.length; i++) {
     var e = G.enemies[i];
-    if (e.type !== 'crow' || (e.wst !== 1 && e.wst !== 2)) continue;
+    var isCrow = e.type === 'crow' && (e.wst === 1 || e.wst === 2);
+    var isOwl = e.type === 'owl' && e.wst === 1;
+    if (!isCrow && !isOwl) continue;
     var pulse = 0.5 + Math.sin(G.t * 14) * 0.3;
     ctx.strokeStyle = 'rgba(255, 91, 110, ' + pulse + ')';
+    if (isOwl) ctx.strokeStyle = 'rgba(157, 255, 224, ' + pulse + ')';
     ctx.lineWidth = 2.4;
+    var rad = isOwl ? 58 : 16;   // сова роняет бомбу пошире
     // круг-прицел
     ctx.beginPath();
-    ctx.arc(e.tx, e.ty, 16, 0, TAU);
+    ctx.arc(e.tx, e.ty, rad, 0, TAU);
     ctx.stroke();
     // крест
     ctx.beginPath();
-    ctx.moveTo(e.tx - 22, e.ty); ctx.lineTo(e.tx - 10, e.ty);
-    ctx.moveTo(e.tx + 10, e.ty); ctx.lineTo(e.tx + 22, e.ty);
-    ctx.moveTo(e.tx, e.ty - 22); ctx.lineTo(e.tx, e.ty - 10);
-    ctx.moveTo(e.tx, e.ty + 10); ctx.lineTo(e.tx, e.ty + 22);
+    ctx.moveTo(e.tx - rad - 6, e.ty); ctx.lineTo(e.tx - rad - 2, e.ty);
+    ctx.moveTo(e.tx + rad + 2, e.ty); ctx.lineTo(e.tx + rad + 6, e.ty);
+    ctx.moveTo(e.tx, e.ty - rad - 6); ctx.lineTo(e.tx, e.ty - rad - 2);
+    ctx.moveTo(e.tx, e.ty + rad + 2); ctx.lineTo(e.tx, e.ty + rad + 6);
     ctx.stroke();
   }
 }
@@ -2218,6 +2955,110 @@ function drawEnemy(e) {
     ctx.fillRect(3, 1.4, 2.4, 2.8);
     ctx.fillRect(7.4, 1.4, 2.4, 2.8);
     face(e, 4, -4);
+  } else if (e.type === 'moose') {
+    // ЛОСЬ: рога-лопаты + тяжёлая морда. Присел (wst 1) — сейчас таран!
+    if (e.wst === 1) { ctx.scale(1.15, 0.8); ctx.translate(rnd(-1.5, 1.5), 0); }
+    ctx.fillStyle = body;
+    // рога
+    ctx.strokeStyle = '#e8dfc8';
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(-5, -12); ctx.lineTo(-12, -22); ctx.moveTo(-12, -22); ctx.lineTo(-18, -20);
+    ctx.moveTo(-12, -22); ctx.lineTo(-14, -27);
+    ctx.moveTo(5, -12); ctx.lineTo(12, -22); ctx.moveTo(12, -22); ctx.lineTo(18, -20);
+    ctx.moveTo(12, -22); ctx.lineTo(14, -27);
+    ctx.stroke();
+    // тело
+    ctx.beginPath(); ctx.ellipse(0, 0, 16, 11, 0, 0, TAU); ctx.fill();
+    // горбатая холка
+    ctx.beginPath(); ctx.ellipse(-4, -6, 9, 7, -0.3, 0, TAU); ctx.fill();
+    // морда
+    ctx.beginPath(); ctx.ellipse(13, 1, 8, 5, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.ellipse(18, 2, 3.4, 2.2, 0, 0, TAU); ctx.fill();
+    // копыта
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath(); ctx.ellipse(-7, 10 + step, 3.6, 2.8, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(7, 10 - step, 3.6, 2.8, 0, 0, TAU); ctx.fill();
+    face(e, 6, -4);
+  } else if (e.type === 'marten') {
+    // КУНИЦА: длинный гибкий корпус, мельтешит
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 13, 6, 0, 0, TAU); ctx.fill();
+    // хвост-волна
+    ctx.strokeStyle = body;
+    ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(-11, 0);
+    ctx.quadraticCurveTo(-18, Math.sin(e.t * 12) * 6, -22, Math.sin(e.t * 12) * 8);
+    ctx.stroke();
+    // мордочка
+    ctx.beginPath(); ctx.ellipse(11, -1, 5, 4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath(); ctx.arc(12, -3, 1.6, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(15, -1.6, 1.6, 0, TAU); ctx.fill();
+    // лапки-семечки
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(-5, 6 + step, 2.2, 1.8, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5, 6 - step, 2.2, 1.8, 0, 0, TAU); ctx.fill();
+  } else if (e.type === 'snowman' || e.type === 'mini') {
+    // СНЕГОВИК/СНЕГАВЧИК: два-три кома, морковка, ведро
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(0, 4, 11, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -7, 8, 0, TAU); ctx.fill();
+    // морковка
+    ctx.fillStyle = '#ff8c42';
+    tri(8, -8, 15, -6, 8, -4);
+    // глаза-уголья
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath(); ctx.arc(3, -10, 1.3, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(6.4, -10, 1.3, 0, TAU); ctx.fill();
+    // ведро
+    ctx.fillStyle = '#5a6a8a';
+    ctx.fillRect(-6, -17, 12, 4);
+    // злая улыбка
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(2, -5); ctx.lineTo(7, -4.4); ctx.stroke();
+  } else if (e.type === 'mouse') {
+    // ПОЛЁВКА: крохотный пузик и уши-локаторы
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 5, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3, -5, 3, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(3, -5, 3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(5.4, -1, 1.1, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(7.6, -0.4, 1.1, 0, TAU); ctx.fill();
+    // хвостик
+    ctx.strokeStyle = body;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-6, 2);
+    ctx.quadraticCurveTo(-12, 4 + Math.sin(e.t * 14) * 3, -14, 2);
+    ctx.stroke();
+  } else if (e.type === 'owl') {
+    // СОВА: круглая голова с «очками», крылья размеренно машут
+    var oflap = Math.sin(e.t * 9) * 5;
+    if (e.wst === 1) oflap = 0;   // зависла — замерла
+    ctx.fillStyle = body;
+    tri(-4, -2, -18, -8 - oflap, -4, 5);
+    tri(4, -2, 18, -8 - oflap, 4, 5);
+    ctx.beginPath(); ctx.ellipse(0, 0, 10, 11, 0, 0, TAU); ctx.fill();
+    // «очки» совы
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(-4, -4, 4.4, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, -4, 4.4, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1a1a2e';
+    var olx = Math.cos(angTo(e.x, e.y, G.player.x, G.player.y)) * 1.6;
+    ctx.beginPath(); ctx.arc(-4 + olx, -4, 2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(4 + olx, -4, 2, 0, TAU); ctx.fill();
+    // клюв
+    ctx.fillStyle = '#ffd76e';
+    tri(0, -1.6, 2.4, 1.4, -2.4, 1.4);
+    // ушные пучки
+    ctx.fillStyle = body;
+    tri(-7, -12, -9, -18, -3, -13);
+    tri(7, -12, 9, -18, 3, -13);
   }
 
   // корона элиты
@@ -2429,6 +3270,50 @@ function drawBullets() {
       ctx.strokeStyle = 'rgba(160,180,210,0.8)';
       ctx.lineWidth = 1.6;
       ctx.stroke();
+    } else if (b.kind === 'tapok') {
+      // тапок-самолёт: кренит в поворотах
+      ctx.rotate(Math.atan2(b.vy, b.vx) + Math.PI / 2 + Math.sin(b.t * 20) * 0.3);
+      ctx.fillStyle = '#7a5c8e';
+      ctx.beginPath(); ctx.ellipse(0, 0, 6, 10, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#e8dfc8';
+      ctx.beginPath(); ctx.ellipse(0, 5, 4, 3.4, 0, 0, TAU); ctx.fill();
+      // след
+      ctx.fillStyle = 'rgba(200,200,220,0.4)';
+      ctx.beginPath(); ctx.arc(-Math.sin(b.t * 30) * 3, -12, 2.4, 0, TAU); ctx.fill();
+    } else if (b.kind === 'flask') {
+      ctx.rotate(b.t * 12);
+      ctx.fillStyle = 'rgba(255, 140, 66, 0.25)';
+      ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#9db88a';
+      ctx.fillRect(-4, -5, 8, 10);
+      ctx.fillStyle = '#ff8c42';
+      ctx.fillRect(-2.4, -7, 4.8, 4);
+    } else if (b.kind === 'puddle') {
+      // горящая лужа скипидара: тает к концу жизни
+      var k = 1 - b.t / b.life;
+      ctx.globalAlpha = 0.55 * k + 0.15;
+      var pg = ctx.createRadialGradient(0, 0, b.puddleR * 0.2, 0, 0, b.puddleR);
+      pg.addColorStop(0, '#ffd76e');
+      pg.addColorStop(0.6, '#ff8c42');
+      pg.addColorStop(1, 'rgba(200, 60, 30, 0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath();
+      ctx.arc(0, 0, b.puddleR, 0, TAU);
+      ctx.fill();
+      if (Math.random() < 0.5) {
+        ctx.fillStyle = '#ffd76e';
+        ctx.beginPath(); ctx.arc(rnd(-b.puddleR * 0.6, b.puddleR * 0.6), rnd(-b.puddleR * 0.4, b.puddleR * 0.4), rnd(1.5, 3.4), 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (b.kind === 'owlbomb') {
+      // снежная бомба совы: падает сверху, тень на снегу растёт
+      ctx.fillStyle = 'rgba(157, 255, 224, 0.35)';
+      ctx.beginPath(); ctx.arc(0, b.vy * 0.5, 8 + b.t * 8, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#dfe8f2';
+      ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#9dffe0';
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -2471,8 +3356,12 @@ function updateHUD(dt) {
 
   $$('xp-bar').style.width = (G.xp / G.xpNext * 100) + '%';
   $$('lvl-txt').textContent = 'УР. ' + G.level;
-  // таймер СКАТКИ до рассвета: 10:00 → 0:00
-  $$('timer').textContent = '🌅 ' + fmtTime(RUN_TIME - G.t);
+  // классика: скатка до рассвета 10:00 → 0:00; бесконечка: ночь тикает вверх
+  if (G.mode === 'endless') {
+    $$('timer').textContent = '🌙 ' + fmtTime(G.t);
+  } else {
+    $$('timer').textContent = '🌅 ' + fmtTime(Math.max(0, RUN_TIME - G.t));
+  }
   $$('timer').className = (G.bossAlive && !G.bossAlive.dead) ? 'boss' : (G.siege ? 'boss' : '');
 
   $$('hp-bar').style.width = (p.hp / p.maxHp * 100) + '%';
@@ -2508,7 +3397,8 @@ function updateHUD(dt) {
 
 // ═══════════════════════════════════════════════ ЗАБЕГ: ЖИЗНЬ ════════════
 
-function startRun() {
+function startRun(mode) {
+  G.mode = mode === 'endless' ? 'endless' : 'classic';
   G.state = 'play';
   G.t = 0;
   G.runSeq++;
@@ -2525,8 +3415,14 @@ function startRun() {
   G.trip = 0;
   G.zapT = 0;
   G.zapFlash = 0;
+  G.zapCount = 0;
   G.bossIdx = 0;
   G.bossAlive = null;
+  G.nextBossT = 0;
+  G.lastHitT = 0;
+  G.lowHpSaid = false;
+  G.said5 = false;
+  G.radioOn = true; G.radioT = 0; G.radioIdx = 0;
   G.siege = false;
   G.dawn = false;
   G.won = false;
@@ -2540,7 +3436,7 @@ function startRun() {
   CAM.x = 0; CAM.y = 0; CAM.shake = 0;
   canvas.style.filter = '';
 
-  ['menu', 'help', 'death', 'win', 'pause'].forEach(function (id) {
+  ['menu', 'help', 'death', 'win', 'pause', 'achs'].forEach(function (id) {
     $$(id).classList.add('hidden');
   });
   $$('hud').classList.remove('hidden');
@@ -2549,7 +3445,11 @@ function startRun() {
   AU.init();
   AU.startWind();
   AU.bell();
-  announce('НОЧЬ НАЧАЛАСЬ\nдожить до рассвета — 10:00', 2600);
+  if (G.mode === 'classic') {
+    announce('НОЧЬ НАЧАЛАСЬ\nдожить до рассвета — 10:00', 2600);
+  } else {
+    announce('БЕСКОНЕЧНАЯ НОЧЬ\nрассвета не будет. сколько вытерпишь?', 3000);
+  }
   dedSay(true);
 }
 
@@ -2558,39 +3458,67 @@ function endRun(winFlag) {
   G.state = winFlag ? 'win' : 'death';
   G.won = winFlag;
   G.bossAlive = null;
+  G.radioOn = false;
   canvas.style.filter = '';
 
   if (winFlag) {
     AU.win();
     AU.stopWind();
     spawnConfetti(G.player.x, G.player.y, 120, 2);
+    unlockAch('winner');
   } else {
     AU.death();
     AU.stopWind();
     CAM.kick(1);
   }
 
-  // рекорды
+  // рекорды (по режимам отдельно)
   try {
     var best = JSON.parse(localStorage.getItem('dedBest') || '{}');
     var t = Math.floor(G.t);
-    if (!best.bestTime || t > best.bestTime) best.bestTime = t;
-    if (!best.bestKills || G.kills > best.bestKills) best.bestKills = G.kills;
+    if (G.mode === 'endless') {
+      if (!best.endlessTime || t > best.endlessTime) best.endlessTime = t;
+      if (!best.endlessKills || G.kills > best.endlessKills) best.endlessKills = G.kills;
+    } else {
+      if (!best.bestTime || t > best.bestTime) best.bestTime = t;
+      if (!best.bestKills || G.kills > best.bestKills) best.bestKills = G.kills;
+    }
     best.runs = (best.runs || 0) + 1;
     if (winFlag) best.wins = (best.wins || 0) + 1;
     localStorage.setItem('dedBest', JSON.stringify(best));
   } catch (e) { /* приватный режим — просто играем */ }
 
   var line =
-    'Продержался: <b>' + fmtTime(G.t) + '</b> из 10:00<br>' +
+    (G.mode === 'endless' ? 'Продержался: ' : 'Продержался: ') + '<b>' + fmtTime(G.t) + '</b>' +
+    (G.mode === 'endless' ? '' : ' из 10:00') + '<br>' +
     'Изгнано глюков: <b>' + G.kills + '</b><br>' +
     'Уровень деда: <b>' + G.level + '</b><br>' +
+    'Старших повержено: <b>' + (G.bossIdx) + '</b><br>' +
     'Грибов сожрано: <b>' + G.stats.mushrooms + '</b><br>' +
     'Свёртков вскрыто: <b>' + G.stats.gifts + '</b><br>' +
     'Урона нанесено: <b>' + G.stats.dmg + '</b>';
 
-  if (winFlag) $$('win-stats').innerHTML = line;
-  else $$('death-stats').innerHTML = line;
+  // сюжетные финалы: чем кончилась ночь
+  var head = '';
+  if (winFlag) {
+    head = 'Небо на востоке налилось золотом.<br>Мультяшки истаяли. Дед идёт ставить самовар.';
+  } else if (G.mode === 'endless') {
+    head = 'Ночь не кончилась — кончился дед.<br>Радио что-то бормотало, но его уже не слышно.';
+  } else if (G.t < 120) {
+    head = 'Безмолвие приняло деда быстро.<br>Даже самовар не успел остыть.';
+  } else if (G.t < 420) {
+    head = 'Безмолвие приняло деда.<br>Лес ещё долго топтался по сугробам, но деда уже не было.';
+  } else {
+    head = 'До рассвета оставалось совсем чуть-чуть.<br>Вот обидно-то, дед. Вот обидно.';
+  }
+
+  if (winFlag) {
+    $$('win-stats').innerHTML = line;
+    $$('win-line').innerHTML = head;
+  } else {
+    $$('death-stats').innerHTML = line;
+    $$('death-line').innerHTML = head;
+  }
 
   setTimeout(function () {
     $$('hud').classList.add('hidden');
@@ -2620,11 +3548,12 @@ function toMenu() {
   particles = [];
   floaters = [];
   G.bossAlive = null;
+  G.radioOn = false;
   G.siege = false;
   G.dawn = false;
   AU.stopWind();
   canvas.style.filter = '';
-  ['hud', 'pause', 'death', 'win', 'levelup', 'help'].forEach(function (id) {
+  ['hud', 'pause', 'death', 'win', 'levelup', 'help', 'achs'].forEach(function (id) {
     $$(id).classList.add('hidden');
   });
   $$('menu').classList.remove('hidden');
@@ -2640,9 +3569,11 @@ function showBest() {
       return;
     }
     el.innerHTML =
-      'Забегов: ' + best.runs + ' · Побед: ' + (best.wins || 0) +
-      '<br>Лучшее время: <b style="color:#ffd76e">' + fmtTime(best.bestTime || 0) +
-      '</b> · Рекорд изгнаний: <b style="color:#ffd76e">' + (best.bestKills || 0) + '</b>';
+      'НОЧЬ: лучшее время <b style="color:#ffd76e">' + fmtTime(best.bestTime || 0) +
+      '</b> · изгнаний <b style="color:#ffd76e">' + (best.bestKills || 0) + '</b>' +
+      ' · побед: ' + (best.wins || 0) +
+      '<br>БЕСКОНЕЧНАЯ: рекорд <b style="color:#b39bff">' + fmtTime(best.endlessTime || 0) +
+      '</b> · изгнаний <b style="color:#b39bff">' + (best.endlessKills || 0) + '</b>';
   } catch (e) {
     el.innerHTML = '';
   }
@@ -2731,19 +3662,27 @@ function bind(id, fn) {
   });
 }
 
-bind('btn-play', startRun);
+bind('btn-play', function () { startRun('classic'); });
+bind('btn-endless', function () { startRun('endless'); });
 bind('btn-help', function () {
   $$('menu').classList.add('hidden');
   $$('help').classList.remove('hidden');
   G.state = 'help';
 });
 bind('btn-help-back', toMenu);
+bind('btn-achs', function () {
+  renderAchs();
+  $$('menu').classList.add('hidden');
+  $$('achs').classList.remove('hidden');
+  G.state = 'achs';
+});
+bind('btn-achs-back', toMenu);
 bind('btn-reroll', rerollCards);
 bind('btn-resume', togglePause);
 bind('btn-quit', toMenu);
-bind('btn-retry', startRun);
+bind('btn-retry', function () { startRun(G.mode); });
 bind('btn-death-menu', toMenu);
-bind('btn-win-retry', startRun);
+bind('btn-win-retry', function () { startRun(G.mode); });
 bind('btn-win-menu', toMenu);
 
 // ═══════════════════════════════════════════════════ СТАРТ ══════════════
@@ -2757,7 +3696,9 @@ window.DED = {
   startRun: startRun, spawnBoss: spawnBoss, killEnemy: killEnemy,
   hurtPlayer: hurtPlayer, tryZap: tryZap, gainXp: gainXp,
   announce: announce, rerollCards: rerollCards, spawnAtRing: spawnAtRing,
+  spawnEnemy: spawnEnemy, unlockAch: unlockAch, getAchs: getAchs,
   WEAPONS: WEAPONS, PASSIVES: PASSIVES, EVOS: EVOS, ENEMY_TYPES: ENEMY_TYPES,
+  BOSSES: BOSSES,
   RUN_TIME: RUN_TIME, BOSS_TIMES: BOSS_TIMES, SIEGE_TIME: SIEGE_TIME
 };
 

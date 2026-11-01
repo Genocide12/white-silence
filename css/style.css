@@ -399,3 +399,85 @@ canvas#game {
   #kills { display: none; }
   #weapon-slots { display: none; }
 }
+
+/* ================= v3.0: режимы, радио, ачивки ================= */
+
+.mode-row {
+  display: flex; gap: 14px; flex-wrap: wrap; justify-content: center;
+  margin: 8px 0 4px;
+}
+.mode-row .btn.big small {
+  display: block; font-size: 12px; font-weight: normal;
+  opacity: 0.75; margin-top: 4px;
+}
+.btn.endless {
+  border-color: #b39bff;
+  background: linear-gradient(160deg, #241b3e, #171230);
+}
+.btn.endless:hover { border-color: #d5c5ff; }
+
+/* радио станции: строка внизу слева, тихо всплывает */
+#radio {
+  position: fixed; left: 16px; bottom: 92px;
+  max-width: min(430px, 72vw);
+  padding: 8px 14px;
+  background: rgba(10, 13, 22, 0.85);
+  border: 1px solid #2a3450;
+  border-left: 3px solid #7bffb0;
+  border-radius: 10px;
+  font-size: 14px; line-height: 1.35;
+  color: #cfe0d8;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 0.4s, transform 0.4s;
+  pointer-events: none; z-index: 15;
+}
+#radio.show { opacity: 1; transform: translateY(0); }
+
+/* тост ачивки: справа сверху */
+#ach-toast {
+  position: fixed; top: 74px; right: -320px;
+  display: flex; align-items: center; gap: 12px;
+  width: 300px; padding: 12px 14px;
+  background: rgba(20, 26, 44, 0.95);
+  border: 1px solid #ffd76e;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5), 0 0 18px rgba(255,215,110,0.18);
+  transition: right 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  z-index: 40; pointer-events: none;
+}
+#ach-toast.show { right: 16px; }
+#ach-toast .at-ico { font-size: 30px; }
+#ach-toast .at-name { font-weight: bold; color: var(--accent); font-size: 15px; }
+#ach-toast .at-desc { font-size: 12px; color: var(--snow); opacity: 0.8; }
+
+/* экран достижений */
+#achs { overflow-y: auto; }
+#ach-list {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px; width: min(760px, 92vw);
+  margin: 0 auto 18px; text-align: left;
+}
+.ach-total {
+  grid-column: 1 / -1; text-align: center;
+  color: var(--accent); font-weight: bold; margin-bottom: 4px;
+}
+.ach {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--card-bg);
+  border: 1px solid #2a3450;
+  border-radius: 10px; padding: 10px 12px;
+  opacity: 0.45;
+}
+.ach.got {
+  opacity: 1; border-color: #5a6a8a;
+  background: linear-gradient(160deg, #1a2340, #141a2e);
+}
+.ach-ico { font-size: 26px; width: 34px; text-align: center; }
+.ach-name { font-weight: bold; font-size: 14px; }
+.ach.got .ach-name { color: var(--accent); }
+.ach-desc { font-size: 12px; opacity: 0.75; }
+
+@media (max-width: 720px) {
+  .mode-row { flex-direction: column; }
+  #radio { bottom: 130px; font-size: 12px; }
+}
