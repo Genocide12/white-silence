@@ -337,7 +337,7 @@
       ok('кнопки управления плеером: −/+/⏸/⟲ в топбаре',
          !!(q('.cn-topbar [data-act="slower"]') && q('.cn-topbar [data-act="faster"]') &&
             q('.cn-topbar [data-act="pause"]') && q('.cn-topbar [data-act="restart"]')));
-      ok('индикатор скорости показывает дефолт ×60', q('.cn-speed') && q('.cn-speed').textContent === '×60');
+      ok('индикатор скорости показывает дефолт ×1 (живой темп)', q('.cn-speed') && q('.cn-speed').textContent === '×1');
       // ФИКС: ряд кнопок всех 10 скоростей ×1..×2400 в панели управления
       var speedBtns = qa('.cn-btn[data-speed]');
       ok('кнопки всех 10 скоростей ×1..×2400 в DOM', speedBtns.length === 10, { n: speedBtns.length });
@@ -422,12 +422,23 @@
          { gt: WS.G && WS.G.time ? Math.round(WS.G.time.totalMin) : -1, tl: Math.round(s.tlMin) });
       ok('камера на призраке', !!pl && Math.abs(WS.Cam.cx - pl.x) < 1 && Math.abs(WS.Cam.cy - pl.y) < 1);
       ok('шапка: имя записи «Победный забег»', q('.cn-name') && q('.cn-name').textContent.indexOf('Победный забег') >= 0);
-      ok('шапка: скорость ×60 по умолчанию', q('.cn-speed') && q('.cn-speed').textContent === '×60');
+      // ЭТАП 13: дефолт ×1 — живой темп; события фикстуры на мин 5/10/15
+      // разыграем на ×60 (кнопкой ряда), как это делал старый дефолт
+      ok('шапка: скорость ×1 по умолчанию', q('.cn-speed') && q('.cn-speed').textContent === '×1');
       ok('плёнка воспроизводится (playing true)', s.playing === true);
+      ok('калибровка темпа фикстуры: baseRate 1 (мало сэмплов — честный темп)',
+         (s.baseRate || 1) === 1, { baseRate: s.baseRate });
+      var feedTx0 = q('.cn-feed') ? q('.cn-feed').textContent : '';
+      ok('лента действий: глава из записи (код 4, мин 0)', feedTx0.indexOf('Мороз и радио') >= 0);
+      q('.cn-speeds .cn-btn[data-speed="5"]').click();      // ×60
+      ok('ряд скоростей: ×60 выбран для разбега событий', cst().speedIx === 5);
+    }),
+
+    delay(600, function () {
+      var s = cst();
       ok('пузырь мысли всплыл (событие кода 1)',
          !hid(q('.cn-bubble')) && q('.cn-bubble').textContent.indexOf('Тарелка') >= 0);
       var feedTx = q('.cn-feed') ? q('.cn-feed').textContent : '';
-      ok('лента действий: глава из записи (код 4)', feedTx.indexOf('Мороз и радио') >= 0);
       ok('лента действий: действие из записи (код 2)', feedTx.indexOf('Срубил ёлку') >= 0);
       ok('ХП из записи на панели (код 3)', q('.cn-hp') && q('.cn-hp').textContent.indexOf('95') >= 0);
       ok('грибная энергия из записи на панели', q('.cn-en') && q('.cn-en').textContent.indexOf('12') >= 0);

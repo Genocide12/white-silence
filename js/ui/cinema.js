@@ -17,7 +17,9 @@
   'use strict';
 
   var SPEEDS = [1, 2, 4, 10, 30, 60, 150, 400, 1000, 2400];
-  var DEF_SPEED_IX = 5;                 // ×60 — час игры в секунду
+  var DEF_SPEED_IX = 0;                  // ×1 = живой темп (ЭТАП 13: baseRate
+                                        // уже растягивает плёнку роя; ×60 по
+                                        // умолчанию пролетало фильм за секунды)
 
   var C = {
     open: false,
@@ -102,8 +104,12 @@
     }
     C.totalMin = ev.length ? (ev[ev.length - 1][0] || 1) : 1;
     if (C.totalMin < 1) C.totalMin = 1;
+    // старт — с ПЕРВОГО события плёнки: запись начинается в 08:00
+    // (totalMin=480), до него в данных пусто, дед стоял бы 8 «часов»
+    C.tMin0 = ev.length ? Math.max(0, ev[0][0]) : 0;
+    if (C.tMin0 >= C.totalMin) C.tMin0 = 0;
     C.evI = 0; C.posI = 0;
-    C.tlMin = 0;
+    C.tlMin = C.tMin0;
     C.ended = false;
     C.feed = [];
     C.lastStat = { hp: 100, en: 0 };
@@ -112,6 +118,35 @@
       C.ghost.x = C.posList[0][2];
       C.ghost.y = C.posList[0][3];
     }
+    C.baseRate = calcBaseRate();
+  }
+
+  /** Калибровка темпа плёнки (ЭТАП 13): «×1» = живой темп ходьбы.
+   *  Рой/демо играли через Loop.speed — часы летели в N раз быстрее
+   *  физики, поэтому в записи дед проходит лишь ~0.07 тайла за игровую
+   *  минуту (в живой игре ×1 — 2.2). Без калибровки просмотр на ×1
+   *  показывал «дед практически не движется». Считаем медианный темп
+   *  ходьбы по сэмплам и растягиваем время так, чтобы шаг выглядел
+   *  живым; день тогда пролетает за ~40-60 сек, вся плёнка — кино
+   *  на 15-60 минут. Для плёнок, записанных в живом темпе (медиана
+   *  ≈ 2.2), калибровка автоматически даёт 1. */
+  function calcBaseRate() {
+    var LIVE_TPM = 2.2;                  // тайлов за игровую минуту в живой ×1
+    var pl = C.posList, rates = [];
+    for (var i = 1; i < pl.length; i++) {
+      var dmin = pl[i][0] - pl[i - 1][0];
+      if (dmin <= 0) continue;
+      var dist = Math.abs(pl[i][2] - pl[i - 1][2]) + Math.abs(pl[i][3] - pl[i - 1][3]);
+      if (dist > 0.15) rates.push(dist / dmin);
+    }
+    if (rates.length < 8) return 1;      // данных мало — честный темп
+    rates.sort(function (a, b) { return a - b; });
+    var med = rates[rates.length >> 1];
+    if (!(med > 0.01)) return 1;
+    var k = LIVE_TPM / med;
+    if (k < 1) k = 1;                    // быстрее живого не ускоряем
+    if (k > 60) k = 60;
+    return k;
   }
 
   function applyUpTo(min) {
@@ -166,7 +201,9 @@
   function cinemaFrame(rdt) {
     if (!C.open || !C.rec) return;
     if (C.playing && !C.ended) {
-      C.tlMin += rdt * SPEEDS[C.speedIx];
+      // ×N — относительно ЖИВОГО темпа (см. calcBaseRate): baseRate
+      // переводит игровые минуты плёнки в «как выглядела игра у оператора»
+      C.tlMin += rdt * SPEEDS[C.speedIx] * (C.baseRate || 1);
       if (C.tlMin > C.totalMin) C.tlMin = C.totalMin;
       applyUpTo(C.tlMin);
     }
@@ -183,9 +220,13 @@
         if (f < 0) f = 0; if (f > 1) f = 1;
         gx = a[2] + (b[2] - a[2]) * f;
         gy = a[3] + (b[3] - a[3]) * f;
-        if (Math.abs(b[2] - a[2]) + Math.abs(b[3] - a[3]) > 0.05) {
-          C.ghost.walkT += rdt * Math.min(4, SPEEDS[C.speedIx] / 40 + 1);
-        }
+      }
+      // анимация шага — по ФАКТИЧЕСКОЙ скорости на экране (тайлов/сек):
+      // дед шагает, только когда действительно идёт, и в темпе движения
+      var pvx = C.ghost.x, pvy = C.ghost.y;
+      var moved = Math.abs(gx - pvx) + Math.abs(gy - pvy);
+      if (rdt > 0 && moved / rdt > 0.08) {
+        C.ghost.walkT += rdt * Math.min(3, (moved / rdt) / 2.2);
       }
       // направление по движению
       var dx = gx - C.ghost.x, dy = gy - C.ghost.y;
@@ -402,7 +443,7 @@
       '    <span class="cn-en">0 🍄</span>' +
       '    <span class="cn-spacer"></span>' +
       '    <button class="ws-btn cn-btn" data-act="slower">−</button>' +
-      '    <span class="cn-speed">×60</span>' +
+      '    <span class="cn-speed">×' + SPEEDS[DEF_SPEED_IX] + '</span>' +
       '    <button class="ws-btn cn-btn" data-act="faster">+</button>' +
       '    <button class="ws-btn cn-btn" data-act="pause">⏸</button>' +
       '    <button class="ws-btn cn-btn" data-act="restart">⟲</button>' +
