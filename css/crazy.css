@@ -250,3 +250,12 @@ body.crazy-high::after {
   box-sizing: border-box;
 }
 .ws-tree-box * { box-sizing: border-box; }
+
+/* ПРИХОД (резак геймплея): полоска 🧠 и кнопка Грибного Залпа */
+#ws-crazy .cz-btn:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+  cursor: not-allowed;
+}
+#ws-crazy .cz-row.cz-trip .cz-val {
+  transition: color 0.4s;
+}

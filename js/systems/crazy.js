@@ -36,6 +36,7 @@
   var KIND_ENERGY = {                   // грибная энергия за изгнание
     wolf: 8, bear: 25, bandit: 12, deer: 6, hare: 3, crow: 2
   };
+  var ZAP_COST = 20;                    // цена Грибного Залпа [G]
   var KIND_NAME = {
     wolf: 'волк', bear: 'медведь', bandit: 'бандит', deer: 'олень',
     hare: 'заяц', crow: 'ворон', generic: 'мираж'
@@ -241,7 +242,15 @@
       voiceOn: true,        // озвучка
       autoSpend: false,     // бот: тратить энергию самому
       saidLow: false,       // сказал про низкое ХП
-      saidD50: false        // сказал про дедлайн
+      saidD50: false,       // сказал про дедлайн
+      // ПРИХОД (геймплейный резак): 1 = дед в полной грибной глюке,
+      // 0 = трезвый. Тает со временем — грибы надо ЕСТЬ постоянно.
+      // В трипе: мир цветной, мультяшки сами лезут к деду (есть чем
+      // заниматься), галюны, полная энергия за изгнания. Трезвому:
+      // мир сереет, звери разбегаются, энергия за изгнания урезана.
+      trip: 0.55,           // старт: дед уже слегка «под грибом»
+      saidTrip: false,      // предупредил ли про протрезвление
+      zapCd: 0              // кулдаун Грибного Залпа [G], сек
     };
   }
 
@@ -250,6 +259,20 @@
     if (!g) return null;
     if (!g.crazy) g.crazy = newState();
     return g.crazy;
+  }
+
+  /** Центр стаи (для «зова гриба»: кто близко — тот идёт к деду). */
+  function packCenterOf(pk) {
+    try {
+      var x = 0, y = 0, n = 0;
+      for (var i = 0; i < pk.members.length; i++) {
+        var m = pk.members[i];
+        if (m.dead) continue;
+        x += m.x; y += m.y; n++;
+      }
+      if (!n) return null;
+      return { x: x / n, y: y / n };
+    } catch (e) { return null; }
   }
 
   // ---- чтение эффектов дерева ----
@@ -408,7 +431,10 @@
     var st = ST();
     if (!st) return;
     st.banished++;
+    // ПРИХОД: трезвому деду магия даётся туго — урезанная энергия
+    // (голодный мозг плохо генерирует чудеса). В трипе — полная.
     var gain = KIND_ENERGY[kind] || 4;
+    if (st.trip < 0.2) gain = Math.ceil(gain * 0.5);
     gainEnergy(gain, 'quiet');
     confetti(x, y, 12);
     try {
@@ -477,7 +503,8 @@
         }
       } catch (eF) { /* пусто */ }
       if (Math.random() < dropChance()) {
-        var drops = ['mushroom_fun', 'candy_ded', 'candy_ded'];
+        // ПРИХОД: грибы — топливо геймплея, пусть будут щедрее
+        var drops = ['mushroom_fun', 'mushroom_fun', 'candy_ded'];
         if (Math.random() < 0.22) drops.push('joint_ded');
         if (Math.random() < 0.10) drops.push('plunger_magic');
         if (Math.random() < 0.10) drops.push('hammer_rubber');
@@ -721,6 +748,65 @@
       if (st.highT <= 0) document.body.classList.remove('crazy-high');
     }
 
+    // --- ПРИХОД: ядро геймплейного резака -------------------------
+    // trip 1..0. Тает медленно (реальных секунд): полбанки — 10 минут.
+    // Древо «Грибная Сила» продляет. Протрезвел ниже 0.25 — предупреждение,
+    // ниже 0.12 — мир серый, звери пугливые, изгнания жадные до энергии.
+    if (st.zapCd > 0) st.zapCd -= dt;
+    var tripDrain = (1 / 600) * (1 - lv('shroom') * 0.15);   // 600 c ≈ 10 мин
+    st.trip -= tripDrain * dt;
+    if (st.trip < 0) st.trip = 0;
+    if (st.trip > 1) st.trip = 1;
+
+    // серость: чем трезвее дед, тем серее мир (CSS-фильтр на канвасе)
+    var gray = st.trip < 0.25 ? (0.25 - st.trip) / 0.25 : 0;   // 0..1
+    var canvas = document.getElementById('game');
+    if (canvas) {
+      if (gray > 0.02) {
+        canvas.style.filter = 'saturate(' + (1 - gray * 0.85).toFixed(2) +
+          ') brightness(' + (1 - gray * 0.25).toFixed(2) + ')';
+      } else if (canvas.style.filter) {
+        canvas.style.filter = '';
+      }
+    }
+
+    // предупреждение о протрезвлении
+    if (st.trip < 0.25 && !st.saidTrip) {
+      st.saidTrip = true;
+      toast('🍄 Приход спадает! Мир блёкнет, мультяшки прячутся. Дед, гриб!', 'warn');
+      Voice.say('Ох, мультики уходят… Гриб бы сейчас, гриб!', 'trip_low', 1);
+    } else if (st.trip > 0.4) {
+      st.saidTrip = false;
+    }
+
+    // МУЛЬТЯШКИ В ТРИПЕ: пока дед под грибом — звери сами идут к нему.
+    // Механика — ЛЕГИТМНЫЙ шум (Ev.emit 'noise'): wolf.js слышит его и
+    // идёт проверять точку, а aggroT (месть) заставляет целиться в деда.
+    // Прямую перезапись pk.target wolf.js тёр своим pickTarget (плейтест:
+    // через 2 сек mode сбрасывался в patrol) — поэтому только крючки ИИ.
+    if (st.trip > 0.3) {
+      st.huntT = (st.huntT || 0) - dt;
+      if (st.huntT <= 0) {
+        st.huntT = 8;   // «зов гриба» раз в 8 сек, пока дед в трипе
+        try {
+          // грибной шёпот: звери в 45 тайлах слышат деда
+          WS.Ev.emit('noise', { x: p.x, y: p.y, r: 45 });
+          // ...а близкие стаи ещё и злятся на него самого
+          var packs = WS.Wolf && WS.Wolf.packs ? WS.Wolf.packs() : [];
+          for (var pi = 0; pi < packs.length; pi++) {
+            var pk = packs[pi];
+            if (!pk || !pk.members || !pk.members.length) continue;
+            var pc = packCenterOf(pk);
+            if (!pc) continue;
+            var pd = WS.M.dist(pc.x, pc.y, p.x, p.y);
+            if (pd < 200) {
+              pk.aggroT = Math.max(pk.aggroT || 0, 30);
+            }
+          }
+        } catch (eHunt) { /* волки не пришли — не беда */ }
+      }
+    }
+
     // --- галлюцинации (мирные частицы вокруг деда) ---
     st.hallT -= dt;
     if (st.hallT <= 0) {
@@ -836,14 +922,23 @@
       '<div class="cz-row cz-hp" title="ХП-часы: тают каждый день. Косяк деда восстанавливает полностью.">' +
       '  <span class="cz-ico">🫀</span><span class="cz-val" id="cz-hp">—</span>' +
       '</div>' +
+      '<div class="cz-row cz-trip" title="ПРИХОД: грибы держат мультики рядом. Тает со временем — ешь грибы! Трезвому деду мир сер и пуст.">' +
+      '  <span class="cz-ico">🧠</span><span class="cz-val" id="cz-trip">—</span>' +
+      '</div>' +
+      '<button class="cz-btn" id="cz-zap" title="Грибной Залп [G]: 20 энергии — грибной гром, мультяшки бегут к деду">🍄 Залп [G]</button>' +
       '<button class="cz-btn" id="cz-tree" title="Древо Мудрости (T)">🌳 Древо</button>' +
       '<button class="cz-btn cz-voice" id="cz-voice" title="Озвучка деда вкл/выкл">🔊</button>';
     (document.body || document.documentElement).appendChild(panel);
     panelEls.energy = panel.querySelector('#cz-energy');
     panelEls.day = panel.querySelector('#cz-day');
     panelEls.hp = panel.querySelector('#cz-hp');
+    panelEls.trip = panel.querySelector('#cz-trip');
+    panelEls.zap = panel.querySelector('#cz-zap');
     panelEls.tree = panel.querySelector('#cz-tree');
     panelEls.voice = panel.querySelector('#cz-voice');
+    panelEls.zap.addEventListener('click', function () {
+      mushroomZap();
+    });
     panelEls.tree.addEventListener('click', function () {
       if (WS.TreeScreen) WS.TreeScreen.toggle();
     });
@@ -909,6 +1004,20 @@
       panelEls.hp.className = 'cz-val' + (hp < 30 ? ' cz-bad' : (hp < 60 ? ' cz-warn' : ''));
     }
     if (panelEls.voice) panelEls.voice.textContent = st.voiceOn ? '🔊' : '🔇';
+    // ПРИХОД: полоска состояния дедова сознания
+    if (panelEls.trip) {
+      var t = Math.round(st.trip * 100);
+      panelEls.trip.textContent = t + '%' + (st.trip < 0.25 ? ' 🥀' : (st.trip > 0.75 ? ' ✨' : ''));
+      panelEls.trip.className = 'cz-val' +
+        (st.trip < 0.25 ? ' cz-bad' : (st.trip < 0.45 ? ' cz-warn' : ''));
+    }
+    if (panelEls.zap) {
+      var canZap = st.energy >= ZAP_COST && st.zapCd <= 0;
+      panelEls.zap.disabled = !canZap;
+      panelEls.zap.textContent = st.zapCd > 0
+        ? '🍄 ' + Math.ceil(st.zapCd) + ' c'
+        : '🍄 Залп [G]';
+    }
   }
 
   // ====================================================================
@@ -928,11 +1037,12 @@
         st.hpShadow = p.hp;
         st.saidLow = false;
         st.highT = 45;                    // 45 секунд радуги
+        st.trip = 1;                      // ПРИХОД: косяк = полная банка
         confetti(p.x, p.y, 16);
         try {
           if (WS.Fx && WS.Fx.text) WS.Fx.text('ВОТ ЭТО ДУРЬ!', p.x, p.y - 1.3, { col: '#9f7bff', size: 17, life: 1.8 });
         } catch (e) { /* пусто */ }
-        toast('🌻 Косяк деда: ХП полностью восстановлены! Реальность поехала.', 'good');
+        toast('🌻 Косяк деда: ХП полностью, ПРИХОД НА ПОЛНОЙ! Мультяшки сами полезут.', 'good');
         Voice.say('Вот это дурь! Полный порядок.', 'joint', 30);
         updatePanel();
         return true;
@@ -945,10 +1055,15 @@
         p.hp = Math.min(p.maxHp || 100, p.hp + heal);
         st.hpShadow = p.hp;
         if (id === 'mushroom_fun') st.highT = Math.max(st.highT, 18);
+        // ПРИХОД: гриб = топливо (весёлый гриб — полноцинковый,
+        // настойка — половина, конфета — чуть-чуть)
+        if (id === 'mushroom_fun') st.trip = Math.min(1, st.trip + 0.45);
+        else if (id === 'tincture_fly') st.trip = Math.min(1, st.trip + 0.25);
+        else st.trip = Math.min(1, st.trip + 0.08);
         try {
-          if (WS.Fx && WS.Fx.text) WS.Fx.text('+' + heal + ' ХП', p.x, p.y - 1.1, { col: '#7bffb0', size: 14 });
+          if (WS.Fx && WS.Fx.text) WS.Fx.text('+' + heal + ' ХП 🍄', p.x, p.y - 1.1, { col: '#7bffb0', size: 14 });
         } catch (e) { /* пусто */ }
-        toast('💊 ' + (def ? def.ru : 'Хилка') + ': +' + heal + ' ХП.', 'good');
+        toast('💊 ' + (def ? def.ru : 'Хилка') + ': +' + heal + ' ХП, приход подрос.', 'good');
         updatePanel();
         return true;
       }
@@ -1129,6 +1244,14 @@
       if (WS.Action && WS.Action.equipBest) WS.Action.equipBest();
       else if (pInv0 && pInv0.equip && palmIx >= 0) pInv0.equip.hand1 = { id: 'palm_ded', cond: 1 };
     } catch (eP) { /* без лодошки дед всё равно дед */ }
+    // ПРИХОД: стартовое топливо — пара весёлых грибов в кармане.
+    // Петля «гриб → мультики → изгнание → подарок → гриб» должна
+    // завестись с первой минуты, а не после первого обыска.
+    try {
+      if (WS.Inv && WS.Inv.give) {
+        WS.Inv.give('mushroom_fun', 2);
+      }
+    } catch (eM) { /* голодный старт — тоже старт */ }
     // синхронизируем общий голос деда с сохранённым состоянием
     try {
       if (WS.Thoughts && st.voiceOn === false) WS.Thoughts.setVoiceOn(false);
@@ -1172,6 +1295,55 @@
     document.body.classList.remove('crazy-high');
   }
 
+  /** ГРИБНОЙ ЗАЛП [G]: дед швыряет грибной ком в небо. 20 энергии,
+   *  грибной гром на весь лес: стаи в радиусе 80 тайков бегут к деду.
+   *  Кулдаун 30 сек. Это «кнопка веселья»: захотел боя — получи бой. */
+  function mushroomZap() {
+    var g = WS.G;
+    if (!g || !g.running || g.dead) return;
+    var st = ST();
+    var p = g.player;
+    if (!st || !p) return;
+    if (st.zapCd > 0) {
+      toast('Грибной гром ещё гремит (' + Math.ceil(st.zapCd) + ' c).', 'warn');
+      return;
+    }
+    if (st.energy < ZAP_COST) {
+      toast('Грибной Залп: нужно ' + ZAP_COST + ' 🍄 (есть ' + Math.floor(st.energy) + '). Изгоняй!', 'warn');
+      return;
+    }
+    st.energy -= ZAP_COST;
+    st.zapCd = 30;
+    st.trip = Math.min(1, st.trip + 0.15);   // гром и сам немного «поднимает»
+    // эффект: грибной гром
+    try {
+      if (WS.Fx && WS.Fx.text) WS.Fx.text('🍄 БАБАХ! 🍄', p.x, p.y - 1.6, { col: '#ffd76e', size: 18, life: 2 });
+      if (WS.Fx && WS.Fx.burst) WS.Fx.burst('spark', p.x, p.y, 22);
+    } catch (e) { /* пусто */ }
+    toast('🍄 ГРИБНОЙ ЗАЛП! Гром по всему лесу — мультяшки бегут к деду!', 'good');
+    Voice.say('А ну все сюда! Грибовой гром гремел!', 'zap', 1);
+    // грибной ГРОМ: легитимный шум на весь лес (волки слышат и идут
+    // проверять) + месть всем стаям в 140 тайлах (целится в деда).
+    // Прямой target wolf.js перетирает pickTarget — только крючки ИИ.
+    var lured = 0;
+    try {
+      WS.Ev.emit('noise', { x: p.x, y: p.y, r: 200 });
+      var packs = WS.Wolf && WS.Wolf.packs ? WS.Wolf.packs() : [];
+      for (var i = 0; i < packs.length; i++) {
+        var pk = packs[i];
+        if (!pk || !pk.members || !pk.members.length) continue;
+        var pc = packCenterOf(pk);
+        if (!pc) continue;
+        if (WS.M.dist(pc.x, pc.y, p.x, p.y) < 200) {
+          pk.aggroT = Math.max(pk.aggroT || 0, 40);
+          lured++;
+        }
+      }
+    } catch (eZ) { /* волки не услышали — не беда */ }
+    WS.log('[Crazy] Грибной залп: стай приманилось ' + lured);
+    updatePanel();
+  }
+
   // ====================================================================
   //  BOOT
   // ====================================================================
@@ -1197,6 +1369,14 @@
       if (WS.Ui && WS.Ui.modal && WS.Ui.modal() &&
           !(WS.TreeScreen && WS.TreeScreen.isOpen && WS.TreeScreen.isOpen())) return;
       if (WS.TreeScreen) WS.TreeScreen.toggle();
+    });
+
+    // ГРИБНОЙ ЗАЛП [G]: 20 энергии → грибной гром, все стаи в радиусе
+    // 80 тайлов слетаются к деду на шум. Решает главную проблему игры —
+    // пустоту: бой приходит ПО ТРЕБОВАНИЮ, когда игрок сам этого хочет.
+    window.addEventListener('keydown', function (ev) {
+      if (ev.code !== 'KeyG') return;
+      mushroomZap();
     });
 
     WS.tick(39, preTick, 'crazy:pre');
