@@ -520,13 +520,18 @@
       var p = g.player;
       if (!p) return origDie.call(WS.Main, cause);
       st.respawns++;
+      // ИЗГНАНИЕ ДО ОЧИСТКИ: пока перелом ещё «при деде», подарки
+      // получают медприоритет (доска+2 тряпки) — на них лягут новые
+      // переломы от следующих укусов. Раньше очистка шла первой и
+      // все подарки прикорна приходили «обычными» (плейтест: Вантуз
+      // сидел с переломом Д11-24 без шины, факелы 0).
+      var ban = banishHostilesNear(p.x, p.y, 14);
       p.hp = Math.max(1, Math.round((p.maxHp || 100) * respawnFrac()));
       st.hpShadow = p.hp;
       p.bleed = 0; p.infection = 0; p.pain = 0; p.sick = null;
       p.fracture = false; p.frostbite = 0; p._wet = 0;
       p.sleeping = false; p._faintT = 0; p._blinkT = 0; p._chillT = 0;
       st.saidLow = false;
-      var ban = banishHostilesNear(p.x, p.y, 14);
       confetti(p.x, p.y, 14);
       try {
         if (WS.Fx && WS.Fx.text) WS.Fx.text('ПУФ! Опять живой', p.x, p.y - 1.2, { col: '#ffd76e', size: 16, life: 1.6 });
