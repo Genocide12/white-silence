@@ -105,6 +105,9 @@
     render();
     root.classList.remove('hidden');
     try { WS.Snd.play('build', { vol: 0.4 }); } catch (e) { /* пусто */ }
+    // ЭТАП 14: туториал деда закрывает шаг «Древо» по этому событию
+    // (экран модальный — тики туториала стоят, опрос невозможен)
+    try { WS.Ev.emit('crazy:tree_open', {}); } catch (e2) { /* пусто */ }
   }
 
   function hide() {

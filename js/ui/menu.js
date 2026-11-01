@@ -302,7 +302,7 @@
     setText(title, 'БЕЛОЕ БЕЗМОЛВИЕ');
 
     var sub = el('div', 'menu-sub', wrap);
-    setText(sub, 'Русский Север. Зима 1917 года. Продержись 60 дней до парохода.');
+    setText(sub, 'БЕЗУМНЫЙ ДЕД: грибы, мультяшки и летающая тарелка. Изгоняй лодошкой — и не проспи 60 дней!');
 
     // эпиграф: при каждом показе — новый (меняется в show())
     els.epigraph = el('div', 'menu-epigraph', wrap);
@@ -317,9 +317,9 @@
     var secProf = el('div', 'menu-section', wrap);
     var profHead = el('div', 'menu-sec-head', secProf);
     var profTitle = el('div', 'ws-title', profHead);
-    setText(profTitle, 'Профессия');
+    setText(profTitle, 'Кем дед был до грибов');
     var profHint = el('div', 'menu-sec-hint', profHead);
-    setText(profHint, 'кем вы встретили эту зиму');
+    setText(profHint, 'прошлое определяет скарб — но дед теперь один на всех');
 
     var cards = el('div', 'menu-cards', secProf);
     var i, k;

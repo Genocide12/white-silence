@@ -858,8 +858,10 @@
       var day = WS.Time.day();
       var left = WS.Time.daysLeft();
       var line = 'День ' + day + ' из 60';
-      if (left > 0) line += ' · до парохода ' + left + ' ' + dayWord(left);
-      else line += ' · пароход опаздывает…';
+      // ЭТАП 14: дед-режим ждёт тарелку, не пароход
+      var czShip = !!(WS.G && WS.G.crazy);
+      if (left > 0) line += ' · ' + (czShip ? 'до тарелки ' : 'до парохода ') + left + ' ' + dayWord(left);
+      else line += czShip ? ' · тарелка уже в небе…' : ' · пароход опаздывает…';
       setText(els.dayInfo, line);
     } catch (e) { /* время недоступно */ }
 
@@ -927,6 +929,28 @@
   }
 
   /** Нужды: полосы + числа (только целочисленные изменения). */
+  // ЭТАП 14: в дед-режиме голод/жажда/усталость/рассудок заморожены —
+  // их полосы скрывает applyCrazyLayout(), здесь только ХП (ХП-часы).
+  var czLayoutDone = false;
+  function applyCrazyLayout() {
+    var cz = !!(WS.G && WS.G.crazy);
+    if (cz === czLayoutDone) return;   // уже применено/не нужно
+    czLayoutDone = cz;
+    var FROZEN = ['hunger', 'thirst', 'fatigue', 'sanity', 'wet', 'frost'];
+    for (var i = 0; i < FROZEN.length; i++) {
+      var b = barEls[FROZEN[i]];
+      if (b && b.row) {
+        if (cz) b.row.classList.add('hidden');
+        else b.row.classList.remove('hidden');
+      }
+    }
+    // стадия гипотермии деду не грозит — прячем и её
+    if (els.stage) {
+      if (cz) els.stage.classList.add('hidden');
+      else els.stage.classList.remove('hidden');
+    }
+  }
+
   function updBars() {
     var p = WS.G && WS.G.player;
     if (!p || !p.needs) return;
@@ -1149,6 +1173,10 @@
   function hudTick(dt) {
     if (!built || !visible) return;
     if (!WS.G || !WS.G.running || WS.dead) return;
+
+    // ЭТАП 14: дед-режим — нужды заморожены, полосы врут (всегда полны).
+    // Прячем их один раз за игру и не дёргаем DOM каждый кадр.
+    applyCrazyLayout();
 
     updClock();
     updWeather();

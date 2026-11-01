@@ -33,6 +33,7 @@
     lastStat: { hp: 100, en: 0 },
     bubbleT: 0, bubbleTxt: '',
     feed: [],                           // последние действия
+    beasts: [],                         // ЭТАП 14: призрачные звери боя
     ended: false,
     prevG: null,                        // что было до кинозала (меню/партия)
     restored: true
@@ -112,6 +113,7 @@
     C.tlMin = C.tMin0;
     C.ended = false;
     C.feed = [];
+    C.beasts = [];            // ЭТАП 14: чистим призрачных зверей
     C.lastStat = { hp: 100, en: 0 };
     C.ghost = { x: 0, y: 0, dir: 4, walkT: 0 };
     if (C.posList.length) {
@@ -158,21 +160,96 @@
           C.bubbleTxt = e[2]; C.bubbleT = 4.5;
           break;
         case 2: // действие
-          C.feed.push({ txt: e[2], cls: e[3] });
-          if (C.feed.length > 30) C.feed.shift();
+          feedPush(e[2], e[3]);
+          // ЭТАП 14 «показать бой»: событие изгнания — рядом с дедом
+          // появляется призрачный зверь, вспышка конфетти, и на снегу
+          // остаётся подарок. Раньше бой существовал только текстом.
+          spawnGhostBeast(e[2]);
           break;
         case 3: // статистика
           C.lastStat = { hp: e[2], en: e[3] };
           break;
         case 4: // глава
-          C.feed.push({ txt: '— ' + e[2] + ' —', cls: 'chapter' });
-          if (C.feed.length > 30) C.feed.shift();
+          feedPush('— ' + e[2] + ' —', 'chapter');
           break;
         case 5: // финал
           onTapeEnd(e[2], e[3]);
           break;
       }
       C.evI++;
+    }
+  }
+
+  /** Лента с анти-спамом (ЭТАП 14): подряд одинаковые строки
+   *  схлопываются в «текст ×N» — топ-повторы плёнок доходили до ×52
+   *  («Перелом без гипса…»), лента превращалась в шум. */
+  function feedPush(txt, cls) {
+    var last = C.feed[C.feed.length - 1];
+    if (last && last.txt === txt) {
+      last.n = (last.n || 1) + 1;
+      last.txt = txt;               // тот же текст, счётчик вырос
+      if (C.feed.length > 30) C.feed.shift();
+      return;
+    }
+    C.feed.push({ txt: txt, cls: cls, n: 1 });
+    if (C.feed.length > 30) C.feed.shift();
+  }
+
+  /** Призрачный зверь по тексту события изгнания: «…Рядом волк
+   *  (0 тайлов) — ИЗГОНЯЮ…» → зверь на N тайлов от деда, 1.2 сек
+   *  жизни + конфетти + подарок на снегу. */
+  function spawnGhostBeast(txt) {
+    if (!txt || typeof txt !== 'string') return;
+    var m = txt.match(/Рядом (волк|бандит|медвед|заяц|олень|ворон)/);
+    if (!m || !/ИЗГОНЯЮ/.test(txt)) return;
+    var kind = m[1] === 'медвед' ? 'bear' : (m[1] === 'бандит' ? 'bandit' : 'wolf');
+    var distM = txt.match(/\((\d+) тайл/);
+    var dist = distM ? Math.min(3, Math.max(0, Number(distM[1]))) : 1;
+    var p = WS.G && WS.G.player;
+    if (!p) return;
+    // зверь со стороны, куда смотрит дед (по dir 0..7)
+    var a = ((p.dir || 4) / 8) * Math.PI * 2 + Math.PI / 2;
+    var bx = p.x + Math.cos(a) * dist, by = p.y + Math.sin(a) * dist;
+    var w = WS.World;
+    if (w && w.addEnt) {
+      try {
+        var beast = w.addEnt({
+          x: bx, y: by, kind: kind, sprName: kind,
+          hp: 1, dead: false, _cinemaGhost: true
+        });
+        C.beasts.push(beast);
+        if (C.beasts.length > 6) C.beasts.shift();
+      } catch (e) { /* зверь ускользнул — плёнка дороже */ }
+    }
+    // вспышка изгнания прямо на звере
+    try {
+      if (WS.Fx && WS.Fx.burst) WS.Fx.burst('spark', bx, by, 10);
+    } catch (e2) { /* пусто */ }
+    // подарок остаётся на снегу — след боя после исчезновения зверя
+    try {
+      if (w && w.addObject) {
+        w.addObject({
+          x: bx, y: by, sprName: 'crazy_gift',
+          name: 'Подарок (плёнка)', scale: 0.8
+        });
+      }
+    } catch (e3) { /* пусто */ }
+  }
+
+  /** Убрать призрачных зверей, чьё время вышло (1.2 сек экранного
+   *  времени — изгнание на плёнке мгновенно). */
+  function beastsTick(rdt) {
+    if (!C.beasts.length) return;
+    for (var i = C.beasts.length - 1; i >= 0; i--) {
+      var b = C.beasts[i];
+      b._cinT = (b._cinT || 0) + rdt;
+      if (b._cinT > 1.2) {
+        try {
+          if (WS.World && WS.World.removeEnt) WS.World.removeEnt(b);
+          else b.dead = true;
+        } catch (e) { b.dead = true; }
+        C.beasts.splice(i, 1);
+      }
     }
   }
 
@@ -208,6 +285,7 @@
       applyUpTo(C.tlMin);
     }
     if (C.bubbleT > 0) C.bubbleT -= rdt;
+    beastsTick(rdt);   // ЭТАП 14: время жизни призрачных зверей боя
 
     // позиция призрака: интерполяция между сэмплами
     var pl = C.posList;
@@ -315,7 +393,8 @@
       var html = '';
       for (var i = C.feed.length - 1, n = 0; i >= 0 && n < 7; i--, n++) {
         var f = C.feed[i];
-        html += '<div class="cn-feed-row ' + esc(f.cls || '') + '">' + esc(f.txt) + '</div>';
+        var t = esc(f.txt) + ((f.n > 1) ? ' <span class="cn-x">×' + num(f.n) + '</span>' : '');
+        html += '<div class="cn-feed-row ' + esc(f.cls || '') + '">' + t + '</div>';
       }
       feed.innerHTML = html;
     }

@@ -57,6 +57,12 @@
   /** Радиус «контейнер близко» (активация шага «Первый обыск»), тайлов. */
   var CONT_ARM_R = 2.5;
 
+  /** Дед-ветка: радиус «мультяшка рядом» (шаг «Первое изгнание»). */
+  var CZ_BANISH_ARM_R = 6.0;
+
+  /** Дед-ветка: радиус «подарок рядом» (шаг «Подарок»). */
+  var CZ_GIFT_ARM_R = 3.0;
+
   /** Радиус «кровать рядом» (активация шага «Сон»), тайлов. */
   var BED_ARM_R = 2.2;
 
@@ -679,6 +685,164 @@
   }
 
   // ====================================================================
+  //  ДЕД-ВЕТКА (ЭТАП 14): режим «Безумный Дед» — своя короткая серия
+  //  шагов. Никаких «наденьте тёплое» и «поешьте»: нужды заморожены,
+  //  дед не мёрзнет. Сердце онбординга — ПЕРВОЕ ИЗГНАНИЕ: без него
+  //  игрок не понимает главную механику игры.
+  // ====================================================================
+
+  function CRAZY_STEPS() {
+    return [
+      // 1. ДВИЖЕНИЕ — то же, что в обычной ветке
+      {
+        id: 'move', order: 1, mode: 'wait', auto: true, hudKey: 'move',
+        title: T('tut.move.title', 'Первые шаги'),
+        text: T('tut.cz.move.text',
+          'Дед, ноги затекли! WASD или стрелки — идти. Пройдитесь по ' +
+          'снегу, разомнитесь — тарелка сама не найдёт седого.'),
+        remind: T('tut.move.remind',
+          'Шагните: W, A, S или D (можно стрелки).'),
+        wait: T('tut.move.wait', 'Идите — 2 секунды хватит.'),
+        done: T('tut.move.done', 'Ноги помнят дорогу'),
+        arm: null,
+        complete: null   // накопитель moveT в тике
+      },
+
+      // 2. КАМЕРА — зум
+      {
+        id: 'look', order: 2, mode: 'wait', auto: true, hudKey: null,
+        title: T('tut.look.title', 'Осмотр'),
+        text: T('tut.cz.look.text',
+          'Колесо мыши — приблизить и отдалить. Мультяшек издалека ' +
+          'заметнее, а деду нужен обзор — мало ли кто бродит.'),
+        remind: T('tut.look.remind',
+          'Покрутите колесо мыши — смените приближение.'),
+        wait: T('tut.look.wait', 'Крутаните колесо мыши.'),
+        done: T('tut.look.done', 'Глаз — первое орудие промысла'),
+        arm: null,
+        complete: null   // изменение зума в тике
+      },
+
+      // 3. ОБЫСК [E] — источник подарков и скарба
+      {
+        id: 'search', order: 3, mode: 'wait', hudKey: 'search',
+        title: T('tut.cz.search.title', 'Обыск'),
+        text: T('tut.cz.search.text',
+          'Шкафы и полки — подойти и [E]. Дед ведь не только изгоняет: ' +
+          'в домах осталась память о людях, а деду — факелы и добро.'),
+        remind: T('tut.cz.search.remind',
+          'Встаньте у шкафа или полки и нажмите [E].'),
+        wait: T('tut.cz.search.wait', 'Обыщите шкаф или полку: [E].'),
+        done: T('tut.cz.search.done', 'Чужое добро — дедова зима'),
+        arm: function () { return !!nearContainer(CONT_ARM_R); },
+        complete: null   // событие loot:searched
+      },
+
+      // 4. ПЕРВОЕ ИЗГНАНИЕ — сердце игры. Бой: ЛКМ/пробел лодошкой.
+      {
+        id: 'banish', order: 4, mode: 'wait', hudKey: null,
+        title: T('tut.cz.banish.title', 'Первое изгнание!'),
+        text: T('tut.cz.banish.text',
+          'Вон мультяшка! Волк, бандит — не важно: подходи и бей ' +
+          'ЛОДОШКОЙ (ЛКМ или пробел). Изгнанник оставит Подарок, а деду ' +
+          'капнёт 🍄 грибная энергия. Это главная механика, дед!'),
+        remind: T('tut.cz.banish.remind',
+          'Подойди к мультяшке и бей: ЛКМ или Пробел.'),
+        wait: T('tut.cz.banish.wait', 'Изгони первую мультяшку!'),
+        done: T('tut.cz.banish.done', 'ПУФ! Мультяшка — в подарок'),
+        arm: function () { return !!nearBeast(CZ_BANISH_ARM_R); },
+        complete: null   // событие crazy:banish
+      },
+
+      // 5. ПОДАРОК — обыскать труп-подарок после изгнания
+      {
+        id: 'gift', order: 5, mode: 'wait', hudKey: null,
+        title: T('tut.cz.gift.title', 'Подарок'),
+        text: T('tut.cz.gift.text',
+          'Изгнанник оставил Подарок — подойди и обыщи его [E]. Внутри ' +
+          'добро: жир для факелов, тряпьё, а бывает и дедовское счастье.'),
+        remind: T('tut.cz.gift.remind',
+          'Обыщи Подарок: [E].'),
+        wait: T('tut.cz.gift.wait', 'Обыщи Подарок: [E].'),
+        done: T('tut.cz.gift.done', 'ПУФ — и с прибытком!'),
+        arm: function () { return !!nearGift(CZ_GIFT_ARM_R); },
+        complete: null   // событие loot:searched по подарку
+      },
+
+      // 6. ДРЕВО МУДРОСТИ [T] — куда тратить энергию
+      {
+        id: 'tree', order: 6, mode: 'wait', hudKey: null,
+        title: T('tut.cz.tree.title', 'Древо Мудрости'),
+        text: T('tut.cz.tree.text',
+          '🍄 Грибная энергия копится за изгнания и обыски. Открой Древо ' +
+          'Мудрости [T] и вложи её в деда: Скорость Ежа, Крепкий Организм, ' +
+          'Вантуз-Мастер... Дед станет легендой.'),
+        remind: T('tut.cz.tree.remind',
+          'Открой Древо Мудрости: [T].'),
+        wait: T('tut.cz.tree.wait', 'Открой Древо Мудрости: [T].'),
+        done: T('tut.cz.tree.done', 'Дед стал мудрее на один гриб'),
+        arm: function () { return !!((WS.G && WS.G.crazy && WS.Crazy && WS.Crazy.energy && WS.Crazy.energy() >= 2)); },
+        complete: function () {
+          try { return !!(WS.TreeScreen && WS.TreeScreen.isOpen && WS.TreeScreen.isOpen()); }
+          catch (e) { return false; }
+        }
+      },
+
+      // 7. ГЛАВНАЯ ЦЕЛЬ — совет (снимается «Понял»); arm — после того,
+      //    как игрок побывал в Древе (энергия уже тратилась)
+      {
+        id: 'goal', order: 7, mode: 'advice', hudKey: null,
+        title: T('tut.cz.goal.title', 'Зачем всё это'),
+        text: T('tut.cz.goal.text',
+          'Слушай сюда, дед: через 60 дней прилетит ТАРЕЛКА. Собери 3 ' +
+          'факела, разведи Магический Огонь на мостках у реки, набросай ' +
+          'Звёздной Пыли и подай 3 Грибных Зова — тарелка заберёт деда ' +
+          'к звёздам раньше срока. ХП-часы тикают: не успеешь — дед ' +
+          'уснёт навсегда.'),
+        remind: T('tut.cz.goal.remind',
+          '60 дней, 3 факела, Магический Огонь, 3 Зова — и к звёздам.'),
+        wait: T('tut.cz.goal.wait', 'К звёздам, дед!'),
+        done: T('tut.cz.goal.done', 'План на зиму есть'),
+        arm: function () {
+          // Древо уже открыли (шаг закрыт) — пора рассказать про тарелку
+          var h = hints();
+          return !!(h && h.tut_tree);
+        },
+        complete: null   // «Понял»
+      }
+    ];
+  }
+
+  /** Зверь в радиусе? (для шага «Первое изгнание») */
+  function nearBeast(r) {
+    var w = W();
+    if (!w || !w.ents) return false;
+    var p = P();
+    if (!p) return false;
+    var BEASTS = { wolf: 1, bear: 1, bandit: 1, cartoon: 1 };
+    for (var i = 0; i < w.ents.length; i++) {
+      var e = w.ents[i];
+      if (!e || e.dead || !BEASTS[e.kind]) continue;
+      if (WS.M.dist(p.x, p.y, e.x, e.y) <= r) return true;
+    }
+    return false;
+  }
+
+  /** Подарок (труп изгнанника) в радиусе? (для шага «Подарок») */
+  function nearGift(r) {
+    var w = W();
+    if (!w || !w.objects) return false;
+    var p = P();
+    if (!p) return false;
+    for (var i = 0; i < w.objects.length; i++) {
+      var o = w.objects[i];
+      if (!o || !o.sprName || o.sprName !== 'crazy_gift') continue;
+      if (WS.M.dist(p.x, p.y, o.x, o.y) <= r) return true;
+    }
+    return false;
+  }
+
+  // ====================================================================
   //  ПЕРСИСТЕНТНОСТЬ: ВКЛ/ВЫКЛ ОБУЧЕНИЯ
   // ====================================================================
 
@@ -1287,6 +1451,10 @@
 
     // --- жизненный цикл партии ------------------------------------
     on('game:start', function () {
+      // ЭТАП 14: дед-режиму — свою ветку шагов (7 вместо 15);
+      // старая ветка учила игре, которой больше нет (одежда при
+      // замороженных нуждах и т.п.)
+      makeSteps();
       resetRuntime();
       syncFromFlags();
       // пересобрать состояния шагов из сейва/новой игры
@@ -1301,6 +1469,7 @@
     });
 
     on('game:load', function () {
+      makeSteps();
       resetRuntime();
       syncFromFlags();
       var h = hints();
@@ -1317,9 +1486,14 @@
     on('game:victory', function () { stopAll('победа'); });
 
     // --- шаг «Первый обыск»: событие завершённого обыска ----------
-    on('loot:searched', function () {
+    on('loot:searched', function (d) {
       var st = byId.search;
       if (st && st.st === ACTIVE) completeStep(st, false);
+      // дед-ветка: обыск подарка закрывает шаг «Подарок»
+      if (byId.gift && byId.gift.st === ACTIVE && d && d.obj &&
+          d.obj.sprName === 'crazy_gift') {
+        completeStep(byId.gift, false);
+      }
       // спички/еда при себе после обыска — arm шагов «Огонь»/«Еда»
       if (byId.fire && byId.fire.st === WAIT && invHasTag('firestarter')) {
         activate('fire');
@@ -1329,13 +1503,27 @@
       }
     });
 
-    // --- шаг «Инвентарь»: окно открылось ---------------------------
-    on('ui:screen', function (d) {
-      if (!d || d.open === false) return;
-      if (d.id === 'inventory') {
-        var st = byId.inv;
-        if (st && st.st === ACTIVE) completeStep(st, false);
+    // --- дед-ветка: первое изгнание → шаг «Изгнание» закрыт,
+    //     активировать «Подарок» ---------------------------------
+    on('crazy:banish', function () {
+      if (byId.banish && byId.banish.st === ACTIVE) {
+        completeStep(byId.banish, false);
       }
+      if (byId.gift && byId.gift.st === WAIT) activate('gift');
+    });
+
+    // --- дед-ветка: открыл Древо Мудрости → шаг «Древо» закрыт
+    //     (экран модальный, тики стоят — ловим событие, не опрос).
+    //     Шаг «Зачем всё это» активируется своим arm-условием в тике.
+    on('crazy:tree_open', function () {
+      if (byId.tree && byId.tree.st === ACTIVE) completeStep(byId.tree, false);
+    });
+
+    // --- шаг «Инвентарь»: окно открылось ---------------------------
+    on('ui:screen:open', function (d) {
+      if (!d || d.name !== 'inventory') return;
+      var st = byId.inv;
+      if (st && st.st === ACTIVE) completeStep(st, false);
     });
 
     // --- шаг «Экипировка»: что-то надели --------------------------
@@ -1624,7 +1812,11 @@
   // ====================================================================
 
   function makeSteps() {
-    var raw = STEPS();
+    // дед-режим? — дед-ветка (ID шагов совпадают там, где суть та же:
+    // move/look/search — переиспользуем сохранённый прогресс честно)
+    var cz = false;
+    try { cz = !!(WS.G && WS.G.crazy); } catch (e) { cz = false; }
+    var raw = cz ? CRAZY_STEPS() : STEPS();
     steps.length = 0;
     byId = {};
     for (var i = 0; i < raw.length; i++) {

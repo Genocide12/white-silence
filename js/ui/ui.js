@@ -583,12 +583,17 @@
         lastClockStr = s;
         if (dom.clock) dom.clock.textContent = s;
       }
-      // дней до парохода
+      // дней до финиша: в дед-режиме финиш — тарелка, не пароход
       if (dom.ship) {
         if (running && WS.Time && WS.Time.daysLeft) {
           var dl = WS.Time.daysLeft();
-          dom.ship.textContent = T('ui.ship.left', 'до парохода') + ' ' +
-            dl + ' ' + plural(dl, 'день', 'дня', 'дней');
+          if (WS.G && WS.G.crazy) {
+            dom.ship.textContent = 'до тарелки ' + dl + ' ' +
+              plural(dl, 'день', 'дня', 'дней');
+          } else {
+            dom.ship.textContent = T('ui.ship.left', 'до парохода') + ' ' +
+              dl + ' ' + plural(dl, 'день', 'дня', 'дней');
+          }
           dom.ship.classList.remove('hidden');
         } else {
           dom.ship.classList.add('hidden');
@@ -802,8 +807,11 @@
   /** Начало новой игры — приветственный тост. */
   function onGameNew(d) {
     void d;
+    // Дед-режим шлёт свой тост («60 дней до тарелки») из crazy.js;
+    // тост про пароход здесь путал игрока и показывал {days} без подстановки
+    if (WS.G && WS.G.crazy) return;
     var days = (WS.Time && WS.Time.DAYS_TO_SHIP) ? WS.Time.DAYS_TO_SHIP : 60;
-    toast(T('msg.start', 'До весеннего парохода — ' + days + ' дней. Держитесь.'), 'info');
+    toast(T('msg.start', { days: days }), 'info');
   }
 
   // ====================================================================

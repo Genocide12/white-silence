@@ -414,6 +414,9 @@
     try {
       if (WS.Fx && WS.Fx.text) WS.Fx.text('ПУФ!', x, y - 0.8, { col: '#ffd76e', size: 15, life: 1.2 });
     } catch (e) { /* пусто */ }
+    // событие для туториала (первое изгнание) и кинозала (плёнки)
+    try { WS.Ev.emit('crazy:banish', { x: x, y: y, kind: kind, total: st.banished }); }
+    catch (eEv) { WS.err('crazy: banish emit', eEv && eEv.message); }
     // подарок с бонусами: шанс на дедовские предметы
     if (corpseObj) {
       corpseObj._crazyExtra = corpseObj._crazyExtra || [];
