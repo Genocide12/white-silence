@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="description" content="Безумный Дед: Грибной Приход — bullet-heaven про деда-грибника: изгоняй мультяшек лодошкой, жри грибы, зови тарелку. 15 минут до звёзд.">
-  <meta name="theme-color" content="#0a0d16">
-  <title>Безумный Дед: Грибной Приход</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0d16'/><text x='6' y='24' font-size='20'>🍄</text></svg>">
+  <meta name="description" content="Белое Безмолвие: Безумный Дед — одна ночь на станции Пристань-Тихая, зима 1917. Дожить до рассвета.">
+  <meta name="theme-color" content="#070a12">
+  <title>Белое Безмолвие: Безумный Дед</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23070a12'/><circle cx='16' cy='16' r='6' fill='%23dfe8f2'/></svg>">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -19,15 +19,15 @@
         <div id="xp-bar"></div>
         <div id="lvl-txt">1</div>
       </div>
-      <div id="timer">0:00</div>
+      <div id="timer" title="До рассвета">🌅 10:00</div>
     </div>
     <div id="hud-bottom">
       <div id="hp-wrap"><div id="hp-bar"></div><span id="hp-txt">100</span></div>
       <div id="trip-wrap" title="ПРИХОД: наполняется грибами. [G] — Грибной Залп!">
-        <div id="trip-bar"></div><span id="trip-txt">🍄 0%</span>
+        <div id="trip-bar"></div><span id="trip-txt">🍄 приход 0%</span>
       </div>
     </div>
-    <div id="kills">🍄 изгнано: 0</div>
+    <div id="kills">изгнано: 0</div>
     <div id="announce"></div>
     <div id="weapon-slots"></div>
   </div>
@@ -38,13 +38,13 @@
   <!-- ===== экраны ===== -->
   <div id="menu" class="screen">
     <div class="snow-bg"></div>
-    <h1>БЕЗУМНЫЙ ДЕД</h1>
-    <div class="subtitle">🍄 ГРИБНОЙ ПРИХОД 🍄</div>
-    <div class="tagline">15 минут. Один дед. Тысяча мультяшек.<br>Дойди до тарелки — и к звёздам.</div>
-    <button class="btn big" id="btn-play">ГУЛЯТЬ</button>
+    <h1>БЕЛОЕ БЕЗМОЛВИЕ</h1>
+    <div class="subtitle">БЕЗУМНЫЙ ДЕД · ДОЖИТЬ ДО РАССВЕТА</div>
+    <div class="tagline">Станция Пристань-Тихая, зима 1917.<br>
+    Одна ночь. Лес лезет со всех сторон — а дед уже слегка с грибами.</div>
+    <button class="btn big" id="btn-play">В НОЧЬ</button>
     <button class="btn" id="btn-help">КАК ИГРАТЬ</button>
     <div id="best-stats"></div>
-    <div class="menu-ded">🧓</div>
   </div>
 
   <div id="help" class="screen hidden">
@@ -52,19 +52,21 @@
     <div class="help-cols">
       <div>
         <h3>Управление</h3>
-        <p><b>WASD / стрелки</b> — дед ходит. Всё!<br>
-        Оружие бьёт <b>само</b>: лодошка не дремлет.</p>
-        <p><b>[G]</b> или <b>[Пробел]</b> — ГРИБНОЙ ЗАЛП:<br>приход на полном — гриб в небо, всё вокруг в конфетти.</p>
+        <p><b>WASD / стрелки</b> — дед ходит.<br>
+        <b>Куда идёшь — туда и бьёт лодошка.</b> Наводись движением!</p>
+        <p><b>[G]</b> или <b>[Пробел]</b> — ГРИБНОЙ ЗАЛП:<br>когда приход полон, всё вокруг в искрах.</p>
+        <p>На уровне — <b>3 карточки</b>. Не нравится? <b>[R]</b> — переброс (один раз).</p>
         <p><b>[P]</b> — пауза, <b>[M]</b> — звук.</p>
         <p>Мобилка: палец по экрану = джойстик.</p>
       </div>
       <div>
-        <h3>Правила леса</h3>
-        <p>🍄 <b>Грибы — опыт</b>. Съедобное притягивается к деду.</p>
-        <p>Уровень → <b>выбор из 3 карточек</b>: новое оружие или апгрейд.</p>
-        <p>👑 <b>Мультяшки в коронах</b> — элита: оставляют ПОДАРОК.</p>
-        <p>4:00, 8:00, 12:00 — <b>БОССЫ</b>. 15:00 — <b>ТАРЕЛКА</b>: добеги и лети к звёздам.</p>
-        <p>ХП на нуле — дед прикорнул. Навсегда.</p>
+        <h3>Правила ночи</h3>
+        <p>🍄 <b>Грибы — опыт</b>, но они <b>гаснут</b>: побежал за дальним — рискуешь.</p>
+        <p>✨ <b>Золотой гриб</b> — лакомый. И обманка: схватишь — лес проснётся.</p>
+        <p>👑 <b>Старшие</b> (синее пламя) оставляют <b>сверток</b> — приз на выбор судьбы.</p>
+        <p><b>Волк присел</b> — сейчас рывок, отходи вбок. <b>Ворона замерла</b> — будет пике в отмеченную точку.</p>
+        <p><b>3:00, 6:30, 9:00 — старшие леса</b> (боссы). После 9:00 — <b>осада</b>.</p>
+        <p><b>10:00 — РАССВЕТ.</b> Дожил — победил. ХП на нуле — безмолвие приняло деда.</p>
       </div>
     </div>
     <button class="btn big" id="btn-help-back">ПОНЯЛ</button>
@@ -74,29 +76,30 @@
     <h2>УРОВЕНЬ <span id="lu-lvl">2</span>!</h2>
     <div class="lu-hint">Выбирай, дед</div>
     <div id="lu-cards"></div>
+    <button class="btn small" id="btn-reroll">⟳ ПЕРЕБРОСИТЬ [R] — один раз</button>
   </div>
 
   <div id="pause" class="screen hidden">
     <h2>ПАУЗА</h2>
     <p class="pause-stats" id="pause-stats"></p>
-    <button class="btn big" id="btn-resume">ГУЛЯТЬ ДАЛЬШЕ</button>
+    <button class="btn big" id="btn-resume">ДАЛЬШЕ В НОЧЬ</button>
     <button class="btn" id="btn-quit">В МЕНЮ</button>
   </div>
 
   <div id="death" class="screen hidden">
-    <h2>ДЕД ПРИКОРНУЛ</h2>
-    <p class="big-emoji">😴</p>
+    <h2>БЕЗМОЛВИЕ ПРИНЯЛО ДЕДА</h2>
+    <p class="big-emoji">🌫️</p>
     <p class="end-stats" id="death-stats"></p>
-    <button class="btn big" id="btn-retry">ЕЩЁ РАЗ</button>
+    <button class="btn big" id="btn-retry">ЕЩЁ НОЧЬ</button>
     <button class="btn" id="btn-death-menu">В МЕНЮ</button>
   </div>
 
   <div id="win" class="screen hidden">
-    <h2>ТАРЕЛКА ПРИЛЕТЕЛА!</h2>
-    <p class="big-emoji">🛸✨</p>
-    <p class="win-line">Дед поднимается по лучу света.<br>Мультяшки машут лапами. Грибной сезон закрыт.</p>
+    <h2>РАССВЕТ</h2>
+    <p class="big-emoji">🌅</p>
+    <p class="win-line">Небо на востоке налилось золотом.<br>Мультяшки истаяли. Дед идёт ставить самовар.</p>
     <p class="end-stats" id="win-stats"></p>
-    <button class="btn big" id="btn-win-retry">ЕЩЁ ЗАБЕГ</button>
+    <button class="btn big" id="btn-win-retry">ЕЩЁ НОЧЬ</button>
     <button class="btn" id="btn-win-menu">В МЕНЮ</button>
   </div>
 

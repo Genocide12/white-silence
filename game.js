@@ -1,12 +1,12 @@
 /* ============================================================================
-   БЕЗУМНЫЙ ДЕД: ГРИБНОЙ ПРИХОД
-   Bullet-heaven с нуля (в духе Vampire Survivors / Brotato):
-   - управление: только движение (WASD/стрелки/тач), оружие бьёт само
-   - грибы = опыт → уровень → выбор из 3 карточек
-   - скрытые эволюции оружия (макс. оружие + макс. пассивка)
-   - Приход 🍄 = супер-шкала → [G] Грибной Залп
-   - боссы 4:00 / 8:00 / 12:00, ТАРЕЛКА на 15:00 = победа
-   Ноль зависимостей. Canvas 2D. Мультяшки — яркие: это глюки деда.
+   БЕЛОЕ БЕЗМОЛВИЕ: БЕЗУМНЫЙ ДЕД
+   Bullet-heaven в каноне проекта (Пристань-Тихая, зима 1917):
+   - управление: движение; ЛОДОШКА БЬЁТ ПО НАПРАВЛЕНИЮ ХОДА (наводка движением)
+   - грибы = опыт, но ГАСНУТ — жадность = риск; золотой гриб = засада
+   - волк приседает → рывок; ворона замирает → пике в отмеченную точку
+   - боссы 3:00 / 6:30 / 9:00, потом ОСАДА; 10:00 — РАССВЕТ = победа
+   - Приход 🍄 → [G] Грибной Залп; свёртки со старших; переброс [R]
+   Ноль зависимостей. Canvas 2D. Мультяшки — грибные глюки деда.
    ============================================================================ */
 
 'use strict';
@@ -143,10 +143,6 @@ var AU = {
     setTimeout(function () { self.tone(659, 0.1, 'sine', 0.14); }, 160);
     setTimeout(function () { self.tone(784, 0.24, 'sine', 0.18); }, 240);
   },
-  ufo: function () {
-    this.tone(300, 1.2, 'sine', 0.2, 600);
-    this.tone(301, 1.2, 'sine', 0.15, 610);
-  },
   death: function () { this.tone(220, 0.5, 'sawtooth', 0.2, 55); },
   win: function () {
     var notes = [392, 523, 659, 784, 1046];
@@ -160,6 +156,47 @@ var AU = {
     [261, 329, 392, 523, 659, 784].forEach(function (n, i) {
       setTimeout(function () { self.tone(n, 0.25, 'triangle', 0.15); }, i * 70);
     });
+  },
+  // --- атмосфера 1917 ---
+  howl: function () {   // волчий вой: две скользящие ноты в туман
+    this.tone(340, 1.4, 'sine', 0.12, 250);
+    var self = this;
+    setTimeout(function () { self.tone(300, 1.1, 'sine', 0.1, 210); }, 500);
+  },
+  bell: function () {    // колокол: тяжёлый удар с долгим хвостом
+    this.tone(140, 2.2, 'sine', 0.25, 130);
+    this.tone(281, 1.4, 'sine', 0.1, 270);
+  },
+  grunt: function () {   // дед крякает
+    this.tone(110, 0.09, 'sawtooth', 0.12, 80);
+  },
+  windNode: null,
+  startWind: function () {   // фоновый ветер: петля шума через фильтр
+    if (!this.ctx || this.windNode || this.muted) return;
+    try {
+      var t = this.ctx.currentTime;
+      var n = this.ctx.sampleRate * 3;
+      var buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
+      var d = buf.getChannelData(0);
+      for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      var src = this.ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      var f = this.ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.frequency.value = 420;
+      var g = this.ctx.createGain(); g.gain.value = 0.045;
+      // медленное дыхание ветра
+      g.gain.setValueAtTime(0.03, t);
+      g.gain.linearRampToValueAtTime(0.07, t + 2.5);
+      g.gain.linearRampToValueAtTime(0.03, t + 5);
+      src.connect(f); f.connect(g); g.connect(this.master);
+      src.start(t);
+      this.windNode = { src: src, gain: g };
+    } catch (e) { /* тихо */ }
+  },
+  stopWind: function () {
+    if (!this.windNode) return;
+    try { this.windNode.src.stop(); } catch (e) { /* уже */ }
+    this.windNode = null;
   }
 };
 
@@ -596,6 +633,36 @@ function drawSnowfall() {
   ctx.globalAlpha = 1;
 }
 
+/** Полярное сияние: медленные зелёно-фиолетовые занавеси над лесом. */
+function drawAurora() {
+  if (G.dawn) return;   // перед рассветом сияние гаснет
+  var t = performance.now() / 1000;
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (var band = 0; band < 3; band++) {
+    var baseY = canvas.height * (0.10 + band * 0.07);
+    var col = band === 0 ? '58, 214, 140' : (band === 1 ? '110, 150, 255' : '170, 100, 255');
+    var g = ctx.createLinearGradient(0, baseY - 60, 0, baseY + 130);
+    var a = 0.16 + Math.sin(t * 0.35 + band * 1.7) * 0.07;
+    g.addColorStop(0, 'rgba(' + col + ', 0)');
+    g.addColorStop(0.4, 'rgba(' + col + ', ' + a + ')');
+    g.addColorStop(1, 'rgba(' + col + ', 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, baseY + 130);
+    // волнистая нижняя кромка занавеса
+    for (var x = 0; x <= canvas.width; x += 64) {
+      var y = baseY + Math.sin(x * 0.004 + t * (0.3 + band * 0.12)) * 26
+            + Math.sin(x * 0.011 + t * 0.7) * 12;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(canvas.width, baseY + 130);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // ══════════════════════════════════════════════════════ СОСТОЯНИЕ ═══════
 
 var G = {
@@ -614,7 +681,10 @@ var G = {
   zapFlash: 0,
   bossIdx: 0,          // какой босс следующий (0,1,2)
   bossAlive: null,
-  ufo: null,           // {x, y, landT} — тарелка на 15:00
+  ufo: null,           // (убрано: финал — рассвет)
+  dawn: false,         // идёт рассвет
+  dawnT: 0,
+  siege: false,        // финальная осада перед рассветом
   won: false,
   waveT: 0,            // таймер миниволн
   spawnAcc: 0,
@@ -622,9 +692,9 @@ var G = {
   levelQueue: 0        // сколько левел-апов ждут выбора карточек
 };
 
-var BOSS_TIMES = [240, 480, 720];    // 4:00, 8:00, 12:00
-var UFO_TIME = 900;                  // 15:00 — победа
-var RUN_TIME = UFO_TIME;
+var BOSS_TIMES = [180, 390, 540];    // 3:00, 6:30, 9:00
+var SIEGE_TIME = 545;                // после третьего босса — осада до рассвета
+var RUN_TIME = 600;                  // 10:00 — РАССВЕТ = победа
 
 function newPlayer() {
   return {
@@ -635,6 +705,8 @@ function newPlayer() {
     walkT: 0,
     iframe: 0,
     hitFx: 0,
+    moveA: 0,           // направление прицела = направление последнего хода
+    aimT: 0,            // сколько секунд дед ещё «держит» направление
     // оружие: id -> {lv, cd}   (lv 0 = не куплено)
     weapons: { palm: { lv: 1, cd: 0 } },
     // пассивки: id -> lv
@@ -660,20 +732,20 @@ function regenRate() { return 0.5 * pasLv('hp'); }
 var WEAPONS = {
   palm: {
     name: 'Лодошка', ico: '🖐️', max: 5, kind: 'weapon',
-    desc: 'Дед машет лодошкой по всем мультяшкам перед собой.',
+    desc: 'Бьёт туда, куда дед идёт. Наводись движением!',
     lvDesc: ['+урон', '+размах', '+дальность', '+урон', 'МАКС: основа эволюции'],
     pair: 'speed'
   },
   slipper: {
-    name: 'Тапок-Бумеранг', ico: '🥿', max: 5, kind: 'weapon',
-    desc: 'Тапок летит вперёд и возвращается, пробивая всех на пути.',
-    lvDesc: ['+урон', '+второй тапок', '+дальность', '+урон', 'МАКС: основа эволюции'],
+    name: 'Дубина-Бумеранг', ico: '🏏', max: 5, kind: 'weapon',
+    desc: 'Кряжистая дубина летит вперёд и возвращается в руку, снося всех на пути.',
+    lvDesc: ['+урон', '+вторая дубина', '+дальность', '+урон', 'МАКС: основа эволюции'],
     pair: 'magnet'
   },
   joint: {
-    name: 'Косяк-Веер', ico: '🚬', max: 5, kind: 'weapon',
-    desc: 'Веер косяков в ближайшую мультяшку. Взрыв — конфетти.',
-    lvDesc: ['+косяки', '+взрыв', '+дальность', '+косяки', 'МАКС: основа эволюции'],
+    name: 'Лучина-Веер', ico: '🔥', max: 5, kind: 'weapon',
+    desc: 'Горящие лучины веером в глюков. Вспышка — и снег в искрах.',
+    lvDesc: ['+лучины', '+вспышка', '+дальность', '+лучины', 'МАКС: основа эволюции'],
     pair: 'shroom'
   },
   cat: {
@@ -720,12 +792,12 @@ var EVOS = {
     desc: 'Две лодошки в две стороны. Отступающих нет.'
   },
   slipper: {
-    name: 'ТАПОК-АПОКАЛИПСИС', ico: '👟', kind: 'evo', req: 'magnet',
-    desc: 'Тапки сами находят жертв и не знают пощады.'
+    name: 'ДУБИНА-ГРОМ', ico: '🌩️', kind: 'evo', req: 'magnet',
+    desc: 'Дубины сами находят жертв и бьют как гром.'
   },
   joint: {
-    name: 'КОСЯК-ШТОРМ', ico: '🌀', kind: 'evo', req: 'shroom',
-    desc: 'Восемь косяков за залп. Лес в дыму.'
+    name: 'ПОЖАР ЛУЧИН', ico: '☄️', kind: 'evo', req: 'shroom',
+    desc: 'Восемь лучин за залп. Ночь в огне.'
   }
 };
 
@@ -748,16 +820,20 @@ function fireWeapons(dt) {
   var mult = p.evolved.palm ? 0.45 : 1;   // РАСПЛЕВЁШКА: вдвое чаще
   var baseCd = 0.85 * cdMul() * mult;
 
-  // ЛОДОШКА / РАСПЛЕВЁШКА
+  // ЛОДОШКА / РАСПЛЕВЁШКА — бьёт ПО НАПРАВЛЕНИЮ ХОДА (наводка движением!)
   var palm = p.weapons.palm;
   palm.cd -= dt;
   if (palm.cd <= 0) {
     var tgt = nearestEnemy(p.x, p.y, 130);
-    if (tgt) {
+    // куда бить: куда дед идёт (или недавно шёл); стоя на месте — по ближайшему
+    var ang = null;
+    if (p.aimT > 0) ang = p.moveA;
+    else if (tgt) ang = angTo(p.x, p.y, tgt.x, tgt.y);
+    if (ang !== null) {
       palm.cd = baseCd;
-      palmSlap(angTo(p.x, p.y, tgt.x, tgt.y));
+      palmSlap(ang);
       if (p.evolved.palm) {
-        palmSlap(angTo(p.x, p.y, tgt.x, tgt.y) + Math.PI);  // вторая рука
+        palmSlap(ang + Math.PI);  // вторая рука
       }
       AU.slap();
     }
@@ -949,15 +1025,20 @@ function killEnemy(e) {
   CAM.kick(e.boss ? 0.9 : (e.elite ? 0.3 : 0.08));
   AU.kill();
 
-  // трофеи: грибы-опыт, сердечки, подарки
-  var shrooms = e.boss ? 26 : (e.elite ? 10 : (rint(1, 2) + (Math.random() < 0.3 ? 1 : 0)));
+  // трофеи: грибы-опыт (ГАСНУТ — жадность = риск), сердца, свёртки
+  var shrooms = e.boss ? 26 : (e.elite ? 8 : (rint(1, 2) + (Math.random() < 0.3 ? 1 : 0)));
   for (var i = 0; i < shrooms; i++) {
     var a = rnd(0, TAU);
     var rr = rnd(4, 26);
     G.pickups.push({
       kind: 'shroom', x: e.x + Math.cos(a) * rr, y: e.y + Math.sin(a) * rr,
-      vx: rnd(-60, 60), vy: rnd(-60, 60), t: rnd(0, 9), r: 7
+      vx: rnd(-60, 60), vy: rnd(-60, 60), t: rnd(0, 9), r: 7,
+      life: rnd(9, 12)      // гриб гаснет: успей подобрать
     });
+  }
+  if (e.elite) {
+    // БОЛЬШОЙ ГРИБ со старшего: сытный, гаснет медленно
+    G.pickups.push({ kind: 'bigshroom', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 11, life: 20 });
   }
   if (Math.random() < 0.04 || e.boss) {
     G.pickups.push({ kind: 'heart', x: e.x, y: e.y, vx: 0, vy: 0, t: 0, r: 9 });
@@ -1135,21 +1216,38 @@ function updateEnemies(dt) {
     if (e.boss) {
       updateBoss(e, dt, ux, uy, dd);
     } else if (d.diver) {
-      // ворона: разгоняется и пикирует насквозь, потом разворот
-      e.diveCd -= dt;
-      if (e.diveCd <= 0) {
-        e.diveCd = 2.2;
-        e.diveVX = ux * e.speed;
-        e.diveVY = uy * e.speed;
+      // ВОРОНА: кружит → ЗАМИРАЕТ (метка на снегу) → пике в точку.
+      // Уворачивайся от метки — читай телеграф.
+      if (!e.wst) { e.wst = 0; e.wstT = 0; }   // 0 кружит, 1 замерла, 2 пике
+      e.wstT -= dt;
+      if (e.wst === 0) {
+        // орбита вокруг деда на дистанции
+        var oa = e.t * 1.6;
+        var ox = p.x + Math.cos(oa) * 200;
+        var oy = p.y + Math.sin(oa) * 200;
+        var da = angTo(e.x, e.y, ox, oy);
+        e.x += Math.cos(da) * e.speed * 0.55 * slow * dt;
+        e.y += Math.sin(da) * e.speed * 0.55 * slow * dt;
+        if (e.wstT <= 0 && dd < 330) {
+          e.wst = 1; e.wstT = 0.7;
+          // метка: чуть с упреждением по ходу деда
+          e.tx = p.x + (p.lastVX || 0) * 0.45;
+          e.ty = p.y + (p.lastVY || 0) * 0.45;
+          AU.pop();
+        }
+      } else if (e.wst === 1) {
+        // замерла в воздухе, нацеливается
+        if (e.wstT <= 0) {
+          e.wst = 2; e.wstT = 0.5;
+          e.dashA = angTo(e.x, e.y, e.tx, e.ty);
+          AU.pop();
+        }
+      } else {
+        // ПИКЕ в отмеченную точку и дальше по прямой
+        e.x += Math.cos(e.dashA) * e.speed * 2.4 * slow * dt;
+        e.y += Math.sin(e.dashA) * e.speed * 2.4 * slow * dt;
+        if (e.wstT <= 0) { e.wst = 0; e.wstT = rnd(1.6, 2.4); }
       }
-      var dvx = e.diveVX, dvy = e.diveVY;
-      var vd = Math.hypot(dvx, dvy) || 1;
-      // плавный доворот к деду
-      e.diveVX = lerp(dvx, ux * e.speed, 1.2 * dt);
-      e.diveVY = lerp(dvy, uy * e.speed, 1.2 * dt);
-      e.x += e.diveVX * slow * dt;
-      e.y += e.diveVY * slow * dt;
-      void vd;
     } else if (d.ranged) {
       // бандит: держит дистанцию и плюётся снежками
       var want = 235;
@@ -1174,8 +1272,31 @@ function updateEnemies(dt) {
         });
         AU.pop();
       }
+    } else if (e.type === 'wolf') {
+      // ВОЛК: погоня → ПРИСЕЛ (телеграф!) → РЫВОК. Отходи вбок.
+      if (!e.wst) { e.wst = 0; e.wstT = 0; }   // 0 погоня, 1 присел, 2 рывок
+      e.wstT -= dt;
+      if (e.wst === 0) {
+        e.x += ux * e.speed * slow * dt;
+        e.y += uy * e.speed * slow * dt;
+        if (e.wstT <= 0 && dd < 250 && dd > 60) {
+          e.wst = 1; e.wstT = 0.55;
+          AU.grunt();
+        }
+      } else if (e.wst === 1) {
+        // присел, дрожит — направление рывка уже видно (морда на деда)
+        if (e.wstT <= 0) {
+          e.wst = 2; e.wstT = 0.34;
+          e.dashA = angTo(e.x, e.y, p.x, p.y);
+          AU.grunt();
+        }
+      } else {
+        e.x += Math.cos(e.dashA) * e.speed * 3.1 * slow * dt;
+        e.y += Math.sin(e.dashA) * e.speed * 3.1 * slow * dt;
+        if (e.wstT <= 0) { e.wst = 0; e.wstT = rnd(1.8, 2.8); }
+      }
     } else {
-      // волк/заяц/медведь: прямая погоня, заяц виляет
+      // заяц/медведь: заяц виляет, медведь прёт напролом
       var zig = d.zig ? Math.sin(e.t * 6) * 55 : 0;
       e.x += (ux * e.speed - uy * zig) * slow * dt;
       e.y += (uy * e.speed + ux * zig) * slow * dt;
@@ -1216,15 +1337,15 @@ function updateEnemies(dt) {
 
 var BOSSES = [
   {
-    id: 'alpha', name: 'АЛЬФА-ВОЛК', col: '#ff5b6e', r: 34, hp: 1500, dmg: 22, speed: 95,
+    id: 'alpha', name: 'ВОЖАК СТАИ', col: '#ff5b6e', r: 34, hp: 1500, dmg: 22, speed: 95,
     taunt: 'Вожак стаи. Зубы как у мамы.'
   },
   {
-    id: 'shisha', name: 'МЕДВЕДЬ-ШИША', col: '#6ecbff', r: 46, hp: 3200, dmg: 28, speed: 60,
+    id: 'shisha', name: 'МЕДВЕДЬ-ШАТУН', col: '#6ecbff', r: 46, hp: 3200, dmg: 28, speed: 60,
     taunt: 'Съел слишком много мухоморов.'
   },
   {
-    id: 'glavar', name: 'ГЛАВАРЬ БАНДИТОВ', col: '#7bffb0', r: 30, hp: 5200, dmg: 20, speed: 85,
+    id: 'glavar', name: 'АТАМАН ДЕЗЕРТИРОВ', col: '#7bffb0', r: 30, hp: 5200, dmg: 20, speed: 85,
     taunt: 'Держит весь снежный бизнес.'
   }
 ];
@@ -1354,42 +1475,79 @@ function updateBoss(e, dt, ux, uy, dd) {
 // Плотность растёт по минутам, состав сменяется, свирепые мини-волны.
 
 var WAVE_EVENTS = [
-  { name: 'ВОЛЧЬЯ СТАЯ!', type: 'wolf', n: 12, ring: true },
-  { name: 'ЗАЯЧИЙ ПРЫГОК!', type: 'hare', n: 16, ring: true },
-  { name: 'БАНДИТЫ С ОБЕЗЬЯННИКА', type: 'bandit', n: 8, side: true },
-  { name: 'КАР-Р-РАУЛ!', type: 'crow', n: 10, ring: true },
-  { name: 'МЕДВЕЖИЙ ПАТРУЛЬ', type: 'bear', n: 4, side: true },
-  { name: 'ВСЯ ЛЕСНАЯ БРАТВА', type: 'mix', n: 18, ring: true }
+  { name: 'ВОЛЧЬЯ СТАЯ', type: 'wolf', n: 12, ring: true },
+  { name: 'ЗАЯЧЬЯ ПАНИКА', type: 'hare', n: 16, ring: true },
+  { name: 'ДЕЗЕРТИРЫ ИДУТ', type: 'bandit', n: 8, side: true },
+  { name: 'ВОРОНЬЁ', type: 'crow', n: 10, ring: true },
+  { name: 'ШАТУН ЗАШЁЛ В ПОСЁЛОК', type: 'bear', n: 4, side: true },
+  { name: 'ВЕСЬ ЛЕС РАЗОМ', type: 'mix', n: 18, ring: true }
 ];
 
 function composition(t) {
-  // что спавнить по обычному ритму
+  // что спавнить по обычному ритму (ночь 10 минут)
   var pool = ['wolf', 'wolf'];
-  if (t > 45) pool.push('hare', 'hare');
-  if (t > 150) pool.push('bandit');
-  if (t > 270) pool.push('crow');
-  if (t > 360) pool.push('bear');
-  if (t > 540) pool.push('hare', 'bandit', 'crow');
+  if (t > 40) pool.push('hare', 'hare');
+  if (t > 120) pool.push('bandit');
+  if (t > 200) pool.push('crow');
+  if (t > 300) pool.push('bear');
+  if (t > 450) pool.push('hare', 'bandit', 'crow');
   return pool;
 }
 
 function updateDirector(dt) {
   var p = G.player;
 
-  // боссы и тарелка по расписанию
+  // БОССЫ — старшие леса: 3:00, 6:30, 9:00
   if (G.bossIdx < BOSS_TIMES.length && G.t >= BOSS_TIMES[G.bossIdx] && !G.bossAlive) {
     spawnBoss(G.bossIdx);
     G.bossIdx++;
   }
-  if (!G.ufo && G.t >= UFO_TIME) {
-    spawnUfo();
+
+  // ОСАДА: после третьего старшего лес идёт ва-банк — до самого рассвета
+  if (!G.siege && G.t >= SIEGE_TIME) {
+    G.siege = true;
+    AU.bell();
+    announce('Ⰰ ОСАДА!\nлес идёт ва-банк', 2800);
+    CAM.kick(0.4);
   }
 
-  // мини-волна каждые 55–75 сек
+  // РАССВЕТ: последние 60 секунд небо светлеет — дожить!
+  if (!G.dawn && G.t >= RUN_TIME - 60) {
+    G.dawn = true;
+    announce('НЕБО СВЕТЛЕЕТ НА ВОСТОКЕ\nдержись!', 3200);
+  }
+  if (G.t >= RUN_TIME) {
+    endRun(true);
+    return;
+  }
+
+  // ЗОЛОТОЙ ГРИБ: лакомая приманка. Схватишь — лес проснётся
+  G.goldT -= dt;
+  if (G.goldT <= 0) {
+    G.goldT = rnd(45, 65);
+    var ga = rnd(0, TAU);
+    var gR = rnd(150, 250);
+    G.pickups.push({
+      kind: 'gold', x: p.x + Math.cos(ga) * gR, y: p.y + Math.sin(ga) * gR,
+      vx: 0, vy: 0, t: 0, r: 9, life: 12
+    });
+  }
+
+  // вой издалека — ночь живая
+  G.howlT -= dt;
+  if (G.howlT <= 0) {
+    G.howlT = rnd(22, 40);
+    AU.howl();
+  }
+
+  // дед бормочет
+  if (Math.random() < dt * 0.07) dedSay();
+
+  // мини-волна каждые 40–60 сек
   G.waveT -= dt;
   if (G.waveT <= 0) {
-    G.waveT = rnd(55, 75);
-    var wv = WAVE_EVENTS[Math.min(WAVE_EVENTS.length - 1, Math.floor(G.t / 150))];
+    G.waveT = rnd(40, 60);
+    var wv = WAVE_EVENTS[Math.min(WAVE_EVENTS.length - 1, Math.floor(G.t / 100))];
     announce('🥁 ' + wv.name, 1600);
     for (var i = 0; i < wv.n; i++) {
       (function (ii) {
@@ -1411,47 +1569,24 @@ function updateDirector(dt) {
   if (G.bossAlive) return;   // во время босса обычный спавн тише
   G.spawnAcc += dt;
   var rate = 0.75 - Math.min(0.5, G.t / 60 * 0.05);   // от 0.75с до 0.25с между пачками
+  if (G.siege) rate *= 0.5;                            // осада: вдвое плотнее
   if (G.spawnAcc >= rate) {
     G.spawnAcc = 0;
-    if (G.enemies.length < 130) {
+    var cap = G.siege ? 170 : 130;
+    if (G.enemies.length < cap) {
       var pool = composition(G.t);
-      var batch = 1 + Math.floor(G.t / 105);
+      var batch = 1 + Math.floor(G.t / 70);
+      if (G.siege) batch += 2;
       for (var b = 0; b < batch; b++) {
-        var elite = Math.random() < 0.012 + G.t / 22000;
+        var elite = Math.random() < 0.012 + G.t / 16000;
         spawnAtRing(pick(pool), elite);
       }
     }
   }
 }
 
-// ═══════════════════════════════════════════════════ ТАРЕЛКА ════════════
-
-function spawnUfo() {
-  var p = G.player;
-  var a = rnd(0, TAU);
-  G.ufo = {
-    x: p.x + Math.cos(a) * 520,
-    y: p.y + Math.sin(a) * 520,
-    landT: 0,
-    arrived: false
-  };
-  AU.ufo();
-  announce('🛸 ТАРЕЛКА! Добеги до луча!', 3200, true);
-  CAM.kick(0.5);
-}
-
-function updateUfo(dt) {
-  var u = G.ufo;
-  if (!u) return;
-  var p = G.player;
-  if (!u.arrived) {
-    u.landT += dt;
-    if (u.landT > 4) u.arrived = true;
-  }
-  if (dist2(p.x, p.y, u.x, u.y) < 42 * 42 && u.arrived) {
-    endRun(true);
-  }
-}
+// ═══════════════════════════════════════════════ РАССВЕТ (ФИНАЛ) ══════════
+// Тарелки нет: победа — дожить до 10:00. Восток наливается золотом.
 
 // ════════════════════════════════════════════════ ТРОФЕИ ════════════════
 
@@ -1461,9 +1596,20 @@ function updatePickups(dt) {
   for (var i = G.pickups.length - 1; i >= 0; i--) {
     var it = G.pickups[i];
     it.t += dt;
+
+    // ГРИБЫ ГАСНУТ: последние 3 секунды тают на глазах
+    if (it.kind === 'shroom' || it.kind === 'bigshroom' || it.kind === 'gold') {
+      it.life -= dt;
+      if (it.life <= 0) {
+        spawnSnowPuff(it.x, it.y, 2);
+        G.pickups.splice(i, 1);
+        continue;
+      }
+    }
+
     var d = dist(p.x, p.y, it.x, it.y);
 
-    if (it.kind === 'shroom' && d < mr) {
+    if ((it.kind === 'shroom' || it.kind === 'bigshroom' || it.kind === 'gold') && d < mr) {
       // магнит: гриб летит в рот
       var a = angTo(it.x, it.y, p.x, p.y);
       var pullSp = 340 + (mr - d) * 4;
@@ -1478,12 +1624,31 @@ function updatePickups(dt) {
     if (d < 20) {
       G.pickups.splice(i, 1);
       if (it.kind === 'shroom') {
-        var val = 1 + Math.floor(G.t / 360);
+        var val = 1 + Math.floor(G.t / 300);
         gainXp(val);
         G.trip = clamp(G.trip + 2.2 * tripGainMul(), 0, 100);
         G.stats.mushrooms++;
         AU.gem();
         spawnSpark(it.x, it.y, 2, '#ffd76e');
+      } else if (it.kind === 'bigshroom') {
+        gainXp(8);
+        G.trip = clamp(G.trip + 22 * tripGainMul(), 0, 100);
+        G.stats.mushrooms += 4;
+        floatText(p.x, p.y - 30, 'СЫТНЫЙ!', '#ffd76e', 17);
+        AU.gift();
+        spawnSpark(it.x, it.y, 8, '#ffd76e');
+      } else if (it.kind === 'gold') {
+        // ЗОЛОТОЙ ГРИБ: лакомый… и обманка. Лес просыпается.
+        gainXp(6);
+        G.trip = clamp(G.trip + 15 * tripGainMul(), 0, 100);
+        G.stats.mushrooms += 2;
+        floatText(p.x, p.y - 30, 'А ЗРЯ…', '#ff5b6e', 18);
+        AU.howl();
+        announce('✨ ЛЕС ПРОСНУЛСЯ', 1600);
+        for (var ai = 0; ai < 6; ai++) {
+          spawnAtRing(pick(['wolf', 'crow', 'hare']));
+        }
+        CAM.kick(0.4);
       } else if (it.kind === 'heart') {
         p.hp = Math.min(p.maxHp, p.hp + 25);
         floatText(p.x, p.y - 30, '+25 🫀', '#7bffb0', 17);
@@ -1643,16 +1808,11 @@ function applyCard(card) {
 }
 
 var luOpen = false;
+var luRerolled = false;   // один переброс на экран выбора
 
-function openLevelUp() {
-  if (luOpen || G.state !== 'play') return;
-  luOpen = true;
-  G.state = 'levelup';
-  AU.levelup();
-  var cards = pickCards(3);
+function renderCards(cards) {
   var wrap = $$('lu-cards');
   wrap.innerHTML = '';
-  $$('lu-lvl').textContent = G.level;
   cards.forEach(function (card, i) {
     var v = cardView(card);
     var el = document.createElement('div');
@@ -1669,8 +1829,29 @@ function openLevelUp() {
     });
     wrap.appendChild(el);
   });
-  $$('levelup').classList.remove('hidden');
   luKeys = cards.slice();
+  var rb = $$('btn-reroll');
+  rb.disabled = luRerolled;
+  rb.textContent = luRerolled ? '⟳ переброс использован' : '⟳ ПЕРЕБРОСИТЬ [R] — один раз';
+}
+
+function openLevelUp() {
+  if (luOpen || G.state !== 'play') return;
+  luOpen = true;
+  luRerolled = false;
+  G.state = 'levelup';
+  AU.levelup();
+  $$('lu-lvl').textContent = G.level;
+  renderCards(pickCards(3));
+  if (Math.random() < 0.5) dedSay();
+  $$('levelup').classList.remove('hidden');
+}
+
+function rerollCards() {
+  if (!luOpen || luRerolled) return;
+  luRerolled = true;
+  AU.pop();
+  renderCards(pickCards(3));
 }
 
 var luKeys = [];
@@ -1682,9 +1863,10 @@ function closeLevelUp() {
   if (G.levelQueue > 0) setTimeout(openLevelUp, 120);
 }
 
-// выбор карточек клавишами 1-2-3
+// выбор карточек клавишами 1-2-3, [R] — переброс
 window.addEventListener('keydown', function (e) {
   if (G.state !== 'levelup') return;
+  if (e.code === 'KeyR') { rerollCards(); return; }
   var idx = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];
   if (idx !== undefined && luKeys[idx]) {
     applyCard(luKeys[idx]);
@@ -1692,6 +1874,28 @@ window.addEventListener('keydown', function (e) {
     closeLevelUp();
   }
 });
+
+// ═══════════════════════════════════════ РЕПЛИКИ ДЕДА ════════════════════
+// Дед живой: комментирует ночь. Мультяшки молчат — они ненастоящие.
+
+var DED_LINES = [
+  '«Иди сюда, ирод…»',
+  '«Грибы-то какие ладные!»',
+  '«В моё время лес скромнее был»',
+  '«Тапки надел бы, да тапки у медведя»',
+  '«Ать-два, ать-два…»',
+  '«Чай остынет, пока вы сдохнете»',
+  '«Один я, один и останусь»',
+  '«Зима, однако»'
+];
+
+var dedSayT = 0;
+function dedSay(force) {
+  if (!force && dedSayT > G.t) return;
+  dedSayT = G.t + 14;
+  var p = G.player;
+  if (p) floatText(p.x, p.y - 44, pick(DED_LINES), '#aab7cc', 14);
+}
 
 // ════════════════════════════════════ ПРИХОД И ГРИБНОЙ ЗАЛП ═════════════
 
@@ -1763,19 +1967,30 @@ function render() {
   drawGround();
   if (G.player) {
     drawPickups();
+    drawCrowMarks();
     drawEntities();
     drawBullets();
     drawParticles();
-    drawUfo();
-    drawEdgeArrow();
   }
 
   ctx.restore();
 
-  // экранные слои: снег, вспышки, вигнетка
+  // экранные слои: снег, сияние, рассвет, вспышки, вигнетка
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawAurora();
   drawSnowfall();
+
+  // РАССВЕТ: последняя минута — восток наливается золотом
+  if (G.dawn && G.state === 'play') {
+    var dawnK = clamp((G.t - (RUN_TIME - 60)) / 60, 0, 1);
+    var dg = ctx.createLinearGradient(canvas.width, 0, canvas.width * 0.4, 0);
+    dg.addColorStop(0, 'rgba(255, 170, 90, ' + (dawnK * 0.5) + ')');
+    dg.addColorStop(0.5, 'rgba(255, 120, 110, ' + (dawnK * 0.22) + ')');
+    dg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = dg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 
   // вспышка урона деду
   if (G.player && G.player.hitFx > 0) {
@@ -1817,22 +2032,34 @@ function drawPickups() {
   for (var i = 0; i < G.pickups.length; i++) {
     var it = G.pickups[i];
     var bob = Math.sin(it.t * 5) * 2.5;
-    if (it.kind === 'shroom') {
-      //Signature гриб: красная шляпка с белыми точками
+    if (it.kind === 'shroom' || it.kind === 'bigshroom' || it.kind === 'gold') {
       var pull = dist2(it.x, it.y, G.player.x, G.player.y) < magnetR() * magnetR();
+      var fade = it.life < 3 ? clamp(it.life / 3, 0.15, 1) : 1;   // гриб гаснет
+      var sc = it.kind === 'bigshroom' ? 1.55 : (it.kind === 'gold' ? 1.2 : 1);
       ctx.save();
+      ctx.globalAlpha = fade;
       ctx.translate(it.x, it.y + bob);
+      ctx.scale(sc, sc);
       if (pull) ctx.rotate(Math.sin(it.t * 20) * 0.4);
+      // ножка
       ctx.fillStyle = '#e8dfc8';
       ctx.fillRect(-2.5, -2, 5, 7);
-      ctx.fillStyle = '#e04848';
+      // шляпка: красная / золотая
+      ctx.fillStyle = it.kind === 'gold' ? '#ffce4d' : '#e04848';
       ctx.beginPath();
       ctx.ellipse(0, -4, 8, 6, 0, Math.PI, 0);
       ctx.fill();
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.arc(-3.5, -6, 1.6, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(3, -7, 1.3, 0, TAU); ctx.fill();
+      // золотой — манящее сияние
+      if (it.kind === 'gold') {
+        ctx.globalAlpha = fade * (0.3 + Math.sin(it.t * 6) * 0.15);
+        ctx.fillStyle = '#ffce4d';
+        ctx.beginPath(); ctx.arc(0, -4, 15, 0, TAU); ctx.fill();
+      }
       ctx.restore();
+      ctx.globalAlpha = 1;
     } else if (it.kind === 'heart') {
       ctx.font = '18px sans-serif';
       ctx.textAlign = 'center';
@@ -1852,6 +2079,28 @@ function drawPickups() {
     }
   }
   ctx.textAlign = 'left';
+}
+
+/** Метки ворон на снегу: сюда будет пике — уходи с точки. */
+function drawCrowMarks() {
+  for (var i = 0; i < G.enemies.length; i++) {
+    var e = G.enemies[i];
+    if (e.type !== 'crow' || (e.wst !== 1 && e.wst !== 2)) continue;
+    var pulse = 0.5 + Math.sin(G.t * 14) * 0.3;
+    ctx.strokeStyle = 'rgba(255, 91, 110, ' + pulse + ')';
+    ctx.lineWidth = 2.4;
+    // круг-прицел
+    ctx.beginPath();
+    ctx.arc(e.tx, e.ty, 16, 0, TAU);
+    ctx.stroke();
+    // крест
+    ctx.beginPath();
+    ctx.moveTo(e.tx - 22, e.ty); ctx.lineTo(e.tx - 10, e.ty);
+    ctx.moveTo(e.tx + 10, e.ty); ctx.lineTo(e.tx + 22, e.ty);
+    ctx.moveTo(e.tx, e.ty - 22); ctx.lineTo(e.tx, e.ty - 10);
+    ctx.moveTo(e.tx, e.ty + 10); ctx.lineTo(e.tx, e.ty + 22);
+    ctx.stroke();
+  }
 }
 
 function drawEntities() {
@@ -1879,6 +2128,14 @@ function drawEnemy(e) {
 
   var body = e.flash > 0 ? '#ffffff' : e.col;
   var step = Math.sin(e.t * 10) * 2;   // топот мультяшек
+
+  // ВОЛК ПРИСЕЛ перед рывком — сплющен и дрожит, читай телеграф
+  if (e.type === 'wolf' && e.wst === 1) {
+    ctx.scale(1.12, 0.74);
+    ctx.translate(rnd(-1.2, 1.2), 0);
+  }
+  // ВОРОНА ЗАМЕРЛА — зависла, крылья расправлены
+  if (e.type === 'crow' && e.wst === 1) step = 0;
 
   if (e.type === 'wolf' || (e.boss === 'alpha')) {
     // уши
@@ -2167,66 +2424,7 @@ function drawBullets() {
   }
 }
 
-function drawUfo() {
-  var u = G.ufo;
-  if (!u) return;
-  var p = G.player;
-  var drop = u.arrived ? 0 : Math.max(0, 1 - u.landT / 4) * 300;
-  var yy = u.y - drop - 60;
-  // луч
-  var beamA = u.arrived ? 0.5 : 0.25;
-  var g = ctx.createLinearGradient(u.x, yy, u.x, u.y + 40);
-  g.addColorStop(0, 'rgba(123, 255, 176, ' + beamA + ')');
-  g.addColorStop(1, 'rgba(123, 255, 176, 0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(u.x - 10, yy);
-  ctx.lineTo(u.x + 10, yy);
-  ctx.lineTo(u.x + 46, u.y + 40);
-  ctx.lineTo(u.x - 46, u.y + 40);
-  ctx.closePath();
-  ctx.fill();
-  // тарелка
-  ctx.save();
-  ctx.translate(u.x, yy + Math.sin(G.t * 2) * 5);
-  ctx.fillStyle = '#9aa8c0';
-  ctx.beginPath(); ctx.ellipse(0, 0, 46, 14, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#cdd8ea';
-  ctx.beginPath(); ctx.ellipse(0, -8, 22, 12, 0, Math.PI, 0); ctx.fill();
-  // огни
-  for (var i = -2; i <= 2; i++) {
-    var on = Math.floor(G.t * 6 + i) % 3 === 0;
-    ctx.fillStyle = on ? '#7bffb0' : '#3d4a70';
-    ctx.beginPath(); ctx.arc(i * 16, 5, 3.4, 0, TAU); ctx.fill();
-  }
-  ctx.restore();
-  void p;
-}
-
-/** Стрелка к тарелке, если она за экраном. */
-function drawEdgeArrow() {
-  var u = G.ufo;
-  if (!u || !u.arrived) return;
-  var p = G.player;
-  var dx = u.x - p.x, dy = u.y - p.y;
-  var d = Math.hypot(dx, dy);
-  if (d < 380) return;
-  var a = Math.atan2(dy, dx);
-  var R = Math.min(VW, VH) / SCALE * 0.36;
-  var x = p.x + Math.cos(a) * R;
-  var y = p.y + Math.sin(a) * R;
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(a);
-  ctx.globalAlpha = 0.75 + Math.sin(G.t * 5) * 0.25;
-  ctx.fillStyle = '#7bffb0';
-  ctx.beginPath();
-  ctx.moveTo(16, 0); ctx.lineTo(-8, -11); ctx.lineTo(-3, 0); ctx.lineTo(-8, 11);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-  ctx.globalAlpha = 1;
-}
+function drawUfo() { /* убрано в v2.1: финал — рассвет, не тарелка */ }
 
 function drawBossBar() {
   var b = G.bossAlive;
@@ -2263,8 +2461,9 @@ function updateHUD(dt) {
 
   $$('xp-bar').style.width = (G.xp / G.xpNext * 100) + '%';
   $$('lvl-txt').textContent = 'УР. ' + G.level;
-  $$('timer').textContent = fmtTime(G.t);
-  $$('timer').className = (G.bossAlive && !G.bossAlive.dead) ? 'boss' : '';
+  // таймер СКАТКИ до рассвета: 10:00 → 0:00
+  $$('timer').textContent = '🌅 ' + fmtTime(RUN_TIME - G.t);
+  $$('timer').className = (G.bossAlive && !G.bossAlive.dead) ? 'boss' : (G.siege ? 'boss' : '');
 
   $$('hp-bar').style.width = (p.hp / p.maxHp * 100) + '%';
   $$('hp-txt').textContent = Math.ceil(p.hp) + ' / ' + p.maxHp;
@@ -2276,7 +2475,7 @@ function updateHUD(dt) {
   $$('trip-wrap').className = G.trip >= 100 ? 'full' : '';
   $$('trip-wrap').id = 'trip-wrap';
 
-  $$('kills').textContent = '🍄 изгнано: ' + G.kills;
+  $$('kills').textContent = 'изгнано: ' + G.kills;
 
   // слоты оружия
   var slots = $$('weapon-slots');
@@ -2317,10 +2516,13 @@ function startRun() {
   G.zapFlash = 0;
   G.bossIdx = 0;
   G.bossAlive = null;
-  G.ufo = null;
+  G.siege = false;
+  G.dawn = false;
   G.won = false;
-  G.waveT = 30;          // первая мини-волна через 30 сек
+  G.waveT = 25;          // первая мини-волна через 25 сек
   G.spawnAcc = 0;
+  G.goldT = rnd(30, 45); // первый золотой гриб
+  G.howlT = rnd(8, 16);  // первый вой издалека
   G.levelQueue = 0;
   G.stats = { dmg: 0, mushrooms: 0, gifts: 0, maxCombo: 0 };
   G.frame = 0;
@@ -2332,9 +2534,12 @@ function startRun() {
   });
   $$('hud').classList.remove('hidden');
 
-  // стартовая реплика
-  announce('ГУЛЯЙ, ДЕД!\nизмножай мультяшек', 2200);
+  // ночь начинается: ветер + колокол дальнего храма
   AU.init();
+  AU.startWind();
+  AU.bell();
+  announce('НОЧЬ НАЧАЛАСЬ\nдожить до рассвета — 10:00', 2600);
+  dedSay(true);
 }
 
 function endRun(winFlag) {
@@ -2346,9 +2551,11 @@ function endRun(winFlag) {
 
   if (winFlag) {
     AU.win();
+    AU.stopWind();
     spawnConfetti(G.player.x, G.player.y, 120, 2);
   } else {
     AU.death();
+    AU.stopWind();
     CAM.kick(1);
   }
 
@@ -2364,11 +2571,11 @@ function endRun(winFlag) {
   } catch (e) { /* приватный режим — просто играем */ }
 
   var line =
-    'Время: <b>' + fmtTime(G.t) + '</b> из 15:00<br>' +
-    'Изгнано мультяшек: <b>' + G.kills + '</b><br>' +
+    'Продержался: <b>' + fmtTime(G.t) + '</b> из 10:00<br>' +
+    'Изгнано глюков: <b>' + G.kills + '</b><br>' +
     'Уровень деда: <b>' + G.level + '</b><br>' +
     'Грибов сожрано: <b>' + G.stats.mushrooms + '</b><br>' +
-    'Подарков вскрыто: <b>' + G.stats.gifts + '</b><br>' +
+    'Свёртков вскрыто: <b>' + G.stats.gifts + '</b><br>' +
     'Урона нанесено: <b>' + G.stats.dmg + '</b>';
 
   if (winFlag) $$('win-stats').innerHTML = line;
@@ -2402,7 +2609,9 @@ function toMenu() {
   particles = [];
   floaters = [];
   G.bossAlive = null;
-  G.ufo = null;
+  G.siege = false;
+  G.dawn = false;
+  AU.stopWind();
   canvas.style.filter = '';
   ['hud', 'pause', 'death', 'win', 'levelup', 'help'].forEach(function (id) {
     $$(id).classList.add('hidden');
@@ -2454,7 +2663,15 @@ function tick(ts) {
         p.y += mv.y * p.speed * speedMul() * dt;
         p.walkT += dt;
         if (mv.x) p.face = mv.x > 0 ? 1 : -1;
+        // ПРИЦЕЛ ЛОДОШКИ = направление хода; вороны читают скорость для упреждения
+        p.moveA = Math.atan2(mv.y, mv.x);
+        p.aimT = 0.35;
+        p.lastVX = mv.x * p.speed * speedMul();
+        p.lastVY = mv.y * p.speed * speedMul();
+      } else {
+        p.lastVX = 0; p.lastVY = 0;
       }
+      if (p.aimT > 0) p.aimT -= dt;
       if (p.iframe > 0) p.iframe -= dt;
       if (p.hitFx > 0) p.hitFx -= dt;
 
@@ -2468,7 +2685,6 @@ function tick(ts) {
       updateBullets(dt);
       updatePickups(dt);
       updateDirector(dt);
-      updateUfo(dt);
       updateTrip(dt);
     }
 
@@ -2511,6 +2727,7 @@ bind('btn-help', function () {
   G.state = 'help';
 });
 bind('btn-help-back', toMenu);
+bind('btn-reroll', rerollCards);
 bind('btn-resume', togglePause);
 bind('btn-quit', toMenu);
 bind('btn-retry', startRun);
@@ -2526,9 +2743,11 @@ requestAnimationFrame(tick);
 // отладочный хук (использует scripts/playtest.mjs)
 window.DED = {
   G: G, CAM: CAM, AU: AU,
-  startRun: startRun, spawnBoss: spawnBoss, spawnUfo: spawnUfo,
+  startRun: startRun, spawnBoss: spawnBoss,
   hurtPlayer: hurtPlayer, tryZap: tryZap, gainXp: gainXp,
-  announce: announce
+  announce: announce, rerollCards: rerollCards, spawnAtRing: spawnAtRing,
+  WEAPONS: WEAPONS, PASSIVES: PASSIVES, EVOS: EVOS, ENEMY_TYPES: ENEMY_TYPES,
+  RUN_TIME: RUN_TIME, BOSS_TIMES: BOSS_TIMES, SIEGE_TIME: SIEGE_TIME
 };
 
 })();
