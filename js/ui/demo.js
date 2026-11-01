@@ -1954,12 +1954,17 @@
         // подарок (4 в очереди)» висел ДНЯМИ — путь к трупу на льду/за
         // лесом не строился, план пересоздавался, факелы не собирались)
         D.gifts = D.gifts.filter(function (g) {
-          if (g && (g._demoFail || 0) >= 2 && !g._demoSkipUntil) {
+          if (!g) return false;
+          // 5 неудач = недостижим ВООБЩЕ (лёд/скалы/за забором) — вон из
+          // очереди навсегда: раньше «Вскрываю подарок (2 в очереди)»
+          // висел ДНЯМИ — суточный скип истекал и цикл повторялся
+          if ((g._demoFail || 0) >= 5) return false;
+          if ((g._demoFail || 0) >= 2 && !g._demoSkipUntil) {
             g._demoSkipUntil = absMin() + 1440;   // отдыхаем от него сутки
             log('Подарок недостижим (путь не строится) — вернусь позже.', 'warn');
             return false;
           }
-          return g && !g.looted && WS.World.objects.indexOf(g) >= 0;
+          return !g.looted && WS.World.objects.indexOf(g) >= 0;
         });
         if (D.gifts.length) {
           // ближайший подарок
