@@ -2,173 +2,106 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Белое Безмолвие — изометрический сурвайвл в духе Project Zomboid: Русский Север, зима 1917 года.">
-  <meta name="theme-color" content="#070a10">
-  <title>Белое Безмолвие — White Silence</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23070a10'/><circle cx='16' cy='16' r='8' fill='%23dfe6ee'/><circle cx='13' cy='14' r='6' fill='%23a9c6dd'/></svg>">
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/cinema.css">
-  <link rel="stylesheet" href="css/crazy.css">
-  <link rel="stylesheet" href="css/crazy_intro.css">
-  <link rel="stylesheet" href="css/ctxmenu.css">
-  <link rel="stylesheet" href="css/demo.css">
-  <link rel="stylesheet" href="css/hud.css">
-  <link rel="stylesheet" href="css/loading.css">
-  <link rel="stylesheet" href="css/menu.css">
-  <link rel="stylesheet" href="css/panels.css">
-  <link rel="stylesheet" href="css/responsive.css">
-  <link rel="stylesheet" href="css/screens.css">
-  <link rel="stylesheet" href="css/thoughts.css">
-  <link rel="stylesheet" href="css/ui.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="description" content="Безумный Дед: Грибной Приход — bullet-heaven про деда-грибника: изгоняй мультяшек лодошкой, жри грибы, зови тарелку. 15 минут до звёзд.">
+  <meta name="theme-color" content="#0a0d16">
+  <title>Безумный Дед: Грибной Приход</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230a0d16'/><text x='6' y='24' font-size='20'>🍄</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <canvas id="game" width="1280" height="720"></canvas>
-  <div id="ui-root"></div>
-  <!-- ==== СКРИПТЫ ИГРЫ (генерируется scripts/build.py) ====
-       Порядок: core -> data -> world -> systems -> ai -> entities -> ui -> content -> i18n -> main -->
-  <script src="js/core/ns.js"></script>
-  <script src="js/core/math.js"></script>
-  <script src="js/core/audio.js"></script>
-  <script src="js/core/audio2.js"></script>
-  <script src="js/core/camera.js"></script>
-  <script src="js/core/events.js"></script>
-  <script src="js/core/fx.js"></script>
-  <script src="js/core/gfx.js"></script>
-  <script src="js/core/input.js"></script>
-  <script src="js/core/loop.js"></script>
-  <script src="js/core/music.js"></script>
-  <script src="js/core/rng.js"></script>
-  <script src="js/core/save.js"></script>
-  <script src="js/core/sprites.js"></script>
-  <script src="js/core/state.js"></script>
-  <script src="js/core/time.js"></script>
-  <script src="js/core/voice_audio.js"></script>
-  <script src="js/data/difficulty.js"></script>
-  <script src="js/data/items_books.js"></script>
-  <script src="js/data/items_cloth.js"></script>
-  <script src="js/data/items_cook.js"></script>
-  <script src="js/data/items_food.js"></script>
-  <script src="js/data/items_relics.js"></script>
-  <script src="js/data/items_seed.js"></script>
-  <script src="js/data/items_tools.js"></script>
-  <script src="js/data/loot_professions.js"></script>
-  <script src="js/data/loot_tables.js"></script>
-  <script src="js/data/loot_tables2.js"></script>
-  <script src="js/data/manifest.js"></script>
-  <script src="js/data/mat_phrases.js"></script>
-  <script src="js/data/recipes.js"></script>
-  <script src="js/data/recipes_cook.js"></script>
-  <script src="js/data/recipes_extra.js"></script>
-  <script src="js/data/soundmap.js"></script>
-  <script src="js/world/almanac.js"></script>
-  <script src="js/world/ambient.js"></script>
-  <script src="js/world/decor.js"></script>
-  <script src="js/world/gen.js"></script>
-  <script src="js/world/gen_terrain.js"></script>
-  <script src="js/world/gen_town.js"></script>
-  <script src="js/world/interiors.js"></script>
-  <script src="js/world/roofs.js"></script>
-  <script src="js/world/sprites_nature.js"></script>
-  <script src="js/world/sprites_props.js"></script>
-  <script src="js/world/weather.js"></script>
-  <script src="js/world/weather2.js"></script>
-  <script src="js/world/world.js"></script>
-  <script src="js/systems/achievements.js"></script>
-  <script src="js/systems/build.js"></script>
-  <script src="js/systems/challenges.js"></script>
-  <script src="js/systems/combat.js"></script>
-  <script src="js/systems/cooking.js"></script>
-  <script src="js/systems/craft.js"></script>
-  <script src="js/systems/crazy.js"></script>
-  <script src="js/systems/day_summary.js"></script>
-  <script src="js/systems/dialog.js"></script>
-  <script src="js/systems/expeditions.js"></script>
-  <script src="js/systems/fire.js"></script>
-  <script src="js/systems/fishing.js"></script>
-  <script src="js/systems/foraging.js"></script>
-  <script src="js/systems/health.js"></script>
-  <script src="js/systems/hunting.js"></script>
-  <script src="js/systems/integration.js"></script>
-  <script src="js/systems/inventory.js"></script>
-  <script src="js/systems/item_icons.js"></script>
-  <script src="js/systems/looting.js"></script>
-  <script src="js/systems/needs.js"></script>
-  <script src="js/systems/qol.js"></script>
-  <script src="js/systems/reading.js"></script>
-  <script src="js/systems/replay.js"></script>
-  <script src="js/systems/reputation.js"></script>
-  <script src="js/systems/skills.js"></script>
-  <script src="js/systems/stats.js"></script>
-  <script src="js/systems/temperature.js"></script>
-  <script src="js/systems/thoughts.js"></script>
-  <script src="js/systems/window_light.js"></script>
-  <script src="js/ai/ai.js"></script>
-  <script src="js/ai/animals.js"></script>
-  <script src="js/ai/bandit.js"></script>
-  <script src="js/ai/bear.js"></script>
-  <script src="js/ai/hermit.js"></script>
-  <script src="js/ai/swarm.js"></script>
-  <script src="js/ai/wanderers.js"></script>
-  <script src="js/ai/wolf.js"></script>
-  <script src="js/entities/actions.js"></script>
-  <script src="js/entities/player.js"></script>
-  <script src="js/entities/sprites_beasts.js"></script>
-  <script src="js/entities/sprites_critters.js"></script>
-  <script src="js/entities/sprites_player.js"></script>
-  <script src="js/ui/about_screen.js"></script>
-  <script src="js/ui/cinema.js"></script>
-  <script src="js/ui/container_screen.js"></script>
-  <script src="js/ui/craft_screen.js"></script>
-  <script src="js/ui/crazy_intro.js"></script>
-  <script src="js/ui/ctx_menu.js"></script>
-  <script src="js/ui/death_screen.js"></script>
-  <script src="js/ui/demo.js"></script>
-  <script src="js/ui/dev_overlay.js"></script>
-  <script src="js/ui/expedition_screen.js"></script>
-  <script src="js/ui/health_screen.js"></script>
-  <script src="js/ui/help_screen.js"></script>
-  <script src="js/ui/hud.js"></script>
-  <script src="js/ui/idle_watch.js"></script>
-  <script src="js/ui/inventory_screen.js"></script>
-  <script src="js/ui/journal_screen.js"></script>
-  <script src="js/ui/loading.js"></script>
-  <script src="js/ui/map_screen.js"></script>
-  <script src="js/ui/menu.js"></script>
-  <script src="js/ui/options.js"></script>
-  <script src="js/ui/skills_screen.js"></script>
-  <script src="js/ui/tooltips.js"></script>
-  <script src="js/ui/tree_screen.js"></script>
-  <script src="js/ui/tutorial.js"></script>
-  <script src="js/ui/ui.js"></script>
-  <script src="js/ui/world_hover.js"></script>
-  <script src="js/content/bestiary.js"></script>
-  <script src="js/content/calendar.js"></script>
-  <script src="js/content/carols.js"></script>
-  <script src="js/content/christmas.js"></script>
-  <script src="js/content/death_causes.js"></script>
-  <script src="js/content/dialogues.js"></script>
-  <script src="js/content/dreams.js"></script>
-  <script src="js/content/encounters.js"></script>
-  <script src="js/content/endings.js"></script>
-  <script src="js/content/events.js"></script>
-  <script src="js/content/farewell.js"></script>
-  <script src="js/content/gazette.js"></script>
-  <script src="js/content/lore.js"></script>
-  <script src="js/content/notes.js"></script>
-  <script src="js/content/notes2.js"></script>
-  <script src="js/content/proverbs.js"></script>
-  <script src="js/content/quests.js"></script>
-  <script src="js/content/quotes.js"></script>
-  <script src="js/content/radio.js"></script>
-  <script src="js/content/radio2.js"></script>
-  <script src="js/content/story.js"></script>
-  <script src="js/content/winter_rules.js"></script>
-  <script src="js/i18n/en.js"></script>
-  <script src="js/i18n/i18n.js"></script>
-  <script src="js/i18n/ru.js"></script>
-  <script src="js/i18n/swarm2.js"></script>
-  <script src="js/main.js"></script>
+  <canvas id="game"></canvas>
+
+  <!-- ===== HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="hud-top">
+      <div id="xp-wrap">
+        <div id="xp-bar"></div>
+        <div id="lvl-txt">1</div>
+      </div>
+      <div id="timer">0:00</div>
+    </div>
+    <div id="hud-bottom">
+      <div id="hp-wrap"><div id="hp-bar"></div><span id="hp-txt">100</span></div>
+      <div id="trip-wrap" title="ПРИХОД: наполняется грибами. [G] — Грибной Залп!">
+        <div id="trip-bar"></div><span id="trip-txt">🍄 0%</span>
+      </div>
+    </div>
+    <div id="kills">🍄 изгнано: 0</div>
+    <div id="announce"></div>
+    <div id="weapon-slots"></div>
+  </div>
+
+  <!-- ===== джойстик (мобилки) ===== -->
+  <div id="joy" class="hidden"><div id="joy-knob"></div></div>
+
+  <!-- ===== экраны ===== -->
+  <div id="menu" class="screen">
+    <div class="snow-bg"></div>
+    <h1>БЕЗУМНЫЙ ДЕД</h1>
+    <div class="subtitle">🍄 ГРИБНОЙ ПРИХОД 🍄</div>
+    <div class="tagline">15 минут. Один дед. Тысяча мультяшек.<br>Дойди до тарелки — и к звёздам.</div>
+    <button class="btn big" id="btn-play">ГУЛЯТЬ</button>
+    <button class="btn" id="btn-help">КАК ИГРАТЬ</button>
+    <div id="best-stats"></div>
+    <div class="menu-ded">🧓</div>
+  </div>
+
+  <div id="help" class="screen hidden">
+    <h2>КАК ИГРАТЬ</h2>
+    <div class="help-cols">
+      <div>
+        <h3>Управление</h3>
+        <p><b>WASD / стрелки</b> — дед ходит. Всё!<br>
+        Оружие бьёт <b>само</b>: лодошка не дремлет.</p>
+        <p><b>[G]</b> или <b>[Пробел]</b> — ГРИБНОЙ ЗАЛП:<br>приход на полном — гриб в небо, всё вокруг в конфетти.</p>
+        <p><b>[P]</b> — пауза, <b>[M]</b> — звук.</p>
+        <p>Мобилка: палец по экрану = джойстик.</p>
+      </div>
+      <div>
+        <h3>Правила леса</h3>
+        <p>🍄 <b>Грибы — опыт</b>. Съедобное притягивается к деду.</p>
+        <p>Уровень → <b>выбор из 3 карточек</b>: новое оружие или апгрейд.</p>
+        <p>👑 <b>Мультяшки в коронах</b> — элита: оставляют ПОДАРОК.</p>
+        <p>4:00, 8:00, 12:00 — <b>БОССЫ</b>. 15:00 — <b>ТАРЕЛКА</b>: добеги и лети к звёздам.</p>
+        <p>ХП на нуле — дед прикорнул. Навсегда.</p>
+      </div>
+    </div>
+    <button class="btn big" id="btn-help-back">ПОНЯЛ</button>
+  </div>
+
+  <div id="levelup" class="screen hidden">
+    <h2>УРОВЕНЬ <span id="lu-lvl">2</span>!</h2>
+    <div class="lu-hint">Выбирай, дед</div>
+    <div id="lu-cards"></div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <h2>ПАУЗА</h2>
+    <p class="pause-stats" id="pause-stats"></p>
+    <button class="btn big" id="btn-resume">ГУЛЯТЬ ДАЛЬШЕ</button>
+    <button class="btn" id="btn-quit">В МЕНЮ</button>
+  </div>
+
+  <div id="death" class="screen hidden">
+    <h2>ДЕД ПРИКОРНУЛ</h2>
+    <p class="big-emoji">😴</p>
+    <p class="end-stats" id="death-stats"></p>
+    <button class="btn big" id="btn-retry">ЕЩЁ РАЗ</button>
+    <button class="btn" id="btn-death-menu">В МЕНЮ</button>
+  </div>
+
+  <div id="win" class="screen hidden">
+    <h2>ТАРЕЛКА ПРИЛЕТЕЛА!</h2>
+    <p class="big-emoji">🛸✨</p>
+    <p class="win-line">Дед поднимается по лучу света.<br>Мультяшки машут лапами. Грибной сезон закрыт.</p>
+    <p class="end-stats" id="win-stats"></p>
+    <button class="btn big" id="btn-win-retry">ЕЩЁ ЗАБЕГ</button>
+    <button class="btn" id="btn-win-menu">В МЕНЮ</button>
+  </div>
+
+  <div id="gift-overlay" class="hidden"><div id="gift-box">🎁</div><div id="gift-text"></div></div>
+
+  <script src="game.js"></script>
 </body>
 </html>
