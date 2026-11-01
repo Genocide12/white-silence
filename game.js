@@ -134,28 +134,39 @@ var AU = {
     } catch (e) { /* пусто */ }
   },
 
-  slap: function () {   // ЛОДОШКА: хлёсткий «ХЛЯСЬ» — щелчок + шлепок + низ
-    this.noise(0.09, 0.3, 2600);
-    this.tone(190, 0.08, 'square', 0.16, 70);
-    this.tone(95, 0.12, 'sine', 0.2, 45);
+  slap: function () {   // ЛОДОШКА: хлёсткий «ХЛЯСЬ» — щелчок кнута + шлепок + бас-панч
+    this.noise(0.05, 0.34, 5200);            // сухой щелчок
+    this.noise(0.11, 0.26, 1500);            // мясистый шлепок
+    this.tone(230, 0.06, 'square', 0.17, 80);// тело удара
+    this.tone(88, 0.16, 'sine', 0.3, 40);    // бас-панч в грудь
   },
-  pop: function () { this.tone(660, 0.07, 'sine', 0.12, 990); },
-  gem: function () { this.tone(880, 0.05, 'sine', 0.08, 1320); },
-  hurt: function () {   // деду прилетело: глухой удар + дребезг
-    this.tone(140, 0.18, 'sawtooth', 0.22, 60);
-    this.tone(70, 0.22, 'sine', 0.26, 40);
-    this.noise(0.08, 0.14, 700);
+  pop: function () { this.tone(520, 0.05, 'sine', 0.09, 700); this.noise(0.02, 0.04, 4000); },
+  gem: function () {   // приз: звонкая ледяная капель
+    this.tone(1318, 0.07, 'sine', 0.11, 1760);
+    this.tone(1975, 0.09, 'sine', 0.05, 2093);
   },
-  kill: function () {    // изгнание: «БАМ» + хруст конфетти
-    this.tone(300, 0.09, 'square', 0.14, 120);
-    this.tone(80, 0.16, 'sine', 0.22, 40);
-    this.noise(0.07, 0.13, 3200);
+  hurt: function () {   // деду прилетело: глухой удар в торс + дребезг санных полозьев
+    this.tone(120, 0.2, 'sawtooth', 0.24, 52);
+    this.tone(56, 0.28, 'sine', 0.32, 34);
+    this.noise(0.09, 0.18, 520);
+    this.tone(310, 0.1, 'square', 0.06, 290); // дребезг
   },
-  levelup: function () {
-    this.tone(523, 0.12, 'square', 0.12); 
+  kill: function () {    // изгнание: сочный «БАМ» + хруст + хвостик
+    this.tone(260, 0.1, 'square', 0.16, 95);
+    this.tone(64, 0.2, 'sine', 0.3, 36);
+    this.noise(0.12, 0.18, 1700);             // хруст
+    this.noise(0.05, 0.1, 5200);              // искра
+  },
+  levelup: function () {   // фанфара: До-Ми-Соль-До + блеск
     var self = this;
-    setTimeout(function () { self.tone(659, 0.12, 'square', 0.12); }, 90);
-    setTimeout(function () { self.tone(784, 0.2, 'square', 0.14); }, 180);
+    var seq = [[523, 0, 0.13], [659, 90, 0.13], [784, 180, 0.13], [1046, 270, 0.22]];
+    seq.forEach(function (n) {
+      setTimeout(function () {
+        self.tone(n[0], n[2] + 0.04, 'triangle', n[2]);
+        self.tone(n[0] * 2, n[2], 'sine', n[2] * 0.3);   // блеск сверху
+      }, n[1]);
+    });
+    setTimeout(function () { self.noise(0.3, 0.05, 6000); }, 270);  // вспышка
   },
   zap: function () {
     this.tone(80, 0.7, 'sawtooth', 0.3, 900);
@@ -247,14 +258,15 @@ var AU = {
   },
 
   /** Голос деда: скрипучий, фраза разбирается на слоги-блипы. */
-  dedTalk: function (phrase, mood, force) {
+  dedTalk: function (phrase, mood, force, fileId) {
     if (!force && !this.canSay('ded', mood === 'pain' ? 1.6 : 2.6)) return false;
     if (force) this.canSay('ded', 0.6);   // даже важное — не чаше раза в 0.6с
-    // НАСТОЯЩАЯ РЕЧЬ: дед произносит фразу синтез-голосом (низкий скрипучий).
-    // Блипы остаются тихим «скрипом» под голосом — характер деда не теряем.
-    var spoke = this.say(phrase, 'ded');
+    // НАСТОЯЩАЯ РЕЧЬ: играет записанный русский голос (voice/*.mp3).
+    // Файла нет или не грузится — честные блипы-скрипы как фолбэк.
+    var spoke = fileId ? this.playVoice(fileId, 'ded', phrase) : false;
     if (!this.ctx || this.muted) return true;   // звука нет — текст всё равно покажем
-    var blipMul = spoke ? 0.3 : 1;              // голос говорит — блипы вполголоса
+    if (spoke) return true;                     // голос из файла уже говорит/грузится
+    var blipMul = 1;
     var base = mood === 'pain' ? 145 : (mood === 'exc' ? 118 : 98);
     var words = phrase.split(' ');
     var notes = [];
@@ -297,7 +309,7 @@ var AU = {
       metelica:{ spawn: 'Ха-ха-ха! Заметаю, старый!', die: 'Оттаяла…', attack: 'Лети!' },
       leshiy:  { spawn: 'Хо-хо-хо! Мой лес, дед!', die: 'Лес отпускает…', attack: 'Хо!' }
     }[id];
-    if (PH && PH[kind]) this.say(PH[kind], 'boss');
+    if (PH && PH[kind]) this.playVoice('boss_' + id + '_' + kind, 'boss', PH[kind], id === 'metelica' ? 0.92 : 0.76);
     if (!this.ctx) return;
     var N = {
       alpha: {    // ВОЖАК: вой в туман
@@ -367,8 +379,9 @@ var AU = {
     setTimeout(function () { self.tone(659, 0.1, 'square', 0.13); }, 110);
     setTimeout(function () { self.tone(1046, 0.24, 'square', 0.15); }, 200);
   },
-  crunch: function () {   // хруст снега под валенками
-    this.noise(0.05, 0.05, 1100);
+  crunch: function () {   // хруст снега под валенками: скрип + crunch-тело
+    this.noise(0.06, 0.07, 950);
+    this.tone(140, 0.04, 'triangle', 0.05, 90);
   },
   crit: function () {   // крит: звонкий «ДЗЫНЬ»
     this.tone(1318, 0.09, 'square', 0.16);
@@ -386,40 +399,74 @@ var AU = {
     setTimeout(function () { self.tone(520, 0.18, 'sine', 0.12, 500); }, 200);
   },
 
-  // ─── НАСТОЯЩАЯ РЕЧЬ: браузерный синтезатор голоса (ru-RU) ───
-  // Дед говорит по-русски: низкий скрипучий питч. Боссы рычат (pitch 0.05).
-  // Если синтеза в браузере нет — тихо остаёмся на блипах, игра не ломается.
-  ttsVoice: null, ttsReady: false, ttsOK: null,
-  pickVoice: function () {
-    this.ttsReady = true;
-    try {
-      if (!window.speechSynthesis) { this.ttsOK = false; return; }
-      var vs = speechSynthesis.getVoices() || [];
-      var ru = [];
-      for (var i = 0; i < vs.length; i++) if (/^ru/i.test(vs[i].lang)) ru.push(vs[i]);
-      this.ttsVoice = ru[0] || null;
-      this.ttsOK = true;
-    } catch (e) { this.ttsOK = false; }
+  // ─── НАСТОЯЩАЯ РЕЧЬ: заранее записанные русские голоса (voice/*.mp3) ───
+  // Дед — Дмитрий, радио и ведьма — Светлана, боссы — Дмитрий с пич-шифтом
+  // вниз при воспроизведении (эффект рыка). Файлы кэшируются после первой
+  // загрузки; если файла нет — честный фолбэк на блип-речь, игра не молчит.
+  voiceBuf: {}, vsrc: null,
+  stopVoice: function () {
+    if (this.vsrc) { try { this.vsrc.stop(); } catch (e) {} this.vsrc = null; }
   },
-  say: function (text, who) {
+  _startVoice: function (buf, rate, vol) {
+    var self = this;
     try {
-      if (!window.speechSynthesis || this.muted || !text) return false;
-      if (!this.ttsReady) this.pickVoice();
-      if (this.ttsOK === false) return false;
-      if (speechSynthesis.speaking || speechSynthesis.pending) {
-        if (who !== 'ded') return false;   // реплики боссов друг друга не перебивают
-        speechSynthesis.cancel();          // а дед перебивает всех — он главный
-      }
-      var u = new SpeechSynthesisUtterance(text);
-      if (this.ttsVoice) u.voice = this.ttsVoice;
-      u.lang = 'ru-RU';
-      u.volume = 1;
-      if (who === 'boss') { u.pitch = 0.05; u.rate = 0.72; }      // старший лес: рык
-      else if (who === 'radio') { u.pitch = 1; u.rate = 1.04; }   // диктор станции
-      else { u.pitch = 0.22; u.rate = 0.92; }                     // дед: низко и скрипуче
-      speechSynthesis.speak(u);
+      this.stopVoice();                      // новая реплика перебивает старую
+      var src = this.ctx.createBufferSource();
+      var g = this.ctx.createGain();
+      src.buffer = buf;
+      src.playbackRate.value = rate || 1;
+      g.gain.value = vol != null ? vol : 0.95;
+      src.connect(g); g.connect(this.master);
+      src.onended = function () { if (self.vsrc === src) self.vsrc = null; };
+      src.start();
+      this.vsrc = src;
       return true;
     } catch (e) { return false; }
+  },
+  // грузит и (по умолчанию) проигрывает реплику; фолбэк — блипы
+  playVoice: function (fid, who, text, rate) {
+    if (this.muted) return true;
+    this.init();
+    if (!this.ctx) return false;
+    var self = this;
+    if (who === 'boss') rate = rate || 0.76;        // рык: ниже и медленнее
+    else rate = rate || 1;
+    var vol = who === 'radio' ? 0.7 : 0.95;
+    if (this.voiceBuf[fid]) return this._startVoice(this.voiceBuf[fid], rate, vol);
+    try {
+      fetch('voice/' + fid + '.mp3').then(function (r) {
+        if (!r.ok) throw 0;
+        return r.arrayBuffer();
+      }).then(function (ab) {
+        return new Promise(function (res, rej) {   // callback-форма: совместимость
+          self.ctx.decodeAudioData(ab, res, rej);
+        });
+      }).then(function (buf) {
+        self.voiceBuf[fid] = buf;
+        self._startVoice(buf, rate, vol);
+      }).catch(function () {
+        if (text) self.dedTalk(text, 'norm', true);   // файла нет — блип-фолбэк
+      });
+      return true;    // файл загружается и заговорит
+    } catch (e) { return false; }
+  },
+  // прогрев кэша ключевых реплик (после разблокировки звука)
+  prewarm: function () {
+    var self = this;
+    ['ev_start_0', 'ev_start_1', 'ev_hurt_0', 'ev_hurt_1', 'ev_hurt_2', 'ev_hurt_3',
+     'ev_levelup_0', 'ev_levelup_1', 'ev_levelup_2', 'zaplaugh', 'ev_zap_0', 'ev_zap_1',
+     'boss_alpha_spawn', 'boss_shisha_spawn', 'boss_glavar_spawn',
+     'boss_hozyain_spawn', 'boss_metelica_spawn', 'boss_leshiy_spawn',
+     'ev_boss_0', 'ev_boss_1', 'ev_boss_2', 'ev_death_0', 'ev_death_1', 'ev_win_0'
+    ].forEach(function (fid) {
+      if (self.voiceBuf[fid]) return;
+      fetch('voice/' + fid + '.mp3').then(function (r) {
+        if (!r.ok) throw 0;
+        return r.arrayBuffer();
+      }).then(function (ab) {
+        return new Promise(function (res, rej) { self.ctx.decodeAudioData(ab, res, rej); });
+      }).then(function (buf) { self.voiceBuf[fid] = buf; }).catch(function () {});
+    });
   },
 
   // ─── МУЗЫКА: музыкальная шкатулка «Ой, мороз, мороз» ───
@@ -455,6 +502,7 @@ var AU = {
     try {
       if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
     } catch (e) { /* пусто */ }
+    this.prewarm();   // фоном греем кэш реплик — первый голос без задержки
   },
   windNode: null,
   startWind: function () {   // фоновый ветер: петля шума через фильтр
@@ -3151,9 +3199,10 @@ function dedSay(force) {
   dedSayT = G.t + 14;
   var p = G.player;
   if (!p) return;
-  var line = pick(DED_LINES);
+  var di = Math.floor(Math.random() * DED_LINES.length);
+  var line = DED_LINES[di];
   // бормотание — тихонько, себе под нос: голос без текста над головой
-  AU.dedTalk(line, 'norm');
+  AU.dedTalk(line, 'norm', false, 'ded_' + di);
   floatText(p.x, p.y - 44, line, '#aab7cc', 14, 2.2);
 }
 
@@ -3163,10 +3212,11 @@ function dedEvent(type) {
   if (!lines) return;
   var p = G.player;
   if (!p) return;
-  var line = pick(lines);
+  var li = Math.floor(Math.random() * lines.length);
+  var line = lines[li];
   var mood = DED_MOODS[type] || 'norm';
   // антиспам голоса: если движок занят — реплику не показываем (кроме смерти/победы)
-  if (!AU.dedTalk(line, mood, type === 'death' || type === 'win' || type === 'boss')) return;
+  if (!AU.dedTalk(line, mood, type === 'death' || type === 'win' || type === 'boss', 'ev_' + type + '_' + li)) return;
   floatText(p.x, p.y - 44, line, mood === 'pain' ? '#ff9d76' : '#ffd76e', 16, 2.2);
   dedSayT = Math.max(dedSayT, G.t + 8);
 }
@@ -3220,9 +3270,15 @@ function radioSay(txt) {
   if (!radioEl) radioEl = $$('radio');
   if (!radioEl) return;
   radioEl.textContent = txt;
-  // диктор станции говорит вслух (ровным «радио»-голосом), текст без «📻»
+  // диктор станции говорит записанным голосом; текст без «📻»
   var spoken = txt.replace(/^📻\s*/, '').replace(/…/g, '.');
-  AU.say(spoken, 'radio');
+  var ri = -1;
+  for (var q = 0; q < RADIO_LINES.length; q++) if (RADIO_LINES[q].txt === txt) ri = q;
+  if (ri >= 0) AU.playVoice('radio_' + ri, 'radio', spoken);
+  else {
+    for (var w = 0; w < RADIO_ENDLESS.length; w++) if (RADIO_ENDLESS[w] === txt) ri = w;
+    if (ri >= 0) AU.playVoice('endless_' + ri, 'radio', spoken);
+  }
   radioEl.classList.add('show');
   AU.pop();
   if (radioHide) clearTimeout(radioHide);
@@ -3357,7 +3413,7 @@ function tryZap() {
   if (G.zapCount >= 3) unlockAch('zap3');
   var p = G.player;
   AU.zap();
-  AU.say('Гы-гы-гы! Вот это приход!', 'ded');   // дед ржёт в голос на залпе
+  AU.playVoice('zaplaugh', 'ded', 'Гы-гы-гы! Вот это приход!');   // дед ржёт в голос на залпе
   CAM.kick(1.2);
   hitstop = Math.max(hitstop, 0.1);
   announce('🍄 ГРИБНОЙ ЗАЛП! 🍄', 1500, true);
@@ -4645,7 +4701,7 @@ function startRun(mode) {
   // интро голосом: ночь встречаем словами, а не блипами
   setTimeout(function () {
     if (G.state === 'play') {
-      AU.say('Ну что, лес. Поглядим, чья возьмёт.', 'ded');
+      AU.playVoice('intro', 'ded', 'Ну что, лес. Поглядим, чья возьмёт.');
     }
   }, 1400);
 }
