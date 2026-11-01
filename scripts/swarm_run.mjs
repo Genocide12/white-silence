@@ -36,10 +36,8 @@ const STATE_F = OUT + '/state.json';
 const AGENTS = [
   { name: 'Гена-Турбо', strategy: 'rush', speedMul: 3 },
   { name: 'Гена-Лодошка', strategy: 'rush', speedMul: 2 },
-  { name: 'Гена-Барахольщик', strategy: 'classic', speedMul: 2 },
-  { name: 'Гена-Дрёма', strategy: 'classic', speedMul: 2 },
-  { name: 'Гена-Телеграфист', strategy: 'classic', speedMul: 3 },
-  { name: 'Гена-Вантуз', strategy: 'rush', speedMul: 2 }
+  { name: 'Гена-Вантуз', strategy: 'rush', speedMul: 3 },
+  { name: 'Гена-Барахольщик', strategy: 'classic', speedMul: 2 }
 ];
 
 function loadState() {

@@ -417,8 +417,12 @@
             plasterN < 1 && (plankN < 1 || ragN < 1));
         } catch (eS) { /* пусто */ }
         if (needSplint) {
+          // ТРЯПКИ С ЗАПАСОМ: шина ест 1 доску + 1 тряпку за каждый
+          // перелом, а переломы при танке повторяются (укус = 10% шанс).
+          // Раньше несли по 1 — шина съедала всё, факелам тряпок не
+          // оставалось (рой: 8 досок, 0 тряпок, 0 факелов к Д15).
           if (plankN < 1) corpseObj._crazyExtra.push({ id: 'plank', count: 1 });
-          if (ragN < 1) corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 1 });
+          corpseObj._crazyExtra.push({ id: 'cloth_rag', count: 2 });
         } else if (torchN < 3) {
           // ДЕФИЦИТНАЯ ЧАСТЬ: на 3 факела нужно 3 горючего + 3 тряпки +
           // 3 доски (двойной рецепт экономит, но капы считаем по трём

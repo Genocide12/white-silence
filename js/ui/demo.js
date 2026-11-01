@@ -1168,7 +1168,7 @@
             // (24 волка вокруг — каждый clearPlan съедал задачу «обыскать
             // подарок»; 29 изгнаний — 0 обысканных подарков в журнале)
             D.gifts = D.gifts || [];
-            if (D.gifts.indexOf(gift) < 0 && D.gifts.length < 8) {
+            if (D.gifts.indexOf(gift) < 0 && D.gifts.length < 12) {
               D.gifts.push(gift);
             }
           }
@@ -1828,6 +1828,25 @@
       D.phase = 'shipwait';
     }
 
+    // === СКАН ПОДАРКОВ (до всех веток!) ===
+    // Раньше скан жил внутри дневной секции (0.9) — и ветка шины,
+    // возвращаясь с лутом ДО неё, замораживала очередь навсегда:
+    // подарки с шиной/материалами лежали у ног, а дед неделями
+    // обыскивал дома (зонд: подарок в 3 тайлах, очередь пуста, Д20).
+    D.gifts = D.gifts || [];
+    if (!D._giftScanMin || absMin() - D._giftScanMin > 20) {
+      D._giftScanMin = absMin();
+      var objsS = WS.World.objects;
+      for (var si = 0; si < objsS.length && D.gifts.length < 12; si++) {
+        var so = objsS[si];
+        if (so && so.sprName === 'crazy_gift' && !so.looted &&
+            !(so._demoSkipUntil && so._demoSkipUntil > absMin()) &&
+            dist(p.x, p.y, so.x, so.y) < 55 && D.gifts.indexOf(so) < 0) {
+          D.gifts.push(so);
+        }
+      }
+    }
+
     // === ПЕРЕЛОМ БЕЗ ШИНЫ: спасательная ветка ===
     // Сломанная нога (×0.45 скорости) — главный тормоз ранней игры:
     // дед ползёт, добыча убегает, материалы не собираются. Человеческое
@@ -1838,10 +1857,12 @@
       var hasSplintParts = invCount('plank') >= 1 && invCount('cloth_rag') >= 1;
       var hasCast = invCount('plaster_cast') > 0;
       if (!hasSplintParts && !hasCast) {
-        // сначала подарок-очередь: изгнанники несут шину (медприоритет)
-        if (D.gifts && D.gifts.length) {
-          // fallthrough: очередь подарков разрулит ветка 0.9 ниже
-        } else if (WS.Health && WS.Health.splintFromPlanks) {
+        // ПОДАРКИ В ПРИОРИТЕТЕ: изгнанники несут шину (медприоритет в
+        // crazy.js: доска + 2 тряпки) — вскрываем их ПЕРВЫМИ. Раньше ветка
+        // шины лутала дома и НАВСЕГДА вытесняла обработку подарков:
+        // дедлок «перелом → лутаю дома → подарки с шиной лежат мёртвым
+        // грузом» (зонд: 3 подарка валялись 10 дней, 🦴 не лечится).
+        if (!(D.gifts && D.gifts.length) && WS.Health && WS.Health.splintFromPlanks) {
           var splintTargets = nextLootTarget(2);
           if (splintTargets.length) {
             D.phase = 'splint';
@@ -1860,6 +1881,8 @@
             return plan;
           }
         }
+        // подарки есть (или лут кончился) — фоллтру до ветки 0.9:
+        // очередь подарков разрулится там, шина придёт из подарка
       } else {
         // части есть — зафиксировать немедленно (лечится в treatInjuries)
         treatInjuries();
@@ -1923,21 +1946,7 @@
       // 0.9) ПОДАРКИ ИЗГНАННИКОВ: очередь переживает clearPlan (угрозы
       //      затирали задачу прямо на подходе — 29 изгнаний, 0 вскрытых
       //      подарков). Жир/масло для факелов лежат именно в них.
-      //      Плюс МИРОВОЙ СКАН: «реванш после прикорнутья» изгоняет зверей
-      //      БЕЗ задачи демо (70 из 80 изгнаний!) — подарки лежали брошенными.
-      D.gifts = D.gifts || [];
-      if (!D._giftScanMin || absMin() - D._giftScanMin > 20) {
-        D._giftScanMin = absMin();
-        var objsS = WS.World.objects;
-        for (var si = 0; si < objsS.length && D.gifts.length < 8; si++) {
-          var so = objsS[si];
-          if (so && so.sprName === 'crazy_gift' && !so.looted &&
-              !(so._demoSkipUntil && so._demoSkipUntil > absMin()) &&
-              dist(p.x, p.y, so.x, so.y) < 55 && D.gifts.indexOf(so) < 0) {
-            D.gifts.push(so);
-          }
-        }
-      }
+      //      Скан очереди — ВЫШЕ (до всех веток), здесь только обработка.
       if (D.gifts.length) {
         // чистим мёртвые/обчистенные/недостижимые (плейтест роя: «Вскрываю
         // подарок (4 в очереди)» висел ДНЯМИ — путь к трупу на льду/за
